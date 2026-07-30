@@ -1,0 +1,412 @@
+/**
+ * ApiHub 全局壳层与 Element Plus 视觉增强（仅样式）
+ * 毛玻璃 / 圆角 / 阴影 — 与 variables.module.scss 中 CSS 变量配合
+ */
+
+/* ========== 页面基底 ========== */
+html {
+  scroll-behavior: smooth;
+}
+
+html body {
+  margin: 0;
+  min-height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto,
+    'Helvetica Neue', Helvetica, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei',
+    Arial, sans-serif;
+  color: var(--el-text-color-primary, #1f2937);
+  background-color: var(--app-bg-base, #eef1f8);
+  background-image: radial-gradient(1200px 600px at 10% -10%, var(--app-bg-glow, rgba(64, 158, 255, 0.12)), transparent 55%),
+    radial-gradient(900px 480px at 100% 0%, var(--app-bg-glow-secondary, rgba(99, 102, 241, 0.08)), transparent 50%),
+    linear-gradient(165deg, var(--app-bg-base, #eef1f8) 0%, var(--app-bg-accent, #e4e9f4) 100%);
+  background-attachment: fixed;
+}
+
+#app {
+  min-height: 100%;
+}
+
+/* ========== 主布局区 ========== */
+#app .main-container {
+  background: transparent;
+}
+
+#app .app-main {
+  position: relative;
+  background: transparent;
+}
+
+/* 业务内容区内边距由 business-surface.scss 统一控制 */
+#app .main-container.fullscreen-mode .app-main {
+  background: var(--el-bg-color, #ffffff) !important;
+}
+
+/* ========== 顶栏（覆盖 Navbar scoped 背景） ========== */
+html body #app .navbar {
+  border-bottom: 1px solid var(--shell-navbar-border, rgba(15, 23, 42, 0.06));
+  box-shadow: var(--shell-navbar-shadow, 0 1px 0 rgba(255, 255, 255, 0.65) inset),
+    0 8px 28px rgba(15, 23, 42, 0.06);
+  background: var(--shell-navbar-bg, rgba(255, 255, 255, 0.72)) !important;
+}
+
+@supports ((backdrop-filter: blur(12px)) or (-webkit-backdrop-filter: blur(12px))) {
+  html body #app .navbar {
+    -webkit-backdrop-filter: blur(18px) saturate(160%);
+    backdrop-filter: blur(18px) saturate(160%);
+  }
+}
+
+html body #app .navbar .right-menu .right-menu-item {
+  color: var(--navbar-text, #3c4257);
+}
+
+html body #app .navbar .right-menu {
+  gap: 4px;
+  padding-left: 2px;
+  padding-right: 2px;
+}
+
+/* 顶栏快捷图标：统一触控块、毛玻璃高光悬浮、柔和点击反馈（不改子组件逻辑） */
+html body #app .navbar .right-menu #header-search.right-menu-item,
+html body #app .navbar .right-menu #screenfull.right-menu-item,
+html body #app .navbar .right-menu .theme-switch-wrapper.right-menu-item,
+html body #app .navbar .right-menu #size-select.right-menu-item,
+html body #app .navbar .right-menu #header-notice .notice-trigger.right-menu-item {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  min-height: 36px;
+  width: auto;
+  height: auto !important;
+  padding: 0 6px !important;
+  line-height: 1 !important;
+  border-radius: 11px;
+  box-sizing: border-box;
+  vertical-align: middle;
+  color: var(--navbar-text, #3c4257);
+  transition:
+    background 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+    color 0.18s ease,
+    transform 0.2s cubic-bezier(0.34, 1.4, 0.64, 1);
+  -webkit-tap-highlight-color: transparent;
+}
+
+html body #app .navbar .right-menu #header-search.right-menu-item .svg-icon,
+html body #app .navbar .right-menu #screenfull.right-menu-item .svg-icon,
+html body #app .navbar .right-menu .theme-switch-wrapper.right-menu-item .svg-icon,
+html body #app .navbar .right-menu #size-select.right-menu-item .svg-icon,
+html body #app .navbar .right-menu #header-notice .notice-trigger .svg-icon {
+  font-size: 19px;
+  transition: transform 0.22s cubic-bezier(0.34, 1.4, 0.64, 1), opacity 0.18s ease;
+}
+
+html body #app .navbar .right-menu #header-search.right-menu-item.hover-effect:hover,
+html body #app .navbar .right-menu #screenfull.right-menu-item.hover-effect:hover,
+html body #app .navbar .right-menu .theme-switch-wrapper.right-menu-item.hover-effect:hover,
+html body #app .navbar .right-menu #size-select.right-menu-item.hover-effect:hover,
+html body #app .navbar .right-menu #header-notice .notice-trigger.right-menu-item.hover-effect:hover {
+  background: var(--shell-navbar-action-bg-hover, var(--shell-hover-fill)) !important;
+  box-shadow: var(--shell-navbar-action-shadow-hover, 0 6px 18px rgba(15, 23, 42, 0.1)) !important;
+}
+
+html body #app .navbar .right-menu #header-search.right-menu-item.hover-effect:hover .svg-icon,
+html body #app .navbar .right-menu #screenfull.right-menu-item.hover-effect:hover .svg-icon,
+html body #app .navbar .right-menu .theme-switch-wrapper.right-menu-item.hover-effect:hover .svg-icon,
+html body #app .navbar .right-menu #size-select.right-menu-item.hover-effect:hover .svg-icon,
+html body #app .navbar .right-menu #header-notice .notice-trigger.right-menu-item.hover-effect:hover .svg-icon {
+  transform: scale(1.06);
+}
+
+html body #app .navbar .right-menu #header-search.right-menu-item.hover-effect:active,
+html body #app .navbar .right-menu #screenfull.right-menu-item.hover-effect:active,
+html body #app .navbar .right-menu .theme-switch-wrapper.right-menu-item.hover-effect:active,
+html body #app .navbar .right-menu #size-select.right-menu-item.hover-effect:active,
+html body #app .navbar .right-menu #header-notice .notice-trigger.right-menu-item.hover-effect:active {
+  transform: scale(0.96);
+  box-shadow: var(--shell-navbar-action-shadow-active, 0 2px 8px rgba(15, 23, 42, 0.12) inset) !important;
+  transition-duration: 0.08s;
+}
+
+html body #app .navbar .right-menu #header-search.right-menu-item.hover-effect:focus-visible,
+html body #app .navbar .right-menu #screenfull.right-menu-item.hover-effect:focus-visible,
+html body #app .navbar .right-menu .theme-switch-wrapper.right-menu-item.hover-effect:focus-visible,
+html body #app .navbar .right-menu #size-select.right-menu-item.hover-effect:focus-visible,
+html body #app .navbar .right-menu #header-notice .notice-trigger.right-menu-item.hover-effect:focus-visible {
+  outline: 2px solid var(--shell-navbar-action-focus-ring, rgba(64, 158, 255, 0.45));
+  outline-offset: 2px;
+}
+
+/* 公告外层容器不重复铺底，避免与内层铃铛按钮双层 hover */
+html body #app .navbar .right-menu #header-notice.right-menu-item {
+  display: inline-flex !important;
+  align-items: center;
+  padding: 0 !important;
+  min-width: 0 !important;
+  height: auto !important;
+  line-height: 1 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+html body #app .navbar .right-menu #header-notice.right-menu-item.hover-effect:hover,
+html body #app .navbar .right-menu #header-notice.right-menu-item.hover-effect:active {
+  background: transparent !important;
+  box-shadow: none !important;
+  transform: none;
+}
+
+html body #app .navbar .right-menu #header-notice .notice-trigger.right-menu-item {
+  transform: translateX(0);
+}
+
+/* 布局尺寸下拉：对齐新触控块 */
+html body #app .navbar .right-menu #size-select .size-icon--style {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  line-height: 1 !important;
+  padding: 0 !important;
+}
+
+html body #app .navbar .right-menu #size-select.right-menu-item .el-dropdown {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+html body #app .navbar .right-menu #screenfull.right-menu-item > div {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+html body #app .navbar .right-menu .right-menu-item.hover-effect:hover {
+  background: var(--shell-hover-fill, rgba(15, 23, 42, 0.06)) !important;
+  border-radius: 10px;
+}
+
+html body #app .navbar .hamburger-container:hover {
+  background: var(--shell-hover-fill, rgba(15, 23, 42, 0.06));
+  border-radius: 10px;
+}
+
+html body #app .navbar .avatar-container .user-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+}
+
+html.dark body #app .navbar .avatar-container .user-avatar {
+  box-shadow: 0 2px 14px rgba(0, 0, 0, 0.48);
+}
+
+html body #app .navbar .right-menu .avatar-container.right-menu-item {
+  border-radius: 12px;
+  padding: 4px 6px 4px 8px !important;
+  transition:
+    background-color 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 0.22s ease;
+}
+
+html body #app .navbar .right-menu .avatar-container.right-menu-item.hover-effect:active {
+  transform: scale(0.99);
+  transition-duration: 0.08s;
+}
+
+/* ========== 左侧菜单壳 ========== */
+html body #app .app-wrapper > .sidebar-container {
+  border-right: 1px solid var(--shell-sidebar-border, rgba(15, 23, 42, 0.06));
+  box-shadow: var(--shell-sidebar-shadow, 8px 0 32px rgba(15, 23, 42, 0.06));
+}
+
+html body #app .app-wrapper > .sidebar-container.theme-light {
+  background: var(--shell-sidebar-bg, rgba(255, 255, 255, 0.78)) !important;
+}
+
+html body #app .app-wrapper > .sidebar-container.theme-dark {
+  background: var(--shell-sidebar-solid-dark, rgba(22, 27, 38, 0.94)) !important;
+}
+
+@supports ((backdrop-filter: blur(12px)) or (-webkit-backdrop-filter: blur(12px))) {
+  html body #app .app-wrapper > .sidebar-container {
+    -webkit-backdrop-filter: blur(22px) saturate(170%);
+    backdrop-filter: blur(22px) saturate(170%);
+  }
+}
+
+html body #app .app-wrapper > .sidebar-container .el-menu,
+html body #app .app-wrapper > .sidebar-container .scrollbar-wrapper {
+  background-color: transparent !important;
+}
+
+html body #app .app-wrapper > .sidebar-container .sidebar-logo-container {
+  background: transparent !important;
+  border-bottom: 1px solid var(--shell-sidebar-border, rgba(15, 23, 42, 0.06));
+}
+
+html body #app .app-wrapper > .sidebar-container .el-menu-item,
+html body #app .app-wrapper > .sidebar-container .el-sub-menu__title {
+  border-radius: 10px;
+  margin: 2px 8px;
+  width: calc(100% - 16px);
+  min-width: 0 !important;
+}
+
+html body #app .hideSidebar .app-wrapper > .sidebar-container .el-menu-item,
+html body #app .hideSidebar .app-wrapper > .sidebar-container .el-sub-menu__title {
+  margin: 2px 6px;
+  width: calc(100% - 12px);
+}
+
+/* ========== 标签栏 ========== */
+html body #app #tags-view-container.tags-view-container {
+  height: 34px;
+  border-bottom: 1px solid var(--tags-item-border, rgba(15, 23, 42, 0.08));
+  background: var(--tags-bg, rgba(255, 255, 255, 0.55)) !important;
+}
+
+@supports ((backdrop-filter: blur(8px)) or (-webkit-backdrop-filter: blur(8px))) {
+  html body #app #tags-view-container.tags-view-container {
+    -webkit-backdrop-filter: blur(14px) saturate(150%);
+    backdrop-filter: blur(14px) saturate(150%);
+  }
+}
+
+html body #app #tags-view-container .tags-view-wrapper .tags-view-item {
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+/* ========== Element Plus 通用质感 ========== */
+.el-card {
+  border-radius: var(--radius-lg, 14px) !important;
+  border: 1px solid var(--el-border-color-lighter, rgba(15, 23, 42, 0.06)) !important;
+  box-shadow: var(--shell-card-shadow, 0 12px 40px rgba(15, 23, 42, 0.06)) !important;
+  background-color: var(--el-bg-color, #ffffff) !important;
+}
+
+.el-card.is-hover-shadow:hover {
+  box-shadow: var(--shell-card-shadow-hover, 0 16px 48px rgba(15, 23, 42, 0.1)) !important;
+}
+
+.el-dialog {
+  border-radius: var(--radius-lg, 14px) !important;
+  overflow: hidden;
+  box-shadow: var(--shell-dialog-shadow, 0 24px 80px rgba(15, 23, 42, 0.18)) !important;
+}
+
+.el-dialog__header {
+  border-bottom: 1px solid var(--el-border-color-lighter, #ebeef5);
+  margin-right: 0;
+  padding: 16px 20px 12px;
+}
+
+.el-overlay-dialog {
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+
+.el-button {
+  border-radius: 10px !important;
+}
+
+.el-button.is-round {
+  border-radius: 999px !important;
+}
+
+.el-input__wrapper,
+.el-select__wrapper,
+.el-textarea__inner {
+  border-radius: 10px !important;
+}
+
+.el-table {
+  --el-table-border-color: var(--el-border-color-lighter);
+  border-radius: var(--radius-md, 10px);
+  overflow: hidden;
+}
+
+.el-table th.el-table__cell {
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.el-pagination.is-background .el-pager li,
+.el-pagination.is-background .btn-next,
+.el-pagination.is-background .btn-prev {
+  border-radius: 8px;
+}
+
+.el-dropdown-menu {
+  border-radius: 12px !important;
+  box-shadow: var(--shell-dropdown-shadow, 0 16px 48px rgba(15, 23, 42, 0.12)) !important;
+  overflow: hidden;
+}
+
+.el-message,
+.el-notification {
+  border-radius: 12px !important;
+}
+
+.el-drawer .el-drawer__header {
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  margin-bottom: 0;
+  padding: 16px 20px;
+}
+
+/* ========== 移动端抽屉遮罩 ========== */
+#app .drawer-bg {
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+}
+
+/* ========== 减弱动画偏好 ========== */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .el-card,
+  .el-button,
+  .tags-view-item {
+    transition: none !important;
+  }
+
+  html body #app .navbar .right-menu #header-search.right-menu-item,
+  html body #app .navbar .right-menu #screenfull.right-menu-item,
+  html body #app .navbar .right-menu .theme-switch-wrapper.right-menu-item,
+  html body #app .navbar .right-menu #size-select.right-menu-item,
+  html body #app .navbar .right-menu #header-notice .notice-trigger.right-menu-item,
+  html body #app .navbar .right-menu .avatar-container.right-menu-item {
+    transition: none !important;
+  }
+
+  html body #app .navbar .right-menu #header-search.right-menu-item .svg-icon,
+  html body #app .navbar .right-menu #screenfull.right-menu-item .svg-icon,
+  html body #app .navbar .right-menu .theme-switch-wrapper.right-menu-item .svg-icon,
+  html body #app .navbar .right-menu #size-select.right-menu-item .svg-icon,
+  html body #app .navbar .right-menu #header-notice .notice-trigger .svg-icon {
+    transition: none !important;
+    transform: none !important;
+  }
+
+  html body #app .navbar .right-menu #header-search.right-menu-item.hover-effect:hover .svg-icon,
+  html body #app .navbar .right-menu #screenfull.right-menu-item.hover-effect:hover .svg-icon,
+  html body #app .navbar .right-menu .theme-switch-wrapper.right-menu-item.hover-effect:hover .svg-icon,
+  html body #app .navbar .right-menu #size-select.right-menu-item.hover-effect:hover .svg-icon,
+  html body #app .navbar .right-menu #header-notice .notice-trigger.right-menu-item.hover-effect:hover .svg-icon {
+    transform: none !important;
+  }
+
+  html body #app .navbar .right-menu #header-search.right-menu-item.hover-effect:active,
+  html body #app .navbar .right-menu #screenfull.right-menu-item.hover-effect:active,
+  html body #app .navbar .right-menu .theme-switch-wrapper.right-menu-item.hover-effect:active,
+  html body #app .navbar .right-menu #size-select.right-menu-item.hover-effect:active,
+  html body #app .navbar .right-menu #header-notice .notice-trigger.right-menu-item.hover-effect:active,
+  html body #app .navbar .right-menu .avatar-container.right-menu-item.hover-effect:active {
+    transform: none !important;
+  }
+}

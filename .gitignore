@@ -1,0 +1,45 @@
+# Java
+target/
+*.class
+*.jar
+*.war
+*.ear
+*.log
+hs_err_pid*
+
+# IDE
+.idea/
+.claude/
+.cursor/
+.codegraph/
+*.iml
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Maven
+.mvn/wrapper/
+mvnw
+mvnw.cmd
+
+# Frontend
+acr-ui/node_modules/
+acr-ui/dist/
+acr-ui/.env.local
+acr-ui/.env.*.local
+acr-ui/src/test-results/
+
+# Secrets
+*.secrets.toml
+.env
+.env.local
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Build
+build/
+out/

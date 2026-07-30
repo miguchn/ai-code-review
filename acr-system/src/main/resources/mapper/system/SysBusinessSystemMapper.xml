@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.acr.system.mapper.SysBusinessSystemMapper">
+
+    <resultMap type="com.acr.system.domain.SysBusinessSystem" id="SysBusinessSystemResult">
+        <id     property="systemId"    column="system_id"    />
+        <result property="systemName"  column="system_name"  />
+        <result property="systemCode"  column="system_code"  />
+        <result property="deptId"      column="dept_id"      />
+        <result property="deptName"    column="dept_name"    />
+        <result property="managerIds"  column="manager_ids"  />
+        <result property="managerNames" column="manager_names"/>
+        <result property="status"      column="status"       />
+        <result property="remark"      column="remark"       />
+        <result property="createBy"    column="create_by"    />
+        <result property="createTime"  column="create_time"  />
+        <result property="updateBy"    column="update_by"    />
+        <result property="updateTime"  column="update_time"  />
+    </resultMap>
+
+    <sql id="selectSysBusinessSystemVo">
+        select bs.system_id, bs.system_name, bs.system_code, bs.dept_id,
+               d.dept_name, bs.manager_ids, bs.status,
+               bs.remark, bs.create_by, bs.create_time, bs.update_by, bs.update_time
+        from sys_business_system bs
+        left join sys_dept d on bs.dept_id = d.dept_id
+    </sql>
+
+    <!-- 管理员查询：全部数据 -->
+    <select id="selectSysBusinessSystemList" parameterType="com.acr.system.domain.SysBusinessSystem" resultMap="SysBusinessSystemResult">
+        <include refid="selectSysBusinessSystemVo"/>
+        <where>
+            <if test="systemName != null and systemName != ''">
+                AND bs.system_name like concat('%', #{systemName}, '%')
+            </if>
+            <if test="systemCode != null and systemCode != ''">
+                AND bs.system_code like concat('%', #{systemCode}, '%')
+            </if>
+            <if test="status != null and status != ''">
+                AND bs.status = #{status}
+            </if>
+            <if test="deptId != null">
+                AND bs.dept_id = #{deptId}
+            </if>
+        </where>
+        order by bs.create_time desc
+    </select>
+
+    <!-- 普通用户查询：仅查看有管理权限的 -->
+    <select id="selectSysBusinessSystemByUserId" parameterType="Long" resultMap="SysBusinessSystemResult">
+        <include refid="selectSysBusinessSystemVo"/>
+        where find_in_set(#{userId}, bs.manager_ids)
+        order by bs.create_time desc
+    </select>
+
+    <select id="selectSysBusinessSystemById" parameterType="Long" resultMap="SysBusinessSystemResult">
+        <include refid="selectSysBusinessSystemVo"/>
+        where bs.system_id = #{systemId}
+    </select>
+
+    <select id="checkSystemCodeUnique" parameterType="String" resultMap="SysBusinessSystemResult">
+        select system_id, system_name, system_code from sys_business_system
+        where system_code = #{systemCode} limit 1
+    </select>
+
+    <select id="checkSystemCodeUniqueExcludeId" resultMap="SysBusinessSystemResult">
+        select system_id, system_name, system_code from sys_business_system
+        where system_code = #{systemCode} and system_id != #{systemId} limit 1
+    </select>
+
+    <insert id="insertSysBusinessSystem" parameterType="com.acr.system.domain.SysBusinessSystem" useGeneratedKeys="true" keyProperty="systemId">
+        insert into sys_business_system
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="systemName != null and systemName != ''">system_name,</if>
+            <if test="systemCode != null and systemCode != ''">system_code,</if>
+            <if test="deptId != null">dept_id,</if>
+            <if test="managerIds != null">manager_ids,</if>
+            <if test="status != null">status,</if>
+            <if test="remark != null">remark,</if>
+            <if test="createBy != null">create_by,</if>
+            create_time
+        </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="systemName != null and systemName != ''">#{systemName},</if>
+            <if test="systemCode != null and systemCode != ''">#{systemCode},</if>
+            <if test="deptId != null">#{deptId},</if>
+            <if test="managerIds != null">#{managerIds},</if>
+            <if test="status != null">#{status},</if>
+            <if test="remark != null">#{remark},</if>
+            <if test="createBy != null">#{createBy},</if>
+            sysdate()
+        </trim>
+    </insert>
+
+    <update id="updateSysBusinessSystem" parameterType="com.acr.system.domain.SysBusinessSystem">
+        update sys_business_system
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="systemName != null and systemName != ''">system_name = #{systemName},</if>
+            <if test="systemCode != null and systemCode != ''">system_code = #{systemCode},</if>
+            <if test="deptId != null">dept_id = #{deptId},</if>
+            <if test="managerIds != null">manager_ids = #{managerIds},</if>
+            <if test="status != null">status = #{status},</if>
+            <if test="remark != null">remark = #{remark},</if>
+            <if test="updateBy != null">update_by = #{updateBy},</if>
+            update_time = sysdate()
+        </trim>
+        where system_id = #{systemId}
+    </update>
+
+    <delete id="deleteSysBusinessSystemById" parameterType="Long">
+        delete from sys_business_system where system_id = #{systemId}
+    </delete>
+
+    <delete id="deleteSysBusinessSystemByIds" parameterType="Long">
+        delete from sys_business_system where system_id in
+        <foreach item="systemId" collection="array" open="(" separator="," close=")">
+            #{systemId}
+        </foreach>
+    </delete>
+
+</mapper>

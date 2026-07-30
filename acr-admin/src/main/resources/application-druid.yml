@@ -1,0 +1,36 @@
+# Druid 连接池配置（通用部分，不区分环境）
+# 数据源连接信息（url、username、password）在各环境的 application-{env}.yml 中配置
+spring:
+  datasource:
+    druid:
+      # 连接池通用配置
+      initialSize: 5
+      minIdle: 10
+      maxActive: 20
+      maxWait: 60000
+      connectTimeout: 30000
+      socketTimeout: 60000
+      timeBetweenEvictionRunsMillis: 60000
+      minEvictableIdleTimeMillis: 300000
+      maxEvictableIdleTimeMillis: 900000
+      validationQuery: SELECT 1 FROM DUAL
+      testWhileIdle: true
+      testOnBorrow: false
+      testOnReturn: false
+      webStatFilter:
+        enabled: true
+      statViewServlet:
+        enabled: true
+        allow:
+        url-pattern: /druid/*
+        login-username: ${DRUID_USER:ruoyi}
+        login-password: ${DRUID_PASSWORD:}
+      filter:
+        stat:
+          enabled: true
+          log-slow-sql: true
+          slow-sql-millis: 1000
+          merge-sql: true
+        wall:
+          config:
+            multi-statement-allow: true

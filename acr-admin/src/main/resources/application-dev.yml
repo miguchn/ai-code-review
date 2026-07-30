@@ -1,0 +1,58 @@
+# 开发环境配置
+server:
+  port: 8080
+
+# 数据源配置
+spring:
+  datasource:
+    type: com.alibaba.druid.pool.DruidDataSource
+    driverClassName: com.mysql.cj.jdbc.Driver
+    druid:
+      master:
+        url: jdbc:mysql://localhost:3306/ai_code_review?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true
+        username: root
+        password: root
+      slave:
+        enabled: false
+        url:
+        username:
+        password:
+      initialSize: 5
+      minIdle: 10
+      maxActive: 20
+      maxWait: 60000
+      connectTimeout: 30000
+      socketTimeout: 60000
+      timeBetweenEvictionRunsMillis: 60000
+      minEvictableIdleTimeMillis: 300000
+      maxEvictableIdleTimeMillis: 900000
+      validationQuery: SELECT 1 FROM DUAL
+      testWhileIdle: true
+      testOnBorrow: false
+      testOnReturn: false
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      database: 0
+      password: redis
+      timeout: 10s
+      lettuce:
+        pool:
+          min-idle: 0
+          max-idle: 8
+          max-active: 8
+          max-wait: -1ms
+  devtools:
+    restart:
+      enabled: true
+
+# 日志配置
+logging:
+  level:
+    com.acr: debug
+    org.springframework: warn
+
+# 文件路径（开发环境示例）
+acr:
+  profile: D:/acr/uploadPath

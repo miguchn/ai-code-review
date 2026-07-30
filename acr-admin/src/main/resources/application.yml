@@ -1,0 +1,97 @@
+# AI-Code-Review 项目相关配置
+acr:
+  name: AI-Code-Review
+  version: 1.0.0
+  copyrightYear: 2026
+  addressEnabled: false
+  captchaType: math
+  ai:
+    embedding-rank-batch-size: 512
+    embedding-text-max-chars: 16000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
+  metrics:
+    tags:
+      application: ${acr.name}
+
+# 服务端口和路径（环境相关值在各 profile 中覆盖）
+server:
+  port: 8080
+  servlet:
+    context-path: /
+  tomcat:
+    uri-encoding: UTF-8
+    accept-count: 1000
+    threads:
+      max: 800
+      min-spare: 100
+
+# 用户配置
+user:
+  password:
+    maxRetryCount: 5
+    lockTime: 10
+
+# Spring配置
+spring:
+  messages:
+    basename: i18n/messages
+  profiles:
+    active: dev,druid
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 20MB
+  jackson:
+    time-zone: GMT+8
+    date-format: yyyy-MM-dd HH:mm:ss
+
+# token配置
+token:
+  header: Authorization
+  secret: abcdefghijklmnopqrstuvwxyz
+  expireTime: 30
+
+# MyBatis配置
+mybatis:
+  typeAliasesPackage: com.acr.**.domain
+  mapperLocations: classpath*:mapper/**/*Mapper.xml
+  configLocation: classpath:mybatis/mybatis-config.xml
+
+# PageHelper分页插件
+pagehelper:
+  helperDialect: mysql
+  supportMethodsArguments: true
+  params: count=countSql
+
+# Springdoc配置
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+    tags-sorter: alpha
+  group-configs:
+    - group: 'default'
+      display-name: 'AI-Code-Review接口文档'
+      paths-to-match: '/**'
+      packages-to-scan: com.acr.web.controller
+
+# 防盗链配置
+referer:
+  enabled: false
+  allowed-domains: localhost,127.0.0.1
+
+# 防止XSS攻击
+xss:
+  enabled: true
+  excludes: /system/notice
+  urlPatterns: /system/*,/monitor/*,/review/*

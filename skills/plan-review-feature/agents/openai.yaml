@@ -1,0 +1,4 @@
+interface:
+  display_name: "规划审查功能"
+  short_description: "依据项目路线图现有架构与交付边界把审查需求拆成可验收实施计划"
+  default_prompt: "使用 $plan-review-feature 为下一项代码审查业务编制实施计划。"

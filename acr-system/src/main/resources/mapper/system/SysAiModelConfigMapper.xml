@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.acr.system.mapper.SysAiModelConfigMapper">
+
+    <resultMap type="com.acr.system.domain.SysAiModelConfig" id="SysAiModelConfigResult">
+        <id     property="modelId"     column="model_id"     />
+        <result property="modelName"   column="model_name"   />
+        <result property="provider"    column="provider"     />
+        <result property="apiUrl"      column="api_url"      />
+        <result property="apiKey"      column="api_key"      />
+        <result property="model"       column="model"        />
+        <result property="embeddingModel" column="embedding_model" />
+        <result property="embeddingApiUrl" column="embedding_api_url" />
+        <result property="enabled"     column="enabled"      />
+        <result property="isDefault"   column="is_default"   />
+        <result property="timeout"     column="timeout"      />
+        <result property="maxTokens"   column="max_tokens"   />
+        <result property="sortOrder"   column="sort_order"   />
+        <result property="remark"      column="remark"       />
+        <result property="createBy"    column="create_by"    />
+        <result property="createTime"  column="create_time"  />
+        <result property="updateBy"    column="update_by"    />
+        <result property="updateTime"  column="update_time"  />
+    </resultMap>
+
+    <sql id="selectSysAiModelConfigVo">
+        select model_id, model_name, provider, api_url, api_key, model, embedding_model, embedding_api_url,
+               enabled, is_default, timeout, max_tokens, sort_order,
+               remark, create_by, create_time, update_by, update_time
+        from sys_ai_model_config
+    </sql>
+
+    <select id="selectSysAiModelConfigList" parameterType="com.acr.system.domain.SysAiModelConfig" resultMap="SysAiModelConfigResult">
+        <include refid="selectSysAiModelConfigVo"/>
+        <where>
+            <if test="modelName != null and modelName != ''">
+                AND model_name like concat('%', #{modelName}, '%')
+            </if>
+            <if test="provider != null and provider != ''">
+                AND provider = #{provider}
+            </if>
+            <if test="enabled != null and enabled != ''">
+                AND enabled = #{enabled}
+            </if>
+        </where>
+        order by sort_order asc, create_time desc
+    </select>
+
+    <select id="selectSysAiModelConfigById" parameterType="Long" resultMap="SysAiModelConfigResult">
+        <include refid="selectSysAiModelConfigVo"/>
+        where model_id = #{modelId}
+    </select>
+
+    <insert id="insertSysAiModelConfig" parameterType="com.acr.system.domain.SysAiModelConfig" useGeneratedKeys="true" keyProperty="modelId">
+        insert into sys_ai_model_config
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="modelName != null and modelName != ''">model_name,</if>
+            <if test="provider != null and provider != ''">provider,</if>
+            <if test="apiUrl != null and apiUrl != ''">api_url,</if>
+            <if test="apiKey != null and apiKey != ''">api_key,</if>
+            <if test="model != null">model,</if>
+            <if test="embeddingModel != null">embedding_model,</if>
+            <if test="embeddingApiUrl != null">embedding_api_url,</if>
+            <if test="enabled != null">enabled,</if>
+            <if test="isDefault != null">is_default,</if>
+            <if test="timeout != null">timeout,</if>
+            <if test="maxTokens != null">max_tokens,</if>
+            <if test="sortOrder != null">sort_order,</if>
+            <if test="remark != null">remark,</if>
+            <if test="createBy != null">create_by,</if>
+            create_time
+        </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="modelName != null and modelName != ''">#{modelName},</if>
+            <if test="provider != null and provider != ''">#{provider},</if>
+            <if test="apiUrl != null and apiUrl != ''">#{apiUrl},</if>
+            <if test="apiKey != null and apiKey != ''">#{apiKey},</if>
+            <if test="model != null">#{model},</if>
+            <if test="embeddingModel != null">#{embeddingModel},</if>
+            <if test="embeddingApiUrl != null">#{embeddingApiUrl},</if>
+            <if test="enabled != null">#{enabled},</if>
+            <if test="isDefault != null">#{isDefault},</if>
+            <if test="timeout != null">#{timeout},</if>
+            <if test="maxTokens != null">#{maxTokens},</if>
+            <if test="sortOrder != null">#{sortOrder},</if>
+            <if test="remark != null">#{remark},</if>
+            <if test="createBy != null">#{createBy},</if>
+            sysdate()
+        </trim>
+    </insert>
+
+    <update id="updateSysAiModelConfig" parameterType="com.acr.system.domain.SysAiModelConfig">
+        update sys_ai_model_config
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="modelName != null and modelName != ''">model_name = #{modelName},</if>
+            <if test="provider != null and provider != ''">provider = #{provider},</if>
+            <if test="apiUrl != null and apiUrl != ''">api_url = #{apiUrl},</if>
+            <if test="apiKey != null">api_key = #{apiKey},</if>
+            <if test="model != null">model = #{model},</if>
+            <if test="embeddingModel != null">embedding_model = #{embeddingModel},</if>
+            <if test="embeddingApiUrl != null">embedding_api_url = #{embeddingApiUrl},</if>
+            <if test="enabled != null">enabled = #{enabled},</if>
+            <if test="isDefault != null">is_default = #{isDefault},</if>
+            <if test="timeout != null">timeout = #{timeout},</if>
+            <if test="maxTokens != null">max_tokens = #{maxTokens},</if>
+            <if test="sortOrder != null">sort_order = #{sortOrder},</if>
+            <if test="remark != null">remark = #{remark},</if>
+            <if test="updateBy != null">update_by = #{updateBy},</if>
+            update_time = sysdate()
+        </trim>
+        where model_id = #{modelId}
+    </update>
+
+    <delete id="deleteSysAiModelConfigById" parameterType="Long">
+        delete from sys_ai_model_config where model_id = #{modelId}
+    </delete>
+
+    <delete id="deleteSysAiModelConfigByIds" parameterType="Long">
+        delete from sys_ai_model_config where model_id in
+        <foreach item="modelId" collection="array" open="(" separator="," close=")">
+            #{modelId}
+        </foreach>
+    </delete>
+
+    <update id="clearDefaultModel">
+        update sys_ai_model_config set is_default = '0' where is_default = '1'
+    </update>
+
+</mapper>
