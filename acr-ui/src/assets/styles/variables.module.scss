@@ -1,24 +1,24 @@
 // base color
-$blue: #324157;
-$light-blue: #333c46;
-$red: #C03639;
-$pink: #E65D6E;
-$green: #30B08F;
-$tiffany: #4AB7BD;
-$yellow: #FEC171;
-$panGreen: #30B08F;
+$blue: #3F6F8F;
+$light-blue: #4F7F9D;
+$red: #B93832;
+$pink: #C2413A;
+$green: #15803D;
+$tiffany: #3F6F8F;
+$yellow: #B7791F;
+$panGreen: #15803D;
 
 // 默认主题变量
 $menuText: #bfcbd9;
-$menuActiveText: #409eff;
+$menuActiveText: #16A34A;
 $menuBg: #1a1f2e;
 $menuHover: #263445;
 
 // 浅色主题theme-light
-$menuLightBg: #ffffff;
-$menuLightHover: #f0f1f5;
-$menuLightText: #303133;
-$menuLightActiveText: #409EFF;
+$menuLightBg: #F8FAF9;
+$menuLightHover: #F0F4F1;
+$menuLightText: #334155;
+$menuLightActiveText: #15803D;
 
 // 基础变量
 $base-sidebar-width: 200px;
@@ -32,11 +32,11 @@ $base-sub-menu-background: #141824;
 $base-sub-menu-hover: rgba(255,255,255,.06);
 
 // 组件变量
-$--color-primary: #409EFF;
-$--color-success: #67C23A;
-$--color-warning: #E6A23C;
-$--color-danger: #F56C6C;
-$--color-info: #909399;
+$--color-primary: #16A34A;
+$--color-success: #3D8B61;
+$--color-warning: #B7791F;
+$--color-danger: #C2413A;
+$--color-info: #4F7F9D;
 
 :export {
   menuText: $menuText;
@@ -67,72 +67,169 @@ $--color-info: #909399;
 
 // CSS变量定义
 :root {
-  /* 亮色模式变量 */
-  --sidebar-bg: #{$menuBg};
-  --sidebar-text: #{$menuText};
-  --menu-hover: #{$menuHover};
-  
-  --navbar-bg: #ffffff;
-  --navbar-text: #303133;
+  color-scheme: light;
 
-  /* 全局壳层 / 背景氛围（亮色） */
-  --app-bg-base: #eef0f7;
-  --app-bg-accent: #e6eaf3;
-  --app-bg-glow: rgba(64, 158, 255, 0.12);
-  --app-bg-glow-secondary: rgba(99, 102, 241, 0.08);
+  /* AI Code Review 浅色主题 Token */
+  --brand-500: #16A34A;
+  --brand-600: #15803D;
+  --brand-700: #166534;
+  --brand-800: #14532D;
+  --brand-bg-soft: #EAF7EE;
+  --brand-bg-selected: #E2F4E7;
+  --brand-border: #BCE7C8;
+  --brand-text: #166534;
+  --brand-on-solid: #F8FBF9;
 
-  --shell-navbar-bg: rgba(255, 255, 255, 0.72);
-  --shell-navbar-border: rgba(15, 23, 42, 0.06);
-  --shell-navbar-shadow: 0 1px 0 rgba(255, 255, 255, 0.72) inset, 0 8px 28px rgba(15, 23, 42, 0.07);
-  --shell-hover-fill: rgba(15, 23, 42, 0.06);
+  --neutral-page: #F5F7F6;
+  --neutral-content: #F8FAF9;
+  --neutral-card: #FCFDFC;
+  --neutral-overlay: #FEFFFE;
+  --neutral-code: #F6F8F7;
+  --text-primary: #0F172A;
+  --text-regular: #334155;
+  --text-secondary: #64748B;
+  --text-assist: #7E8B84;
+  --text-placeholder: #94A3B8;
+  --text-disabled: #8E9A94;
+  --border-default: #D8E0DC;
+  --border-light: #E5EAE7;
+  --divider: #EBEFED;
+  --bg-hover: #F0F4F1;
+  --bg-selected: #EAF7EE;
+  --mask: rgba(15, 23, 42, 0.42);
 
-  /* 顶栏右侧快捷图标：悬浮 / 点击 / 聚焦（与毛玻璃顶栏协调） */
-  --shell-navbar-action-bg-hover: linear-gradient(
-    165deg,
-    rgba(255, 255, 255, 0.78) 0%,
-    rgba(255, 255, 255, 0.28) 40%,
-    var(--shell-hover-fill) 100%
-  );
-  --shell-navbar-action-shadow-hover: 0 1px 0 rgba(255, 255, 255, 0.62) inset,
-    0 6px 18px rgba(15, 23, 42, 0.1);
-  --shell-navbar-action-shadow-active: 0 2px 8px rgba(15, 23, 42, 0.12) inset;
-  --shell-navbar-action-focus-ring: color-mix(in srgb, var(--el-color-primary, #409eff) 42%, transparent);
+  --status-success-text: #2F7650;
+  --status-success-icon: #3D8B61;
+  --status-success-bg: #F0F7F2;
+  --status-success-border: #CFE5D5;
+  --status-warning-text: #946200;
+  --status-warning-icon: #B7791F;
+  --status-warning-bg: #FFF8E6;
+  --status-warning-border: #F0D6A0;
+  --status-danger-text: #C2413A;
+  --status-danger-bg: #FFF1F0;
+  --status-danger-border: #F2C4C1;
+  --status-info-text: #3F6F8F;
+  --status-info-icon: #4F7F9D;
+  --status-info-bg: #EEF6FA;
+  --status-info-border: #C9DFEA;
 
-  --shell-sidebar-bg: rgba(255, 255, 255, 0.82);
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --radius-sm: 6px;
+  --radius-control: 8px;
+  --radius-card: 12px;
+  --radius-overlay: 14px;
+  --shadow-float: 0 4px 16px rgba(15, 23, 42, 0.06);
+  --shadow-menu: 0 10px 30px rgba(15, 23, 42, 0.10);
+  --shadow-dialog: 0 20px 56px rgba(15, 23, 42, 0.16);
+
+  /* Element Plus 语义映射 */
+  --el-color-primary: var(--brand-500);
+  --el-color-primary-dark-2: var(--brand-700);
+  --el-color-primary-light-3: #53B976;
+  --el-color-primary-light-5: #8BD39F;
+  --el-color-primary-light-7: var(--brand-border);
+  --el-color-primary-light-8: #D5EDDC;
+  --el-color-primary-light-9: var(--brand-bg-soft);
+  --el-color-success: var(--status-success-icon);
+  --el-color-success-light-9: var(--status-success-bg);
+  --el-color-warning: var(--status-warning-icon);
+  --el-color-warning-light-9: var(--status-warning-bg);
+  --el-color-danger: var(--status-danger-text);
+  --el-color-danger-light-9: var(--status-danger-bg);
+  --el-color-error: var(--status-danger-text);
+  --el-color-info: var(--status-info-icon);
+  --el-color-info-light-9: var(--status-info-bg);
+  --el-bg-color: var(--neutral-card);
+  --el-bg-color-page: var(--neutral-page);
+  --el-bg-color-overlay: var(--neutral-overlay);
+  --el-fill-color-blank: var(--neutral-card);
+  --el-fill-color-light: var(--neutral-content);
+  --el-fill-color-lighter: #FAFCFB;
+  --el-fill-color-extra-light: #FCFDFC;
+  --el-fill-color-dark: #E8EDEA;
+  --el-fill-color-darker: #DDE4E0;
+  --el-text-color-primary: var(--text-primary);
+  --el-text-color-regular: var(--text-regular);
+  --el-text-color-secondary: var(--text-secondary);
+  --el-text-color-placeholder: var(--text-placeholder);
+  --el-text-color-disabled: var(--text-disabled);
+  --el-border-color: var(--border-default);
+  --el-border-color-light: var(--border-light);
+  --el-border-color-lighter: var(--divider);
+  --el-border-color-extra-light: #F1F4F2;
+  --el-disabled-bg-color: #EFF2F0;
+  --el-disabled-border-color: #D5DDD8;
+  --el-disabled-text-color: var(--text-disabled);
+  --el-mask-color: var(--mask);
+  --el-border-radius-base: var(--radius-control);
+  --el-border-radius-small: var(--radius-sm);
+  --el-component-size: 36px;
+  --el-component-size-small: 28px;
+  --el-component-size-large: 40px;
+
+  /* 亮色壳层 */
+  --sidebar-bg: var(--neutral-content);
+  --sidebar-text: var(--text-regular);
+  --menu-hover: var(--bg-hover);
+
+  --navbar-bg: var(--neutral-card);
+  --navbar-text: var(--text-regular);
+
+  --app-bg-base: var(--neutral-page);
+  --app-bg-accent: var(--neutral-content);
+  --app-bg-glow: transparent;
+  --app-bg-glow-secondary: transparent;
+
+  --shell-navbar-bg: var(--neutral-card);
+  --shell-navbar-border: var(--border-light);
+  --shell-navbar-shadow: none;
+  --shell-hover-fill: var(--bg-hover);
+
+  --shell-navbar-action-bg-hover: var(--bg-hover);
+  --shell-navbar-action-shadow-hover: none;
+  --shell-navbar-action-shadow-active: none;
+  --shell-navbar-action-focus-ring: rgba(22, 163, 74, 0.16);
+
+  --shell-sidebar-bg: var(--neutral-content);
   --shell-sidebar-solid-dark: rgba(24, 29, 42, 0.94);
-  --shell-sidebar-border: rgba(15, 23, 42, 0.07);
-  --shell-sidebar-shadow: 8px 0 28px rgba(15, 23, 42, 0.06);
+  --shell-sidebar-border: var(--border-light);
+  --shell-sidebar-shadow: none;
 
-  --radius-md: 10px;
-  --radius-lg: 14px;
+  --radius-md: var(--radius-control);
+  --radius-lg: var(--radius-card);
 
-  --shell-card-shadow: 0 12px 40px rgba(15, 23, 42, 0.06);
-  --shell-card-shadow-hover: 0 18px 52px rgba(15, 23, 42, 0.1);
-  --shell-dialog-shadow: 0 28px 90px rgba(15, 23, 42, 0.16);
-  --shell-dropdown-shadow: 0 16px 48px rgba(15, 23, 42, 0.12);
+  --shell-card-shadow: none;
+  --shell-card-shadow-hover: var(--shadow-float);
+  --shell-dialog-shadow: var(--shadow-dialog);
+  --shell-dropdown-shadow: var(--shadow-menu);
 
-  /* 标签栏（亮色毛玻璃条） */
-  --tags-bg: rgba(255, 255, 255, 0.55);
-  --tags-item-bg: rgba(255, 255, 255, 0.72);
-  --tags-item-border: rgba(15, 23, 42, 0.08);
-  --tags-item-text: #3c4257;
-  --tags-item-hover: rgba(15, 23, 42, 0.06);
-  --tags-close-hover: rgba(15, 23, 42, 0.14);
+  --tags-bg: var(--neutral-content);
+  --tags-item-bg: var(--neutral-card);
+  --tags-item-border: var(--border-light);
+  --tags-item-text: var(--text-regular);
+  --tags-item-hover: var(--bg-hover);
+  --tags-close-hover: #DDE4E0;
 
-  /* 业务内容区面板（与壳层渐变配合） */
-  --content-surface-bg: rgba(255, 255, 255, 0.78);
-  --content-surface-border: rgba(15, 23, 42, 0.07);
-  --content-surface-shadow: 0 4px 24px rgba(15, 23, 42, 0.04), 0 20px 48px rgba(15, 23, 42, 0.06);
-  --content-query-bg: rgba(255, 255, 255, 0.62);
-  --content-query-border: rgba(15, 23, 42, 0.06);
-  --content-toolbar-bg: rgba(246, 248, 252, 0.88);
-  --content-table-header-bg: rgba(252, 253, 255, 0.97);
-  --content-table-header-gradient: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(245, 248, 252, 0.94) 100%);
-  --content-table-row-hover: rgba(64, 158, 255, 0.07);
-  --content-table-row-alt: rgba(246, 249, 253, 0.45);
-  --content-table-border: rgba(15, 23, 42, 0.055);
-  --content-table-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 10px 36px rgba(15, 23, 42, 0.06);
-  --content-empty-opacity: 0.92;
+  --content-surface-bg: transparent;
+  --content-surface-border: transparent;
+  --content-surface-shadow: none;
+  --content-query-bg: var(--neutral-card);
+  --content-query-border: var(--border-default);
+  --content-toolbar-bg: var(--neutral-card);
+  --content-table-header-bg: var(--neutral-content);
+  --content-table-header-gradient: var(--neutral-content);
+  --content-table-row-hover: var(--bg-hover);
+  --content-table-row-alt: #FAFCFB;
+  --content-table-border: var(--border-light);
+  --content-table-shadow: none;
+  --content-empty-opacity: 1;
   
   /* splitpanes default-theme 变量 */
   --splitpanes-default-bg: #ffffff;

@@ -80,7 +80,6 @@
 import Fuse from 'fuse.js'
 import { getNormalPath } from '@/utils/common'
 import { isHttp } from '@/utils/validate'
-import useSettingsStore from '@/store/modules/settings'
 import usePermissionStore from '@/store/modules/permission'
 
 const search = ref('')
@@ -91,7 +90,6 @@ const show = ref(false)
 const fuse = ref(undefined)
 const headerSearchSelectRef = ref(null)
 const router = useRouter()
-const theme = computed(() => useSettingsStore().theme)
 const routes = computed(() => usePermissionStore().defaultRoutes)
 
 function click() {
@@ -205,8 +203,8 @@ function querySearch(query) {
 function activeStyle(index) {
   if (index !== activeIndex.value) return {}
   return {
-    "background-color": theme.value,
-    "color": "#fff"
+    "background-color": "var(--brand-bg-selected)",
+    "color": "var(--brand-text)"
   }
 }
 
@@ -247,16 +245,16 @@ watch(searchPool, (list) => {
 
 <style lang='scss' scoped>
 :deep(.el-dialog__header) {
-  padding: 6px !important;
+  display: none;
 }
 
 :deep(.highlight) {
-  color: red;
+  color: var(--status-danger-text);
   font-weight: 600;
 }
 
 :deep(.is-active .highlight) {
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--brand-700);
   font-weight: 600;
 }
 
@@ -269,12 +267,12 @@ watch(searchPool, (list) => {
 }
 
 .result-count {
-  padding: 6px 16px 0;
+  padding: 8px 16px 0;
   font-size: 12px;
-  color: #aaa;
+  color: var(--text-secondary);
 
   strong {
-    color: red;
+    color: var(--brand-600);
     font-weight: 600;
   }
 }
@@ -287,9 +285,9 @@ watch(searchPool, (list) => {
     display: flex;
     height: 48px;
     align-items: center;
-    padding-right: 10px;
-    border-radius: 4px;
-    transition: background 0.15s;
+    padding-right: 12px;
+    border-radius: var(--radius-control);
+    transition: background-color 0.15s ease-out;
 
     .left {
       width: 60px;
@@ -303,8 +301,8 @@ watch(searchPool, (list) => {
     }
 
     .search-info {
-      padding-left: 5px;
-      margin-top: 10px;
+      padding-left: 4px;
+      margin-top: 8px;
       width: 100%;
       display: flex;
       flex-direction: column;
@@ -321,8 +319,8 @@ watch(searchPool, (list) => {
       }
 
       .menu-path {
-        color: #ccc;
-        font-size: 10px;
+        color: var(--text-assist);
+        font-size: 12px;
       }
     }
   }
@@ -340,23 +338,23 @@ watch(searchPool, (list) => {
 
     .empty-icon {
       font-size: 42px;
-      color: #e0e0e0;
-      margin-bottom: 14px;
+      color: var(--text-assist);
+      margin-bottom: 12px;
     }
 
     .empty-text {
       font-size: 14px;
-      color: #999;
-      margin: 0 0 6px;
+      color: var(--text-secondary);
+      margin: 0 0 4px;
 
       strong {
-        color: #666;
+        color: var(--text-regular);
       }
     }
 
     .empty-tip {
       font-size: 12px;
-      color: #bbb;
+      color: var(--text-assist);
       margin: 0;
     }
   }
@@ -365,16 +363,16 @@ watch(searchPool, (list) => {
 .search-footer {
   display: flex;
   align-items: center;
-  gap: 28px;
-  padding: 10px 20px;
-  border-top: 1px solid #f0f0f0;
-  color: #999;
+  gap: 24px;
+  padding: 12px 20px 0;
+  border-top: 1px solid var(--divider);
+  color: var(--text-secondary);
   font-size: 12px;
 
   .shortcut-item {
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: 4px;
   }
 
   kbd {
@@ -383,15 +381,15 @@ watch(searchPool, (list) => {
     justify-content: center;
     min-width: 20px;
     height: 20px;
-    padding: 0 5px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    background: #f7f7f7;
-    color: #555;
+    padding: 0 4px;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-sm);
+    background: var(--neutral-content);
+    color: var(--text-regular);
     font-size: 11px;
     font-family: inherit;
     line-height: 1;
-    box-shadow: 0 1px 0 #ccc;
+    box-shadow: none;
   }
 }
 </style>

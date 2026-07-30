@@ -17,7 +17,7 @@ body {
 }
 
 label {
-  font-weight: 700;
+  font-weight: 500;
 }
 
 html {
@@ -45,7 +45,7 @@ html {
 
 a:focus,
 a:active {
-  outline: none;
+  outline-color: var(--brand-500);
 }
 
 a,
@@ -69,11 +69,11 @@ div:focus {
 }
 
 .pr-5 {
-  padding-right: 5px;
+  padding-right: 4px;
 }
 
 .pl-5 {
-  padding-left: 5px;
+  padding-left: 4px;
 }
 
 .block {
@@ -100,24 +100,25 @@ div:focus {
 }
 
 aside {
-  background: #eef1f6;
+  background: var(--neutral-content);
   padding: 8px 24px;
   margin-bottom: 20px;
-  border-radius: 2px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-control);
   display: block;
   line-height: 32px;
   font-size: 16px;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
-  color: #2c3e50;
+  color: var(--text-regular);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 
   a {
-    color: #337ab7;
+    color: var(--brand-600);
     cursor: pointer;
 
     &:hover {
-      color: rgb(32, 160, 255);
+      color: var(--brand-700);
     }
   }
 }
@@ -143,8 +144,8 @@ aside {
   width: 100%;
   text-align: right;
   padding-right: 20px;
-  transition: 600ms ease position;
-  background: linear-gradient(90deg, rgba(32, 182, 249, 1) 0%, rgba(32, 182, 249, 1) 0%, rgba(33, 120, 241, 1) 100%, rgba(33, 120, 241, 1) 100%);
+  transition: background-color 0.15s ease-out;
+  background: var(--brand-600);
 
   .subtitle {
     font-size: 20px;
@@ -152,21 +153,21 @@ aside {
   }
 
   &.draft {
-    background: #d0d0d0;
+    background: var(--text-assist);
   }
 
   &.deleted {
-    background: #d0d0d0;
+    background: var(--text-assist);
   }
 }
 
 .link-type,
 .link-type:focus {
-  color: #337ab7;
+  color: var(--brand-600);
   cursor: pointer;
 
   &:hover {
-    color: rgb(32, 160, 255);
+    color: var(--brand-700);
   }
 }
 

@@ -24,8 +24,7 @@
     left: 0;
     z-index: 1001;
     overflow: hidden;
-    -webkit-box-shadow: 0 8px 32px rgba(15, 23, 42, 0.08);
-    box-shadow: 0 0 1px rgba(15, 23, 42, 0.06), 0 8px 32px rgba(15, 23, 42, 0.06);
+    box-shadow: none;
 
     // reset element-ui css
     .horizontal-collapse-transition {
@@ -86,7 +85,7 @@
     .sub-menu-title-noDropdown,
     .el-sub-menu__title {
       &:hover {
-        background-color: rgba(0, 0, 0, 0.06);
+        background-color: var(--menu-hover);
       }
     }
 
@@ -99,7 +98,7 @@
       min-width: vars.$base-sidebar-width !important;
 
       &:hover {
-        background-color: rgba(0, 0, 0, 0.06);
+        background-color: var(--menu-hover);
       }
     }
 
@@ -125,14 +124,14 @@
       height: 14px;
       right: 12px;
       margin-top: -7px !important;
-      color: rgba(0, 0, 0, 0.4);
+      color: var(--text-assist);
       transition:
         transform var(--el-transition-duration, 0.3s),
         color 0.2s ease;
     }
 
     .el-sub-menu.is-opened > .el-sub-menu__title .el-sub-menu__icon-arrow {
-      color: rgba(0, 0, 0, 0.62);
+      color: var(--text-secondary);
     }
 
     .nest-menu .el-sub-menu__title .el-sub-menu__icon-arrow {
@@ -200,57 +199,57 @@
     
     // theme-light 浅色主题
     &.theme-light {
-      border-right: 1px solid #e8eaf0;
+      border-right: 1px solid var(--border-light);
       box-shadow: none;
 
       .el-menu-item,
       .el-sub-menu__title {
-        color: rgba(0, 0, 0, 0.65);
+        color: var(--text-regular);
       }
 
       .el-menu-item.is-active {
-        color: var(--current-color, #409eff) !important;
+        color: var(--current-color, #16A34A) !important;
         position: relative;
 
         &::before {
           content: '';
           position: absolute;
           inset: 0;
-          background-color: var(--current-color-light, #ecf5ff);
+          background-color: var(--current-color-light, #EAF7EE);
           pointer-events: none;
           z-index: 1;
         }
       }
 
       .el-sub-menu.is-active > .el-sub-menu__title {
-        color: var(--current-color, #409eff) !important;
+        color: var(--current-color, #16A34A) !important;
       }
 
       .el-sub-menu__title .el-sub-menu__icon-arrow {
-        color: rgba(0, 0, 0, 0.36);
+        color: var(--text-assist);
       }
 
       .el-sub-menu.is-opened > .el-sub-menu__title .el-sub-menu__icon-arrow {
-        color: rgba(0, 0, 0, 0.58);
+        color: var(--text-secondary);
       }
 
       .el-sub-menu.is-active > .el-sub-menu__title .el-sub-menu__icon-arrow {
-        color: var(--current-color, #409eff);
+        color: var(--current-color, #16A34A);
       }
 
       .el-menu-item:not(.is-active):hover,
       .submenu-title-noDropdown:hover,
       .el-sub-menu__title:hover {
-        background-color: #f5f7fa;
-        color: rgba(0, 0, 0, 0.85) !important;
+        background-color: var(--bg-hover);
+        color: var(--text-primary) !important;
       }
 
       .nest-menu .el-sub-menu > .el-sub-menu__title,
       .el-sub-menu .el-menu-item {
-        background-color: #fafafa;
+        background-color: var(--neutral-content);
 
         &:hover {
-          background-color: #f0f5ff;
+          background-color: var(--bg-hover);
         }
       }
     }
@@ -358,7 +357,7 @@
   .el-menu-item {
     &:hover {
       // you can use $sub-menuHover
-      background-color: rgba(0, 0, 0, 0.06) !important;
+      background-color: var(--bg-hover) !important;
     }
   }
 
@@ -368,7 +367,7 @@
     overflow-y: auto;
 
     &::-webkit-scrollbar-track-piece {
-      background: #d3dce6;
+      background: var(--neutral-content);
     }
 
     &::-webkit-scrollbar {
@@ -376,7 +375,7 @@
     }
 
     &::-webkit-scrollbar-thumb {
-      background: #99a9bf;
+      background: #AFC0B6;
       border-radius: 20px;
     }
   }

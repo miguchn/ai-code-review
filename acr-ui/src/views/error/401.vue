@@ -4,7 +4,7 @@
       返回
     </el-button>
     <el-row>
-      <el-col :span="12">
+      <el-col :xs="24" :md="12">
         <h1 class="text-jumbo text-ginormous">
           401错误!
         </h1>
@@ -18,8 +18,8 @@
           </li>
         </ul>
       </el-col>
-      <el-col :span="12">
-        <img :src="errGif" width="313" height="428" alt="Girl has dropped her ice cream.">
+      <el-col :xs="24" :md="12" class="error-illustration">
+        <img :src="errGif" alt="无访问权限">
       </el-col>
     </el-row>
   </div>
@@ -43,13 +43,21 @@ function back() {
 
 <style lang="scss" scoped>
 .errPage-container {
-  width: 800px;
-  max-width: 100%;
-  margin: 100px auto;
+  width: 960px;
+  max-width: calc(100% - 32px);
+  margin: 64px auto;
+  padding: 32px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-card);
+  background: var(--neutral-card);
   .pan-back-btn {
-    background: #008489;
-    color: #fff;
+    margin-bottom: 24px;
+    background: var(--brand-600);
+    color: var(--brand-on-solid);
     border: none !important;
+    &:hover {
+      background: var(--brand-700);
+    }
   }
   .pan-gif {
     margin: 0 auto;
@@ -61,9 +69,11 @@ function back() {
     width: 100%;
   }
   .text-jumbo {
-    font-size: 60px;
-    font-weight: 700;
-    color: #484848;
+    margin: 24px 0 16px;
+    font-size: 40px;
+    line-height: 48px;
+    font-weight: 600;
+    color: var(--text-primary);
   }
   .list-unstyled {
     font-size: 14px;
@@ -71,11 +81,48 @@ function back() {
       padding-bottom: 5px;
     }
     a {
-      color: #008489;
+      color: var(--brand-600);
       text-decoration: none;
       &:hover {
         text-decoration: underline;
       }
+    }
+  }
+
+  h2 {
+    color: var(--text-primary);
+    font-weight: 600;
+  }
+
+  h6 {
+    color: var(--text-secondary);
+    font-size: 14px;
+    font-weight: 400;
+    line-height: 22px;
+  }
+
+  .error-illustration {
+    text-align: center;
+
+    img {
+      width: min(280px, 80%);
+      height: auto;
+    }
+  }
+}
+
+@media (max-width: 767px) {
+  .errPage-container {
+    margin: 24px auto;
+    padding: 24px 20px;
+
+    .text-jumbo {
+      font-size: 32px;
+      line-height: 40px;
+    }
+
+    .error-illustration {
+      margin-top: 24px;
     }
   }
 }

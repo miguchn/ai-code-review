@@ -1,6 +1,6 @@
 /**
- * ApiHub 全局壳层与 Element Plus 视觉增强（仅样式）
- * 毛玻璃 / 圆角 / 阴影 — 与 variables.module.scss 中 CSS 变量配合
+ * AI Code Review 全局壳层与 Element Plus 基础视觉
+ * 以浅色、中性表面、轻边框和稳定交互反馈为统一基线。
  */
 
 /* ========== 页面基底 ========== */
@@ -14,12 +14,8 @@ html body {
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto,
     'Helvetica Neue', Helvetica, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei',
     Arial, sans-serif;
-  color: var(--el-text-color-primary, #1f2937);
-  background-color: var(--app-bg-base, #eef1f8);
-  background-image: radial-gradient(1200px 600px at 10% -10%, var(--app-bg-glow, rgba(64, 158, 255, 0.12)), transparent 55%),
-    radial-gradient(900px 480px at 100% 0%, var(--app-bg-glow-secondary, rgba(99, 102, 241, 0.08)), transparent 50%),
-    linear-gradient(165deg, var(--app-bg-base, #eef1f8) 0%, var(--app-bg-accent, #e4e9f4) 100%);
-  background-attachment: fixed;
+  color: var(--text-regular);
+  background: var(--neutral-page);
 }
 
 #app {
@@ -43,16 +39,15 @@ html body {
 
 /* ========== 顶栏（覆盖 Navbar scoped 背景） ========== */
 html body #app .navbar {
-  border-bottom: 1px solid var(--shell-navbar-border, rgba(15, 23, 42, 0.06));
-  box-shadow: var(--shell-navbar-shadow, 0 1px 0 rgba(255, 255, 255, 0.65) inset),
-    0 8px 28px rgba(15, 23, 42, 0.06);
-  background: var(--shell-navbar-bg, rgba(255, 255, 255, 0.72)) !important;
+  border-bottom: 1px solid var(--shell-navbar-border);
+  box-shadow: var(--shell-navbar-shadow);
+  background: var(--shell-navbar-bg) !important;
 }
 
 @supports ((backdrop-filter: blur(12px)) or (-webkit-backdrop-filter: blur(12px))) {
   html body #app .navbar {
-    -webkit-backdrop-filter: blur(18px) saturate(160%);
-    backdrop-filter: blur(18px) saturate(160%);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
 }
 
@@ -81,15 +76,14 @@ html body #app .navbar .right-menu #header-notice .notice-trigger.right-menu-ite
   height: auto !important;
   padding: 0 6px !important;
   line-height: 1 !important;
-  border-radius: 11px;
+  border-radius: var(--radius-control);
   box-sizing: border-box;
   vertical-align: middle;
   color: var(--navbar-text, #3c4257);
   transition:
-    background 0.22s cubic-bezier(0.4, 0, 0.2, 1),
-    box-shadow 0.22s cubic-bezier(0.4, 0, 0.2, 1),
-    color 0.18s ease,
-    transform 0.2s cubic-bezier(0.34, 1.4, 0.64, 1);
+    background-color 0.15s ease-out,
+    color 0.15s ease-out,
+    box-shadow 0.15s ease-out;
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -99,7 +93,7 @@ html body #app .navbar .right-menu .theme-switch-wrapper.right-menu-item .svg-ic
 html body #app .navbar .right-menu #size-select.right-menu-item .svg-icon,
 html body #app .navbar .right-menu #header-notice .notice-trigger .svg-icon {
   font-size: 19px;
-  transition: transform 0.22s cubic-bezier(0.34, 1.4, 0.64, 1), opacity 0.18s ease;
+  transition: color 0.15s ease-out;
 }
 
 html body #app .navbar .right-menu #header-search.right-menu-item.hover-effect:hover,
@@ -107,8 +101,9 @@ html body #app .navbar .right-menu #screenfull.right-menu-item.hover-effect:hove
 html body #app .navbar .right-menu .theme-switch-wrapper.right-menu-item.hover-effect:hover,
 html body #app .navbar .right-menu #size-select.right-menu-item.hover-effect:hover,
 html body #app .navbar .right-menu #header-notice .notice-trigger.right-menu-item.hover-effect:hover {
-  background: var(--shell-navbar-action-bg-hover, var(--shell-hover-fill)) !important;
-  box-shadow: var(--shell-navbar-action-shadow-hover, 0 6px 18px rgba(15, 23, 42, 0.1)) !important;
+  color: var(--brand-600);
+  background: var(--shell-navbar-action-bg-hover) !important;
+  box-shadow: none !important;
 }
 
 html body #app .navbar .right-menu #header-search.right-menu-item.hover-effect:hover .svg-icon,
@@ -116,7 +111,7 @@ html body #app .navbar .right-menu #screenfull.right-menu-item.hover-effect:hove
 html body #app .navbar .right-menu .theme-switch-wrapper.right-menu-item.hover-effect:hover .svg-icon,
 html body #app .navbar .right-menu #size-select.right-menu-item.hover-effect:hover .svg-icon,
 html body #app .navbar .right-menu #header-notice .notice-trigger.right-menu-item.hover-effect:hover .svg-icon {
-  transform: scale(1.06);
+  transform: none;
 }
 
 html body #app .navbar .right-menu #header-search.right-menu-item.hover-effect:active,
@@ -124,9 +119,9 @@ html body #app .navbar .right-menu #screenfull.right-menu-item.hover-effect:acti
 html body #app .navbar .right-menu .theme-switch-wrapper.right-menu-item.hover-effect:active,
 html body #app .navbar .right-menu #size-select.right-menu-item.hover-effect:active,
 html body #app .navbar .right-menu #header-notice .notice-trigger.right-menu-item.hover-effect:active {
-  transform: scale(0.96);
-  box-shadow: var(--shell-navbar-action-shadow-active, 0 2px 8px rgba(15, 23, 42, 0.12) inset) !important;
-  transition-duration: 0.08s;
+  color: var(--brand-800);
+  background: #E8EDEA !important;
+  transform: none;
 }
 
 html body #app .navbar .right-menu #header-search.right-menu-item.hover-effect:focus-visible,
@@ -134,8 +129,9 @@ html body #app .navbar .right-menu #screenfull.right-menu-item.hover-effect:focu
 html body #app .navbar .right-menu .theme-switch-wrapper.right-menu-item.hover-effect:focus-visible,
 html body #app .navbar .right-menu #size-select.right-menu-item.hover-effect:focus-visible,
 html body #app .navbar .right-menu #header-notice .notice-trigger.right-menu-item.hover-effect:focus-visible {
-  outline: 2px solid var(--shell-navbar-action-focus-ring, rgba(64, 158, 255, 0.45));
+  outline: 1px solid var(--brand-500);
   outline-offset: 2px;
+  box-shadow: 0 0 0 3px var(--shell-navbar-action-focus-ring) !important;
 }
 
 /* 公告外层容器不重复铺底，避免与内层铃铛按钮双层 hover */
@@ -195,8 +191,8 @@ html body #app .navbar .hamburger-container:hover {
 html body #app .navbar .avatar-container .user-avatar {
   width: 32px;
   height: 32px;
-  border-radius: 10px;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+  border-radius: 50%;
+  box-shadow: none;
 }
 
 html.dark body #app .navbar .avatar-container .user-avatar {
@@ -218,12 +214,12 @@ html body #app .navbar .right-menu .avatar-container.right-menu-item.hover-effec
 
 /* ========== 左侧菜单壳 ========== */
 html body #app .app-wrapper > .sidebar-container {
-  border-right: 1px solid var(--shell-sidebar-border, rgba(15, 23, 42, 0.06));
-  box-shadow: var(--shell-sidebar-shadow, 8px 0 32px rgba(15, 23, 42, 0.06));
+  border-right: 1px solid var(--shell-sidebar-border);
+  box-shadow: var(--shell-sidebar-shadow);
 }
 
 html body #app .app-wrapper > .sidebar-container.theme-light {
-  background: var(--shell-sidebar-bg, rgba(255, 255, 255, 0.78)) !important;
+  background: var(--shell-sidebar-bg) !important;
 }
 
 html body #app .app-wrapper > .sidebar-container.theme-dark {
@@ -232,8 +228,8 @@ html body #app .app-wrapper > .sidebar-container.theme-dark {
 
 @supports ((backdrop-filter: blur(12px)) or (-webkit-backdrop-filter: blur(12px))) {
   html body #app .app-wrapper > .sidebar-container {
-    -webkit-backdrop-filter: blur(22px) saturate(170%);
-    backdrop-filter: blur(22px) saturate(170%);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
 }
 
@@ -264,53 +260,123 @@ html body #app .hideSidebar .app-wrapper > .sidebar-container .el-sub-menu__titl
 /* ========== 标签栏 ========== */
 html body #app #tags-view-container.tags-view-container {
   height: 34px;
-  border-bottom: 1px solid var(--tags-item-border, rgba(15, 23, 42, 0.08));
-  background: var(--tags-bg, rgba(255, 255, 255, 0.55)) !important;
+  border-bottom: 1px solid var(--tags-item-border);
+  background: var(--tags-bg) !important;
 }
 
 @supports ((backdrop-filter: blur(8px)) or (-webkit-backdrop-filter: blur(8px))) {
   html body #app #tags-view-container.tags-view-container {
-    -webkit-backdrop-filter: blur(14px) saturate(150%);
-    backdrop-filter: blur(14px) saturate(150%);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
 }
 
 html body #app #tags-view-container .tags-view-wrapper .tags-view-item {
-  border-radius: 8px;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  border-radius: var(--radius-sm);
+  box-shadow: none;
 }
 
-/* ========== Element Plus 通用质感 ========== */
+/* ========== Element Plus 通用组件 ========== */
 .el-card {
-  border-radius: var(--radius-lg, 14px) !important;
-  border: 1px solid var(--el-border-color-lighter, rgba(15, 23, 42, 0.06)) !important;
-  box-shadow: var(--shell-card-shadow, 0 12px 40px rgba(15, 23, 42, 0.06)) !important;
-  background-color: var(--el-bg-color, #ffffff) !important;
+  border-radius: var(--radius-card) !important;
+  border: 1px solid var(--border-default) !important;
+  box-shadow: none !important;
+  background-color: var(--neutral-card) !important;
 }
 
 .el-card.is-hover-shadow:hover {
-  box-shadow: var(--shell-card-shadow-hover, 0 16px 48px rgba(15, 23, 42, 0.1)) !important;
+  border-color: #AFC0B6 !important;
+  box-shadow: var(--shadow-float) !important;
 }
 
 .el-dialog {
-  border-radius: var(--radius-lg, 14px) !important;
+  border-radius: var(--radius-overlay) !important;
   overflow: hidden;
-  box-shadow: var(--shell-dialog-shadow, 0 24px 80px rgba(15, 23, 42, 0.18)) !important;
+  box-shadow: var(--shadow-dialog) !important;
+  background: var(--neutral-overlay);
 }
 
 .el-dialog__header {
-  border-bottom: 1px solid var(--el-border-color-lighter, #ebeef5);
+  border-bottom: 1px solid var(--divider);
   margin-right: 0;
-  padding: 16px 20px 12px;
+  padding: 20px 24px 16px;
+}
+
+.el-dialog__title {
+  color: var(--text-primary);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.el-dialog__body {
+  padding: 20px 24px;
+}
+
+.el-dialog__footer {
+  padding: 16px 24px 20px;
+  border-top: 1px solid var(--divider);
 }
 
 .el-overlay-dialog {
-  -webkit-backdrop-filter: blur(4px);
-  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+.el-overlay {
+  background-color: var(--mask) !important;
 }
 
 .el-button {
-  border-radius: 10px !important;
+  min-height: 36px;
+  padding: 8px 14px;
+  border-radius: var(--radius-control) !important;
+  font-size: 14px;
+  font-weight: 500;
+  transition: color 0.15s ease-out, background-color 0.15s ease-out, border-color 0.15s ease-out,
+    box-shadow 0.15s ease-out;
+}
+
+.el-button--small {
+  min-height: 28px;
+  padding: 5px 12px;
+}
+
+.el-button--large {
+  min-height: 40px;
+  padding: 9px 16px;
+}
+
+.el-button:not(.is-disabled):focus-visible {
+  outline: 1px solid var(--brand-500);
+  outline-offset: 1px;
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.16);
+}
+
+.el-button--primary:not(.is-link):not(.is-plain) {
+  --el-button-bg-color: var(--brand-600);
+  --el-button-border-color: var(--brand-600);
+  --el-button-text-color: var(--brand-on-solid);
+  --el-button-hover-bg-color: var(--brand-700);
+  --el-button-hover-border-color: var(--brand-700);
+  --el-button-active-bg-color: var(--brand-800);
+  --el-button-active-border-color: var(--brand-800);
+  --el-button-disabled-bg-color: #D5DED8;
+  --el-button-disabled-border-color: #D5DED8;
+  --el-button-disabled-text-color: #7E8B84;
+}
+
+.el-button--danger:not(.is-link):not(.is-plain) {
+  --el-button-bg-color: #B93832;
+  --el-button-border-color: #B93832;
+  --el-button-hover-bg-color: #A6312C;
+  --el-button-hover-border-color: #A6312C;
+  --el-button-active-bg-color: #8F2B27;
+  --el-button-active-border-color: #8F2B27;
+}
+
+.el-button.is-link {
+  min-height: 28px;
+  padding: 4px 6px;
 }
 
 .el-button.is-round {
@@ -320,7 +386,39 @@ html body #app #tags-view-container .tags-view-wrapper .tags-view-item {
 .el-input__wrapper,
 .el-select__wrapper,
 .el-textarea__inner {
-  border-radius: 10px !important;
+  border-radius: var(--radius-control) !important;
+  background: var(--neutral-card);
+  transition: box-shadow 0.15s ease-out, background-color 0.15s ease-out;
+}
+
+.el-input__wrapper:hover,
+.el-select__wrapper:hover,
+.el-textarea__inner:hover {
+  box-shadow: 0 0 0 1px #AFC0B6 inset;
+}
+
+.el-input__wrapper.is-focus,
+.el-input__wrapper:focus-within,
+.el-select__wrapper.is-focused,
+.el-textarea__inner:focus {
+  box-shadow: 0 0 0 1px var(--brand-500) inset, 0 0 0 3px rgba(22, 163, 74, 0.14) !important;
+}
+
+.el-form-item.is-error .el-input__wrapper,
+.el-form-item.is-error .el-select__wrapper,
+.el-form-item.is-error .el-textarea__inner {
+  box-shadow: 0 0 0 1px var(--status-danger-text) inset, 0 0 0 3px rgba(194, 65, 58, 0.10) !important;
+}
+
+.el-textarea__inner {
+  min-height: 96px;
+  padding: 10px 12px;
+}
+
+.el-input.is-disabled .el-input__wrapper,
+.el-select.is-disabled .el-select__wrapper,
+.el-textarea.is-disabled .el-textarea__inner {
+  background: #EFF2F0;
 }
 
 .el-table {
@@ -337,30 +435,114 @@ html body #app #tags-view-container .tags-view-wrapper .tags-view-item {
 .el-pagination.is-background .el-pager li,
 .el-pagination.is-background .btn-next,
 .el-pagination.is-background .btn-prev {
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+}
+
+.el-pagination.is-background .el-pager li.is-active {
+  color: var(--brand-text);
+  background: var(--brand-bg-selected);
 }
 
 .el-dropdown-menu {
-  border-radius: 12px !important;
-  box-shadow: var(--shell-dropdown-shadow, 0 16px 48px rgba(15, 23, 42, 0.12)) !important;
+  border-radius: var(--radius-card) !important;
+  box-shadow: var(--shadow-menu) !important;
   overflow: hidden;
+}
+
+.el-dropdown-menu__item {
+  min-height: 34px;
+  padding: 0 12px;
+}
+
+.el-dropdown-menu__item:not(.is-disabled):focus,
+.el-dropdown-menu__item:not(.is-disabled):hover {
+  color: var(--brand-700);
+  background: var(--bg-hover);
+}
+
+.el-tag {
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.el-tag--success {
+  --el-tag-bg-color: var(--status-success-bg);
+  --el-tag-border-color: var(--status-success-border);
+  --el-tag-text-color: var(--status-success-text);
+}
+
+.el-tag--warning {
+  --el-tag-bg-color: var(--status-warning-bg);
+  --el-tag-border-color: var(--status-warning-border);
+  --el-tag-text-color: var(--status-warning-text);
+}
+
+.el-tag--danger {
+  --el-tag-bg-color: var(--status-danger-bg);
+  --el-tag-border-color: var(--status-danger-border);
+  --el-tag-text-color: var(--status-danger-text);
+}
+
+.el-tag--info {
+  --el-tag-bg-color: var(--status-info-bg);
+  --el-tag-border-color: var(--status-info-border);
+  --el-tag-text-color: var(--status-info-text);
 }
 
 .el-message,
 .el-notification {
-  border-radius: 12px !important;
+  border-radius: var(--radius-card) !important;
 }
 
 .el-drawer .el-drawer__header {
-  border-bottom: 1px solid var(--el-border-color-lighter);
+  border-bottom: 1px solid var(--divider);
   margin-bottom: 0;
-  padding: 16px 20px;
+  padding: 20px 24px 16px;
+  color: var(--text-primary);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.el-drawer {
+  max-width: calc(100vw - 32px);
+  background: var(--neutral-overlay);
+  box-shadow: -12px 0 36px rgba(15, 23, 42, 0.10);
+}
+
+.el-drawer__body {
+  padding: 20px 24px 24px;
+}
+
+.el-popover.el-popper {
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-menu);
 }
 
 /* ========== 移动端抽屉遮罩 ========== */
 #app .drawer-bg {
-  -webkit-backdrop-filter: blur(2px);
-  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+@media (max-width: 767px) {
+  .el-dialog {
+    width: calc(100vw - 32px) !important;
+    max-width: calc(100vw - 32px);
+  }
+
+  .el-dialog__header,
+  .el-dialog__body,
+  .el-dialog__footer,
+  .el-drawer .el-drawer__header,
+  .el-drawer__body {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
 }
 
 /* ========== 减弱动画偏好 ========== */

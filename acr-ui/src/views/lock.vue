@@ -1,8 +1,5 @@
 <template>
   <div class="lock-container">
-    <!-- 动态粒子背景 -->
-    <canvas ref="particleCanvas" class="particle-bg"></canvas>
-
     <!-- 时钟 -->
     <div class="lock-time">{{ currentTime }}</div>
     <div class="lock-date">{{ currentDate }}</div>
@@ -11,12 +8,12 @@
     <div class="lock-card">
       <div class="avatar-wrap">
         <img :src="userStore.avatar" class="lock-avatar" @error="onAvatarError" />
-        <div class="lock-icon">🔒</div>
+        <div class="lock-icon"><el-icon><Lock /></el-icon></div>
       </div>
       <div class="lock-username">{{ userStore.nickName }}</div>
       <div class="lock-hint">系统已锁定，请输入密码解锁</div>
 
-      <div class="input-wrap" :class="{ shake: isShaking }">
+      <div class="input-wrap">
         <input ref="passwordInput" v-model="password" type="password" placeholder="请输入登录密码" class="lock-input" @keydown.enter="handleUnlock" autocomplete="off" />
         <button class="unlock-btn" @click="handleUnlock" :disabled="loading">
           <span v-if="!loading">→</span>
@@ -47,15 +44,11 @@ const lockStore = useLockStore()
 const password = ref('')
 const loading = ref(false)
 const errorMsg = ref('')
-const isShaking = ref(false)
 const currentTime = ref('')
 const currentDate = ref('')
 const passwordInput = ref(null)
-const particleCanvas = ref(null)
 
 let timer = null
-let animationId = null
-let particles = []
 
 const onAvatarError = (e) => {
   e.target.src = defAva
@@ -97,8 +90,6 @@ const handleUnlock = async () => {
 
 const showError = (msg) => {
   errorMsg.value = msg
-  isShaking.value = true
-  setTimeout(() => { isShaking.value = false }, 600)
 }
 
 const goLogin = () => {
@@ -108,125 +99,63 @@ const goLogin = () => {
   })
 }
 
-const initParticles = () => {
-  const canvas = particleCanvas.value
-  if (!canvas) return
-  const ctx = canvas.getContext('2d')
-  const resize = () => {
-    canvas.width = window.innerWidth
-    canvas.height = window.innerHeight
-  }
-  resize()
-  window.addEventListener('resize', resize)
-
-  particles = Array.from({ length: 80 }, () => ({
-    x: Math.random() * canvas.width,
-    y: Math.random() * canvas.height,
-    r: Math.random() * 2 + 1,
-    dx: (Math.random() - 0.5) * 0.6,
-    dy: (Math.random() - 0.5) * 0.6,
-    alpha: Math.random() * 0.5 + 0.2
-  }))
-
-  const draw = () => {
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
-    particles.forEach(p => {
-      ctx.beginPath()
-      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2)
-      ctx.fillStyle = `rgba(255,255,255,${p.alpha})`
-      ctx.fill()
-      p.x += p.dx
-      p.y += p.dy
-      if (p.x < 0 || p.x > canvas.width) p.dx *= -1
-      if (p.y < 0 || p.y > canvas.height) p.dy *= -1
-    })
-    for (let i = 0; i < particles.length; i++) {
-      for (let j = i + 1; j < particles.length; j++) {
-        const a = particles[i], b = particles[j]
-        const dist = Math.hypot(a.x - b.x, a.y - b.y)
-        if (dist < 120) {
-          ctx.beginPath()
-          ctx.moveTo(a.x, a.y)
-          ctx.lineTo(b.x, b.y)
-          ctx.strokeStyle = `rgba(255,255,255,${0.15 * (1 - dist / 120)})`
-          ctx.lineWidth = 0.5
-          ctx.stroke()
-        }
-      }
-    }
-    animationId = requestAnimationFrame(draw)
-  }
-  draw()
-}
-
 onMounted(() => {
   startClock()
-  initParticles()
   nextTick(() => passwordInput.value?.focus())
 })
 
 onBeforeUnmount(() => {
   clearInterval(timer)
-  cancelAnimationFrame(animationId)
 })
 </script>
 
 <style scoped>
-/* 样式与原文件完全一致，无需改动 */
 .lock-container {
   position: fixed;
   inset: 0;
-  background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+  background: var(--neutral-page);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   z-index: 9999;
-  font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  padding: 32px 16px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   overflow: hidden;
-}
-
-.particle-bg {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
 }
 
 .lock-time {
   position: relative;
   z-index: 1;
-  font-size: 72px;
-  font-weight: 200;
-  color: #fff;
-  letter-spacing: 4px;
-  text-shadow: 0 0 40px rgba(255,255,255,0.3);
-  margin-bottom: 8px;
+  margin-bottom: 4px;
+  color: var(--text-primary);
+  font-size: 52px;
+  font-weight: 500;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
 }
 
 .lock-date {
   position: relative;
   z-index: 1;
-  font-size: 15px;
-  color: rgba(255,255,255,0.6);
-  margin-bottom: 48px;
-  letter-spacing: 2px;
+  margin-bottom: 32px;
+  color: var(--text-secondary);
+  font-size: 14px;
 }
 
 .lock-card {
   position: relative;
   z-index: 1;
-  background: rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 24px;
-  padding: 40px 48px;
-  width: 360px;
+  width: min(400px, calc(100vw - 32px));
+  padding: 32px;
+  background: var(--neutral-card);
+  border: 1px solid var(--border-default);
+  border-radius: 16px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  box-shadow: 0 25px 60px rgba(0,0,0,0.4);
+  box-shadow: var(--shadow-float);
 }
 
 .avatar-wrap {
@@ -238,7 +167,7 @@ onBeforeUnmount(() => {
   width: 80px;
   height: 80px;
   border-radius: 50%;
-  border: 3px solid rgba(255,255,255,0.3);
+  border: 2px solid var(--brand-border);
   object-fit: cover;
   display: block;
 }
@@ -247,57 +176,46 @@ onBeforeUnmount(() => {
   position: absolute;
   bottom: -4px;
   right: -4px;
-  background: rgba(255,255,255,0.15);
+  background: var(--brand-bg-soft);
+  color: var(--brand-600);
   border-radius: 50%;
   width: 26px;
   height: 26px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
-  backdrop-filter: blur(8px);
+  font-size: 14px;
+  border: 1px solid var(--brand-border);
 }
 
 .lock-username {
-  color: #fff;
+  color: var(--text-primary);
   font-size: 18px;
   font-weight: 600;
   margin-bottom: 6px;
-  letter-spacing: 1px;
 }
 
 .lock-hint {
-  color: rgba(255,255,255,0.5);
+  color: var(--text-secondary);
   font-size: 13px;
-  margin-bottom: 28px;
+  margin-bottom: 24px;
 }
 
 .input-wrap {
   width: 100%;
   display: flex;
   align-items: center;
-  background: rgba(255,255,255,0.1);
-  border: 1px solid rgba(255,255,255,0.2);
-  border-radius: 50px;
-  padding: 4px 4px 4px 20px;
-  transition: border-color 0.3s;
+  min-height: 40px;
+  background: var(--neutral-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  padding: 2px 2px 2px 12px;
+  transition: border-color 0.15s ease-out, box-shadow 0.15s ease-out;
 }
 
 .input-wrap:focus-within {
-  border-color: rgba(255,255,255,0.6);
-  background: rgba(255,255,255,0.13);
-}
-
-.input-wrap.shake {
-  animation: shake 0.5s ease;
-}
-
-@keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  20% { transform: translateX(-8px); }
-  40% { transform: translateX(8px); }
-  60% { transform: translateX(-6px); }
-  80% { transform: translateX(6px); }
+  border-color: var(--brand-500);
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.14);
 }
 
 .lock-input {
@@ -305,25 +223,25 @@ onBeforeUnmount(() => {
   background: transparent;
   border: none;
   outline: none;
-  color: #fff;
-  font-size: 15px;
-  padding: 10px 0;
+  color: var(--text-primary);
+  font-size: 14px;
+  padding: 8px 0;
 }
 
 .lock-input::placeholder {
-  color: rgba(255,255,255,0.35);
+  color: var(--text-placeholder);
 }
 
 .unlock-btn {
   width: 42px;
-  height: 42px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #667eea, #764ba2);
+  height: 36px;
+  border-radius: var(--radius-control);
+  background: var(--brand-600);
   border: none;
-  color: #fff;
+  color: var(--brand-on-solid);
   font-size: 18px;
   cursor: pointer;
-  transition: transform 0.2s, opacity 0.2s;
+  transition: background-color 0.15s ease-out, box-shadow 0.15s ease-out;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -331,7 +249,13 @@ onBeforeUnmount(() => {
 }
 
 .unlock-btn:hover:not(:disabled) {
-  transform: scale(1.08);
+  background: var(--brand-700);
+}
+
+.unlock-btn:focus-visible {
+  outline: 1px solid var(--brand-500);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.16);
 }
 
 .unlock-btn:disabled {
@@ -346,15 +270,9 @@ onBeforeUnmount(() => {
 
 .error-msg {
   margin-top: 14px;
-  color: #ff7675;
+  color: var(--status-danger-text);
   font-size: 13px;
   text-align: center;
-  animation: fadeIn 0.3s ease;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(-4px); }
-  to   { opacity: 1; transform: translateY(0); }
 }
 
 .lock-footer {
@@ -362,13 +280,33 @@ onBeforeUnmount(() => {
 }
 
 .lock-footer a {
-  color: rgba(255,255,255,0.4);
+  color: var(--brand-600);
   font-size: 13px;
-  text-decoration: none;
-  transition: color 0.2s;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: color 0.15s ease-out;
 }
 
 .lock-footer a:hover {
-  color: rgba(255,255,255,0.8);
+  color: var(--brand-700);
+}
+
+@media (max-height: 680px) {
+  .lock-date {
+    margin-bottom: 20px;
+  }
+
+  .lock-card {
+    padding-top: 24px;
+    padding-bottom: 24px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .input-wrap,
+  .unlock-btn,
+  .lock-footer a {
+    transition: none;
+  }
 }
 </style>

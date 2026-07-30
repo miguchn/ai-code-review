@@ -12,7 +12,7 @@
     <!-- 平台能力概览（占位，后续按真实模块填充） -->
     <el-row :gutter="20" class="feature-row">
       <el-col :xs="24" :sm="24" :md="8" v-for="cap in capabilities" :key="cap.title">
-        <el-card shadow="hover" class="feature-card">
+        <el-card shadow="never" class="feature-card">
           <template #header>
             <div class="feature-header">
               <svg-icon :icon-class="cap.icon" class-name="home-feature-icon" />
@@ -42,32 +42,35 @@ const capabilities = [
 
 <style scoped lang="scss">
 .home {
-  padding-bottom: 20px;
+  padding-bottom: 32px;
 }
 
 .welcome-card {
   margin-bottom: 20px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border: none;
+  background: var(--brand-bg-soft) !important;
+  border-color: var(--brand-border) !important;
   :deep(.el-card__body) {
-    padding: 36px 40px;
+    padding: 24px 28px !important;
   }
 }
 .welcome-inner {
-  color: #fff;
+  color: var(--text-regular);
   h1 {
     margin: 0 0 8px;
-    font-size: 28px;
+    color: var(--text-primary);
+    font-size: 24px;
+    line-height: 32px;
     font-weight: 600;
   }
   p {
     margin: 0;
-    opacity: 0.92;
-    font-size: 15px;
+    color: var(--text-regular);
+    font-size: 14px;
+    line-height: 22px;
   }
   .welcome-sub {
-    margin-top: 6px;
-    opacity: 0.7;
+    margin-top: 4px;
+    color: var(--text-secondary);
     font-size: 13px;
   }
 }
@@ -78,23 +81,23 @@ const capabilities = [
 .feature-card {
   height: 100%;
   :deep(.el-card__header) {
-    padding: 16px 20px 8px;
-    border-bottom: none;
+    padding: 16px 20px !important;
+    border-bottom-color: var(--divider);
   }
 }
 .feature-header {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
-  color: #303133;
+  color: var(--text-primary);
   :deep(.svg-icon) {
-    font-size: 24px;
+    font-size: 18px;
     width: 1em;
     height: 1em;
     flex-shrink: 0;
-    color: #409eff;
+    color: var(--brand-500);
   }
 }
 .feature-body {
@@ -102,14 +105,31 @@ const capabilities = [
   p {
     margin: 4px 0;
     font-size: 13px;
-    color: #606266;
-    line-height: 1.6;
+    color: var(--text-secondary);
+    line-height: 20px;
   }
 }
 
 .placeholder-card {
   :deep(.el-card__body) {
-    padding: 40px 0;
+    padding: 32px 0 !important;
+  }
+}
+
+@media (max-width: 991px) {
+  .feature-row {
+    margin-bottom: 4px;
+  }
+
+  .feature-card {
+    height: auto;
+    margin-bottom: 16px;
+  }
+}
+
+@media (max-width: 767px) {
+  .welcome-card :deep(.el-card__body) {
+    padding: 20px !important;
   }
 }
 </style>

@@ -231,19 +231,19 @@ function saveStorage() {
 :deep(.el-transfer__button) {
   border-radius: 50%;
   display: block;
-  margin-left: 0px;
+  margin-left: 0;
 }
 :deep(.el-transfer__button:first-child) {
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 :deep(.el-dropdown-menu__item) {
-  line-height: 30px;
-  padding: 0 17px;
+  line-height: 34px;
+  padding: 0 12px;
 }
 .check-line {
   width: 90%;
   height: 1px;
-  background-color: #ccc;
-  margin: 3px auto;
+  background-color: var(--divider);
+  margin: 4px auto;
 }
 </style>

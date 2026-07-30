@@ -254,23 +254,24 @@ onMounted(() => {
 }
 .popup-main {
     position: relative;
-    margin: 10px auto;
-    border-radius: 5px;
+    margin: 8px auto;
+    border-radius: var(--radius-control);
     font-size: 12px;
     overflow: hidden;
 }
 .popup-title {
     overflow: hidden;
     line-height: 34px;
-    padding-top: 6px;
-    background: #f2f2f2;
+    padding-top: 8px;
+    background: var(--neutral-content);
 }
 .popup-result {
     box-sizing: border-box;
     line-height: 24px;
-    margin: 25px auto;
-    padding: 15px 10px 10px;
-    border: 1px solid #ccc;
+    margin: 24px auto;
+    padding: 16px 12px 12px;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-control);
     position: relative;
 }
 .popup-result .title {
@@ -282,7 +283,7 @@ onMounted(() => {
     margin-left: -70px;
     text-align: center;
     line-height: 30px;
-    background: #fff;
+    background: var(--neutral-card);
 }
 .popup-result table {
     text-align: center;
@@ -302,7 +303,7 @@ onMounted(() => {
     height: 30px;
     white-space: nowrap;
     overflow: hidden;
-    border: 1px solid #e8e8e8;
+    border: 1px solid var(--border-light);
 }
 .popup-result-scroll {
     font-size: 12px;

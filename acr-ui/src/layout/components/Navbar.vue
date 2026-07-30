@@ -181,7 +181,7 @@ async function toggleTheme(event) {
   overflow: hidden;
   position: relative;
   background: var(--shell-navbar-bg, var(--navbar-bg));
-  box-shadow: var(--shell-navbar-shadow, 0 1px 4px rgba(0, 21, 41, 0.08));
+  box-shadow: var(--shell-navbar-shadow);
   display: flex;
   align-items: center;
   // padding: 0 8px;
@@ -191,7 +191,7 @@ async function toggleTheme(event) {
     line-height: 46px;
     height: 100%;
     cursor: pointer;
-    transition: background 0.3s;
+    transition: background-color 0.15s ease-out;
     -webkit-tap-highlight-color: transparent;
     display: flex;
     align-items: center;
@@ -199,7 +199,7 @@ async function toggleTheme(event) {
     margin-right: 8px;
 
     &:hover {
-      background: rgba(0, 0, 0, 0.025);
+      background: var(--bg-hover);
     }
   }
 
@@ -237,15 +237,15 @@ async function toggleTheme(event) {
       padding: 0 6px;
       height: 100%;
       font-size: 18px;
-      color: var(--navbar-text, #5a5e66);
+      color: var(--navbar-text);
       vertical-align: text-bottom;
 
       &.hover-effect {
         cursor: pointer;
-        transition: background-color 0.22s ease, box-shadow 0.22s ease;
+        transition: background-color 0.15s ease-out, box-shadow 0.15s ease-out;
 
         &:hover {
-          background: rgba(0, 0, 0, 0.025);
+          background: var(--bg-hover);
         }
       }
 
@@ -255,7 +255,7 @@ async function toggleTheme(event) {
         justify-content: center;
 
         svg {
-          transition: transform 0.22s cubic-bezier(0.34, 1.4, 0.64, 1);
+          transition: transform 0.18s ease-out;
         }
       }
     }
@@ -297,7 +297,7 @@ async function toggleTheme(event) {
           font-weight: 500;
           line-height: 1.25;
           letter-spacing: 0.01em;
-          color: var(--navbar-text, #5a5e66);
+          color: var(--navbar-text);
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;

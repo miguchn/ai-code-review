@@ -67,9 +67,9 @@ onMounted(() => {
   float: left;
   height: 50px !important;
   line-height: 50px !important;
-  color: #303133 !important;
-  padding: 0 5px !important;
-  margin: 0 10px !important;
+  color: var(--text-regular) !important;
+  padding: 0 4px !important;
+  margin: 0 8px !important;
 }
 
 .el-sub-menu.is-active .svg-icon, .el-menu-item.is-active .svg-icon + span, .el-sub-menu.is-active .svg-icon + span, .el-sub-menu.is-active .el-sub-menu__title span {
@@ -80,15 +80,15 @@ onMounted(() => {
 .topbar-menu.el-menu--horizontal > .el-sub-menu .el-sub-menu__title {
   float: left;
   line-height: 50px !important;
-  color: #303133 !important;
-  margin: 0 15px -3px!important;
+  color: var(--text-regular) !important;
+  margin: 0 16px -4px !important;
 }
 
 /* topbar more arrow */
 .topbar-menu .el-sub-menu .el-sub-menu__icon-arrow {
   position: static;
   margin-left: 8px;
-  margin-top: 0px;
+  margin-top: 0;
   display: block !important;
 }
 

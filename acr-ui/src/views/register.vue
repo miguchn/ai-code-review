@@ -160,20 +160,28 @@ getCode()
   justify-content: center;
   align-items: center;
   height: 100%;
+  min-height: 100vh;
+  padding: 32px 16px 64px;
   background-image: url("../assets/images/login-light.png");
   background-size: cover;
+  background-position: center;
 }
 .title {
-  margin: 0px auto 30px auto;
+  margin: 0 auto 24px;
   text-align: center;
-  color: #707070;
+  color: var(--text-primary);
+  font-size: 24px;
+  line-height: 32px;
+  font-weight: 600;
 }
 
 .register-form {
-  border-radius: 6px;
-  background: #ffffff;
-  width: 400px;
-  padding: 25px 25px 5px 25px;
+  width: min(400px, 100%);
+  padding: 28px 28px 8px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-card);
+  background: var(--neutral-overlay);
+  box-shadow: var(--shadow-dialog);
   .el-input {
     height: 40px;
     input {
@@ -189,7 +197,7 @@ getCode()
 .register-tip {
   font-size: 13px;
   text-align: center;
-  color: #bfbfbf;
+  color: var(--text-secondary);
 }
 .register-code {
   width: 33%;
@@ -207,13 +215,18 @@ getCode()
   bottom: 0;
   width: 100%;
   text-align: center;
-  color: #fff;
-  font-family: Arial;
+  color: var(--text-secondary);
+  font-family: inherit;
   font-size: 12px;
-  letter-spacing: 1px;
 }
 .register-code-img {
   height: 40px;
   padding-left: 12px;
+}
+
+@media (max-width: 480px) {
+  .register-form {
+    padding: 24px 20px 8px;
+  }
 }
 </style>

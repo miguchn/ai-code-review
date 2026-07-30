@@ -169,8 +169,9 @@ function isActive(r) {
 function tagActiveStyle(tag) {
   if (!isActive(tag) || tagsViewStyle.value !== 'card') return {}
   return {
-    'background-color': theme.value,
-    'border-color': theme.value
+    'background-color': 'var(--brand-bg-selected)',
+    'border-color': 'var(--brand-border)',
+    color: 'var(--brand-text)'
   }
 }
 
@@ -486,8 +487,8 @@ $tags-bar-height: 34px;
       background: var(--tags-item-bg, #fff);
       padding: 0 8px;
       font-size: 12px;
-      margin-left: 5px;
-      border-radius: 3px;
+      margin-left: 4px;
+      border-radius: var(--radius-sm);
       text-decoration: none;
       vertical-align: middle;
       padding-top: 2px !important;
@@ -498,16 +499,16 @@ $tags-bar-height: 34px;
   }
 
   &:not(.tags-view-container--chrome) .tags-view-wrapper .tags-view-item.active {
-    background-color: var(--el-color-primary);
-    color: #fff;
-    border-color: var(--el-color-primary);
+    background-color: var(--brand-bg-selected);
+    color: var(--brand-text);
+    border-color: var(--brand-border);
 
     &::before {
       content: '';
-      background: #fff;
+      background: var(--brand-500);
       display: inline-block;
-      width: 8px;
-      height: 8px;
+      width: 6px;
+      height: 6px;
       border-radius: 50%;
       position: relative;
       margin-right: 5px;

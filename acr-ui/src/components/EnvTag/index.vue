@@ -22,30 +22,27 @@ const label = envMap[props.env]?.label || props.env.toUpperCase()
 </script>
 
 <style scoped lang="scss">
-/* 顶栏环境胶囊：毛玻璃质感 + 环境色编码（逻辑仍由 tagType / label 驱动） */
+/* 顶栏环境标签：短环境代码允许紧凑徽标形态 */
 .env-tag.env-tag-badge {
   cursor: default !important;
   display: inline-flex !important;
   align-items: center;
   justify-content: center;
-  height: 26px !important;
-  padding: 0 12px 0 10px !important;
+  height: 24px !important;
+  padding: 0 8px !important;
   margin: 0 !important;
-  border-radius: 999px !important;
+  border-radius: var(--radius-sm) !important;
   font-size: 11px !important;
-  font-weight: 700 !important;
-  letter-spacing: 0.1em !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.04em !important;
   line-height: 1 !important;
   border-width: 1px !important;
   border-style: solid !important;
   vertical-align: middle;
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.55) inset,
-    0 4px 14px rgba(15, 23, 42, 0.07);
+  box-shadow: none;
   transition:
-    box-shadow 0.22s ease,
-    border-color 0.22s ease,
-    background 0.22s ease;
+    border-color 0.15s ease-out,
+    background-color 0.15s ease-out;
 
   .env-tag-badge__inner {
     display: inline-flex;
@@ -62,39 +59,29 @@ const label = envMap[props.env]?.label || props.env.toUpperCase()
     border-radius: 50%;
     background: currentColor;
     opacity: 0.92;
-    box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 22%, transparent);
+    box-shadow: none;
   }
 }
 
 @supports ((backdrop-filter: blur(8px)) or (-webkit-backdrop-filter: blur(8px))) {
   .env-tag.env-tag-badge {
-    -webkit-backdrop-filter: blur(10px) saturate(150%);
-    backdrop-filter: blur(10px) saturate(150%);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
 }
 
 /* DEV — 琥珀 */
 .env-tag.env-tag-badge.el-tag--warning {
-  color: #b45309 !important;
-  border-color: rgba(251, 191, 36, 0.42) !important;
-  background: linear-gradient(
-    155deg,
-    rgba(255, 255, 255, 0.82) 0%,
-    rgba(254, 243, 199, 0.65) 55%,
-    rgba(253, 230, 138, 0.38) 100%
-  ) !important;
+  color: var(--status-warning-text) !important;
+  border-color: var(--status-warning-border) !important;
+  background: var(--status-warning-bg) !important;
 }
 
 /* UAT / 默认 — 靛蓝 */
 .env-tag.env-tag-badge.el-tag--info {
-  color: #1d4ed8 !important;
-  border-color: rgba(147, 197, 253, 0.55) !important;
-  background: linear-gradient(
-    155deg,
-    rgba(255, 255, 255, 0.85) 0%,
-    rgba(219, 234, 254, 0.62) 55%,
-    rgba(191, 219, 254, 0.38) 100%
-  ) !important;
+  color: var(--status-info-text) !important;
+  border-color: var(--status-info-border) !important;
+  background: var(--status-info-bg) !important;
 }
 
 html.dark .env-tag.env-tag-badge {

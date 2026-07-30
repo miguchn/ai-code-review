@@ -1,9 +1,9 @@
 <template>
-  <el-drawer :model-value="visible" direction="rtl" size="700px" append-to-body @update:model-value="$emit('update:visible', $event)">
+  <el-drawer :model-value="visible" direction="rtl" size="min(700px, calc(100vw - 32px))" append-to-body @update:model-value="$emit('update:visible', $event)">
     <!-- 自定义标题 -->
     <template #header>
       <div class="drawer-head">
-        <el-icon style="color:#5b9bd5;margin-right:8px;"><List /></el-icon>
+        <el-icon class="drawer-head-icon"><List /></el-icon>
         <span class="drawer-head-name">{{ row.dictName }}</span>
         <span class="drawer-head-type">{{ row.dictType }}</span>
       </div>
@@ -113,32 +113,36 @@ function loadData() {
   display: flex;
   align-items: center;
 }
+.drawer-head-icon {
+  margin-right: 8px;
+  color: var(--brand-500);
+}
 .drawer-head-name {
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 600;
-  color: #2c3e50;
+  color: var(--text-primary);
   margin-right: 8px;
 }
 .drawer-head-type {
-  font-size: 14px;
-  color: #95a5a6;
-  font-family: monospace;
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 .drawer-wrap {
-  padding: 0 20px 20px;
+  padding: 0;
 }
 .drawer-loading {
   display: flex;
   align-items: center;
   justify-content: center;
   height: 120px;
-  color: #aaa;
+  color: var(--text-assist);
   font-size: 13px;
   gap: 8px;
 }
 .drawer-empty {
   text-align: center;
-  color: #bbb;
+  color: var(--text-assist);
   padding: 60px 0;
   font-size: 13px;
 }
@@ -150,36 +154,38 @@ function loadData() {
   margin-bottom: 16px;
 }
 .stat-card {
-  background: #f7f9fb;
-  border: 1px solid #e8ecf0;
-  border-radius: 6px;
-  padding: 10px 14px;
+  background: var(--neutral-content);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-card);
+  padding: 12px 16px;
   text-align: center;
 }
 .stat-num {
-  font-size: 22px;
-  font-weight: 700;
-  color: #2c3e50;
+  font-size: 28px;
+  line-height: 34px;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
 }
-.stat-num.success { color: #27ae60; }
-.stat-num.danger  { color: #e74c3c; }
+.stat-num.success { color: var(--status-success-text); }
+.stat-num.danger  { color: var(--status-danger-text); }
 .stat-label {
-  font-size: 11px;
-  color: #95a5a6;
+  font-size: 12px;
+  color: var(--text-secondary);
   margin-top: 4px;
 }
 .dict-item {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
-  border: 1px solid #e8ecf0;
-  border-radius: 6px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-card);
   overflow: hidden;
   margin-bottom: 8px;
 }
 .dict-cell {
   display: grid;
   grid-template-columns: 70px 1fr;
-  border-right: 1px solid #f0f4f8;
+  border-right: 1px solid var(--border-light);
 }
 .dict-cell:last-child {
   border-right: 0;
@@ -187,16 +193,35 @@ function loadData() {
 .dict-cell-key {
   padding: 9px 14px;
   font-size: 12px;
-  color: #888;
-  background: #f7f9fb;
-  border-right: 1px solid #f0f4f8;
+  color: var(--text-secondary);
+  background: var(--neutral-content);
+  border-right: 1px solid var(--border-light);
 }
 .dict-cell-val {
   padding: 9px 14px;
   font-size: 13px;
-  color: #2c3e50;
+  color: var(--text-regular);
   word-break: break-all;
   display: flex;
   align-items: center;
+}
+
+@media (max-width: 640px) {
+  .drawer-head-type {
+    display: none;
+  }
+
+  .dict-item {
+    grid-template-columns: 1fr;
+  }
+
+  .dict-cell {
+    border-right: 0;
+    border-bottom: 1px solid var(--border-light);
+  }
+
+  .dict-cell:last-child {
+    border-bottom: 0;
+  }
 }
 </style>

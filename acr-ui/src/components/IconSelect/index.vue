@@ -82,10 +82,10 @@ defineExpose({
             display: flex;
             max-width: 100%;
             height: 100%;
-            padding: 0 5px;
+            padding: 0 4px;
             &:hover {
-              background: #ececec;
-              border-radius: 5px;
+              background: var(--bg-hover);
+              border-radius: var(--radius-sm);
             }
             .icon {
               flex-shrink: 0;
@@ -94,15 +94,16 @@ defineExpose({
               display: inline-block;
               vertical-align: -0.15em;
               fill: currentColor;
-              padding-left: 2px;
+              padding-left: 4px;
               overflow: hidden;
               text-overflow: ellipsis;
               white-space: nowrap;
             }
           }
           .icon-item.active {
-            background: #ececec;
-            border-radius: 5px;
+            color: var(--brand-text);
+            background: var(--brand-bg-selected);
+            border-radius: var(--radius-sm);
           }
         }
       }

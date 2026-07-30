@@ -51,21 +51,22 @@ const toggleClick = () => {
   justify-content: center;
   cursor: pointer;
   outline: none;
-  border-radius: 4px;
-  color: var(--navbar-text, #5a5e66);
-  transition: color 0.2s ease, transform 0.2s ease;
+  border-radius: var(--radius-control);
+  color: var(--navbar-text);
+  transition: color 0.15s ease-out, background-color 0.15s ease-out;
 }
 
 .hamburger-inner:hover {
-  color: var(--current-color, #409eff);
+  color: var(--brand-600);
+  background: var(--bg-hover);
 }
 
 .hamburger-inner:focus-visible {
-  box-shadow: 0 0 0 2px var(--current-color-light, rgba(64, 158, 255, 0.35));
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.16);
 }
 
 .hamburger-chevron {
   font-size: 18px;
-  transition: transform 0.22s cubic-bezier(0.34, 1.4, 0.64, 1);
+  transition: transform 0.18s ease-out;
 }
 </style>

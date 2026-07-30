@@ -1,23 +1,24 @@
 /**
- * 现代 SaaS 风格表格
+ * 管理端统一表格
  * 作用域：Layout 主内容区 #app .main-container .app-main
  */
 
-/* ========== 表格外壳：轻阴影 + 圆角，弱化「盒子边框」感 ========== */
+/* ========== 表格外壳 ========== */
 #app .main-container .app-main .el-table {
-  --el-table-border-color: var(--content-table-border, rgba(15, 23, 42, 0.055));
+  --el-table-border-color: var(--content-table-border);
   --el-table-header-bg-color: transparent !important;
-  --el-table-row-hover-bg-color: var(--content-table-row-hover, rgba(64, 158, 255, 0.07)) !important;
-  border: none !important;
-  border-radius: 14px;
+  --el-table-row-hover-bg-color: var(--content-table-row-hover) !important;
+  --el-table-current-row-bg-color: var(--brand-bg-selected);
+  border: 1px solid var(--content-table-border) !important;
+  border-radius: var(--radius-card);
   overflow: hidden;
-  background: var(--el-bg-color, #fff);
-  box-shadow: var(--content-table-shadow, 0 1px 2px rgba(15, 23, 42, 0.04), 0 10px 36px rgba(15, 23, 42, 0.06));
+  background: var(--neutral-card);
+  box-shadow: none;
 }
 
 #app .main-container .app-main .el-table--border {
-  border: 1px solid var(--content-table-border, rgba(15, 23, 42, 0.06)) !important;
-  box-shadow: var(--content-table-shadow, 0 1px 2px rgba(15, 23, 42, 0.04), 0 10px 36px rgba(15, 23, 42, 0.06));
+  border: 1px solid var(--content-table-border) !important;
+  box-shadow: none;
 }
 
 /* 去掉表格外圈第二条线 */
@@ -25,20 +26,21 @@
   height: 0;
 }
 
-/* ========== 表头：浅色渐变 + 底部分割，取消「整块灰底」========== */
+/* ========== 表头 ========== */
 #app .main-container .app-main .el-table thead th.el-table__cell {
-  background: var(--content-table-header-gradient, var(--content-table-header-bg)) !important;
-  color: var(--el-text-color-secondary) !important;
+  height: 44px;
+  background: var(--content-table-header-bg) !important;
+  color: var(--text-secondary) !important;
   font-weight: 600;
-  font-size: 13px;
-  letter-spacing: 0.02em;
-  border-bottom: 1px solid var(--content-table-border, rgba(15, 23, 42, 0.08)) !important;
+  font-size: 12px;
+  letter-spacing: 0.01em;
+  border-bottom: 1px solid var(--content-table-border) !important;
   border-right: none !important;
-  padding: 12px 0;
+  padding: 0;
 }
 
 #app .main-container .app-main .el-table--border thead th.el-table__cell {
-  border-right: 1px solid var(--content-table-border, rgba(15, 23, 42, 0.05)) !important;
+  border-right: none !important;
 }
 
 #app .main-container .app-main .el-table--border thead th.el-table__cell:last-child {
@@ -48,19 +50,22 @@
 /* 固定列表头同步 */
 #app .main-container .app-main .el-table__fixed-header-wrapper thead th.el-table__cell,
 #app .main-container .app-main .el-table__fixed-right-patch {
-  background: var(--content-table-header-gradient, var(--content-table-header-bg)) !important;
+  background: var(--content-table-header-bg) !important;
 }
 
-/* ========== 表体：行高、柔和分割线 ========== */
+/* ========== 表体 ========== */
 #app .main-container .app-main .el-table td.el-table__cell {
-  border-bottom: 1px solid var(--content-table-border, rgba(15, 23, 42, 0.05)) !important;
-  padding: 12px 0;
+  height: 48px;
+  border-bottom: 1px solid var(--content-table-border) !important;
+  border-right: none !important;
+  padding: 0;
   font-size: 13px;
-  transition: background-color 0.18s ease;
+  color: var(--text-regular);
+  transition: background-color 0.15s ease-out;
 }
 
 #app .main-container .app-main .el-table--border td.el-table__cell {
-  border-right: 1px solid var(--content-table-border, rgba(15, 23, 42, 0.045)) !important;
+  border-right: none !important;
 }
 
 #app .main-container .app-main .el-table--border td.el-table__cell:last-child {
@@ -68,32 +73,53 @@
 }
 
 #app .main-container .app-main .el-table .el-table__body tr:hover > td.el-table__cell {
-  background-color: var(--content-table-row-hover, rgba(64, 158, 255, 0.07)) !important;
+  background-color: var(--content-table-row-hover) !important;
 }
 
 #app .main-container .app-main .el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell {
-  background: var(--content-table-row-alt, rgba(246, 249, 253, 0.45)) !important;
+  background: var(--content-table-row-alt) !important;
 }
 
 #app .main-container .app-main .el-table--striped .el-table__body tr.el-table__row--striped:hover td.el-table__cell {
-  background-color: var(--content-table-row-hover, rgba(64, 158, 255, 0.08)) !important;
+  background-color: var(--content-table-row-hover) !important;
+}
+
+#app .main-container .app-main .el-table .cell {
+  padding-right: 16px;
+  padding-left: 16px;
+}
+
+#app .main-container .app-main .el-table .current-row > td.el-table__cell,
+#app .main-container .app-main .el-table .el-table__body tr.current-row:hover > td.el-table__cell {
+  background: var(--brand-bg-selected) !important;
+}
+
+#app .main-container .app-main .el-table__fixed,
+#app .main-container .app-main .el-table__fixed-right {
+  box-shadow: 8px 0 12px -12px rgba(15, 23, 42, 0.24);
+}
+
+#app .main-container .app-main .el-table__fixed-right {
+  box-shadow: -8px 0 12px -12px rgba(15, 23, 42, 0.24);
 }
 
 /* 小号表格（展开行、弹窗内） */
 #app .main-container .app-main .el-table .el-table {
   border-radius: 10px;
   box-shadow: none;
-  border: 1px solid var(--content-table-border, rgba(15, 23, 42, 0.06)) !important;
+  border: 1px solid var(--content-table-border) !important;
   margin: 4px 0;
 }
 
 #app .main-container .app-main .el-table .el-table thead th.el-table__cell {
-  padding: 8px 0;
+  height: 40px;
+  padding: 0;
   font-size: 12px;
 }
 
 #app .main-container .app-main .el-table .el-table td.el-table__cell {
-  padding: 8px 0;
+  height: 40px;
+  padding: 0;
 }
 
 /* ========== 操作列按钮：紧凑间距 ========== */
@@ -108,14 +134,16 @@
 
 /* ========== 分页区：与表格分离、轻分割 ========== */
 #app .main-container .app-main .pagination-container {
-  margin-top: 20px;
-  padding: 14px 4px 4px;
-  border-top: 1px solid var(--content-table-border, rgba(15, 23, 42, 0.06));
+  margin-top: 16px;
+  padding: 0;
+  border-top: 0;
 }
 
 #app .main-container .app-main .el-pagination.is-background .el-pager li.is-active {
   font-weight: 600;
-  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.25);
+  color: var(--brand-text);
+  background: var(--brand-bg-selected);
+  box-shadow: none;
 }
 
 @media (prefers-reduced-motion: reduce) {

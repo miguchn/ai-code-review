@@ -551,13 +551,13 @@ onBeforeUnmount(() => {
 .tree-sidebar {
   flex-shrink: 0;
   width: 220px;
-  background: #fff;
-  border-right: 1px solid #e8eaed;
+  background: var(--neutral-card);
+  border-right: 1px solid var(--border-light);
   display: flex;
   flex-direction: column;
   overflow: hidden;
   position: relative;
-  transition: width 0.25s ease;
+  transition: width 0.2s ease-out;
   
   &.collapsed {
     width: 42px;
@@ -589,11 +589,11 @@ onBeforeUnmount(() => {
   transition: background 0.2s;
   
   &:hover {
-    background: rgba(64, 158, 255, 0.3);
+    background: var(--brand-border);
   }
   
   &.active {
-    background: rgba(64, 158, 255, 0.5);
+    background: var(--brand-500);
   }
 }
 
@@ -608,14 +608,16 @@ onBeforeUnmount(() => {
   justify-content: center;
   width: 15px;
   height: 20px;
-  background: #fff;
+  background: var(--neutral-card);
   border-radius: 0 4px 4px 0;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  transition: all 0.2s ease;
+  border: 1px solid var(--border-light);
+  border-left: 0;
+  box-shadow: none;
+  transition: background-color 0.15s ease-out;
   
   .tree-sidebar.collapsed & {
     right: 0;
-    background: #f7f8fa;
+    background: var(--neutral-content);
     border-radius: 0 4px 4px 0;
   }
   
@@ -626,15 +628,15 @@ onBeforeUnmount(() => {
 
 .collapse-button {
   font-size: 20px;
-  color: #909399;
+  color: var(--text-assist);
   cursor: pointer;
   padding: 4px;
   border-radius: 4px;
-  transition: all 0.2s;
+  transition: color 0.15s ease-out, background-color 0.15s ease-out;
   
   &:hover {
-    color: #409eff;
-    background: #ecf5ff;
+    color: var(--brand-600);
+    background: var(--brand-bg-soft);
   }
 }
 
@@ -644,14 +646,14 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   padding: 0 10px;
   height: 40px;
-  border-bottom: 1px solid #e8eaed;
-  background: #f7f8fa;
+  border-bottom: 1px solid var(--border-light);
+  background: var(--neutral-content);
   flex-shrink: 0;
 
   .tree-title {
     font-size: 13px;
     font-weight: 600;
-    color: #303133;
+    color: var(--text-primary);
     white-space: nowrap;
     overflow: hidden;
     display: flex;
@@ -659,7 +661,7 @@ onBeforeUnmount(() => {
     gap: 5px;
 
     .el-icon {
-      color: #409eff;
+      color: var(--brand-500);
       font-size: 16px;
     }
   }
@@ -674,15 +676,15 @@ onBeforeUnmount(() => {
 
 .tree-action-icon {
   font-size: 20px;
-  color: #909399;
+  color: var(--text-assist);
   cursor: pointer;
   padding: 4px;
   border-radius: 4px;
-  transition: all 0.2s;
+  transition: color 0.15s ease-out, background-color 0.15s ease-out;
 
   &:hover {
-    color: #409eff;
-    background: #ecf5ff;
+    color: var(--brand-600);
+    background: var(--brand-bg-soft);
   }
 }
 
@@ -705,11 +707,11 @@ onBeforeUnmount(() => {
   }
 
   &::-webkit-scrollbar-thumb {
-    background: #dcdfe6;
+    background: var(--border-default);
     border-radius: 4px;
     
     &:hover {
-      background: #c0c4cc;
+      background: #AFC0B6;
     }
   }
 
@@ -719,17 +721,17 @@ onBeforeUnmount(() => {
     margin-bottom: 1px;
 
     &:hover {
-      background: #f0f7ff;
+      background: var(--bg-hover);
     }
   }
 
   :deep(.el-tree-node.is-current > .el-tree-node__content) {
-    background: #e6f0fd;
-    color: #409eff;
+    background: var(--brand-bg-selected);
+    color: var(--brand-text);
     font-weight: 600;
 
     .node-icon {
-      color: #409eff !important;
+      color: var(--brand-500) !important;
     }
   }
 }
@@ -743,7 +745,7 @@ onBeforeUnmount(() => {
 
   .node-icon {
     font-size: 14px;
-    color: #f5a623;
+    color: var(--status-warning-icon);
     flex-shrink: 0;
   }
 
