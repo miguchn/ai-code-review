@@ -23,7 +23,7 @@ spring:
         enabled: true
         allow:
         url-pattern: /druid/*
-        login-username: ${DRUID_USER:ruoyi}
+        login-username: ${DRUID_USER:admin}
         login-password: ${DRUID_PASSWORD:}
       filter:
         stat:

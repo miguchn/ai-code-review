@@ -55,16 +55,15 @@ AI Code Review 是一个面向企业内部使用的**智能代码审查管理平
 ```
 ai-code-review/
 ├── acr-common/          # 公共工具层（utils、基类、AI Client 抽象、XSS 过滤）
-├── acr-system/          # 系统管理（RBAC 权限、用户、角色、字典、日志、通知）
+├── acr-system/          # 平台治理（RBAC、组织、字典、业务系统、模型配置）
+├── acr-review/          # 代码审核主业务边界（当前仅 Maven 模块说明）
 ├── acr-framework/       # 框架胶水层（Security、JWT、Druid、Redis、AOP、限流）
-├── acr-admin/           # Web 入口（Spring Boot 主类 + Controller）
-├── acr-quartz/          # 定时任务管理（全量扫描调度）
-├── acr-generator/       # 代码生成器（从 DB 表生成 CRUD 代码）
+├── acr-admin/           # 启动、配置与 Web 接入
+├── acr-quartz/          # 通用定时任务管理与触发
 ├── acr-ui/              # 前端（Vue3 + Element Plus）
-├── docs/planning/       # 产品路线图、架构骨架、领域与接口预留
-├── agents/              # 协作角色与交接边界
-├── skills/              # 项目规划与变更校验技能
-├── rules/               # 架构、安全和交付约束
+├── docs/planning/       # 产品路线图与最小架构骨架
+├── skills/              # 单项业务规划技能
+├── rules/               # 架构与交付约束
 └── sql/                 # 数据库脚本
 ```
 
@@ -74,10 +73,9 @@ ai-code-review/
 
 1. [产品路线图](docs/planning/product-roadmap.md)：业务模块、依赖、阶段和验收标准
 2. [架构与目录骨架](docs/planning/architecture-scaffold.md)：实际技术基线、模块归属和关键流程
-3. [领域对象与接口预留](docs/planning/domain-api-contracts.md)：对象、状态、API 和幂等边界
-4. [协作入口](AGENTS.md)：角色、技能、规则和基础验证
+3. [协作入口](AGENTS.md)：规划技能、开发规则和基础验证
 
-当前仓库已具备业务系统归属管理，以及模型配置、启停、默认模型和连接测试的基础能力；它们只覆盖后续“项目接入”和“模型管理”的一部分。实际完成度以产品路线图的“当前基线”为准。
+当前仓库已具备业务系统归属管理，以及模型配置、启停、默认模型和连接测试的基础能力；它们只覆盖后续“项目接入”和“模型管理”的一部分。`acr-review` 当前只建立依赖边界，没有实现任何代码审核业务。实际完成度以产品路线图的“当前基线”为准。
 
 ## 功能模块
 
@@ -94,7 +92,6 @@ ai-code-review/
 | 通知公告 | 站内通知、公告管理 |
 | 操作日志 | 操作审计、登录日志 |
 | 定时任务 | 任务 CRUD、执行日志 |
-| 代码生成 | 从数据库表生成前后端代码 |
 | 系统监控 | CPU/内存/JVM、Redis、Druid 监控 |
 
 ### 规划中（代码审查业务）
@@ -194,6 +191,5 @@ services:
 - Conventional Commits（`feat:`, `fix:`, `refactor:`, `docs:`）
 - 功能分支：`feature/<name>`，修复分支：`fix/<issue>`
 - 代码提交前必须通过编译和单元测试
-- 前端使用 ESLint + Prettier
 - 每个代码审查业务切片开发前，先按 `skills/plan-review-feature/` 明确范围与验收
 - 新业务遵守 `rules/architecture.md` 和 `rules/delivery.md`

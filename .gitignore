@@ -17,7 +17,6 @@ hs_err_pid*
 *.swp
 *.swo
 *~
-.DS_Store
 
 # Maven
 .mvn/wrapper/
@@ -41,5 +40,5 @@ Thumbs.db
 .DS_Store
 
 # Build
-build/
-out/
+/build/
+/out/

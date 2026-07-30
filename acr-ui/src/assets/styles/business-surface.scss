@@ -145,12 +145,12 @@
 }
 
 /* ========== 右侧工具条（表格页）========== */
-#app .main-container .app-main .top-right-btn .el-row.toolbar-ruoyi .el-button.is-circle {
+#app .main-container .app-main .top-right-btn .el-row.toolbar-actions .el-button.is-circle {
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
   border-color: var(--el-border-color-lighter);
 }
 
-#app .main-container .app-main .top-right-btn .el-row.toolbar-ruoyi .el-button.is-circle:hover {
+#app .main-container .app-main .top-right-btn .el-row.toolbar-actions .el-button.is-circle:hover {
   border-color: var(--el-color-primary-light-5);
   color: var(--el-color-primary);
 }

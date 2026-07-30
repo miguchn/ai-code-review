@@ -4,9 +4,10 @@
 
 1. `docs/planning/product-roadmap.md`
 2. `docs/planning/architecture-scaffold.md`
-3. `docs/planning/domain-api-contracts.md`
-4. `rules/architecture.md`
-5. `rules/delivery.md`
+3. `rules/architecture.md`
+4. `rules/delivery.md`
+
+涉及 `acr-ui` 页面、组件、样式、图标或插图时，还必须阅读 `rules/UI_THEME_RULES.md`。
 
 基础验证命令：
 
@@ -15,4 +16,4 @@ mvn test
 cd acr-ui && npm run build:prod
 ```
 
-不要在未完成单项功能规划前生成业务 CRUD，也不要新增框架、组件或 Maven 模块。
+不要在未完成单项功能规划前生成业务 CRUD，也不要新增框架、组件或继续拆分业务 Maven 模块。
