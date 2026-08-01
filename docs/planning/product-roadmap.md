@@ -56,9 +56,11 @@ AI Code Review 面向企业内部研发团队，是部署在代码托管平台�
 - 已具备 LLM 模型服务基础：`LlmProviderCode` 标准厂商枚举、`LlmCallService` 统一调用、`LlmCallResult` 结构化结果、API Key AES-GCM 加密存储、连接/模型调用测试及最近检测记录；管理页迁入「模型服务」一级目录；
 - 已具备本地 `open-code-review` CLI 审查引擎适配：统一请求/结果契约、安全进程调用、环境检测、内置样例测试调用，以及「模型服务 → 审查引擎」管理页；尚未接入正式 PR 审查任务消费；
 - P0/M1 第一个纵向切片已完成：`acr-review` 已实现 GitHub 项目、加密 PAT 凭据、GitHub Provider、连接检测、Mapper 和用例服务，`acr-admin` 提供对应 REST 与权限入口，`acr-ui` 提供业务系统、项目和凭据页面；
-- M2「GitHub PR Webhook 事件接入」已完成（2026-08-01）：`POST /webhook/github` 匿名可达并以 HMAC-SHA256 验签（Secret 按项目 AES-GCM 加密、独立 AAD、不回显不进日志）；事件与审查任务 1:1 拆分，`review_webhook_event` 按 `(provider, delivery_id)` 唯一键幂等去重并记录 RECEIVED/ACCEPTED/IGNORED/DUPLICATE/FAILED 全过程，`review_task` 生成 PENDING 最小任务（项目、PR 号、源/目标分支、base/head SHA、事件关联）；动作白名单（opened/reopened/synchronize，参数 `review.github.prEvents` 可调）、目标分支匹配、项目启停与 PR 审查开关判断均在服务端完成；请求线程只落库不执行审查。后台提供「审查任务」列表页（项目/PR/分支/SHA/状态/触发方式/失败原因）与项目详情 Webhook 配置区（回调地址、Secret 配置状态、最近接收时间与结果）。已经真实 GitHub 仓库（miguchn/webhook-test）验证 ping/closed/reopened/synchronize 四类投递，GitHub 侧全部 200；
+- M2「GitHub PR Webhook 事件接入」已完成（2026-08-01）：`POST /webhook/github` 匿名可达并以 HMAC-SHA256 验签（Secret 按项目 AES-GCM 加密、独立 AAD、不回显不进日志）；事件与审查任务 1:1 拆分，`review_webhook_event` 按 `(provider, delivery_id)` 唯一键幂等去重并记录 RECEIVED/ACCEPTED/IGNORED/DUPLICATE/FAILED 全过程，`review_task` 生成 PENDING 最小任务（项目、PR 号、源/目标分支、base/head SHA、事件关联）；动作白名单（opened/reopened/synchronize，参数 `review.github.prEvents` 可调）、目标分支匹配、项目启停与 PR 审查开关判断均在服务端完成；请求线程只落库不执行审查。后台提供「审查任务」列表页与项目详情 Webhook 配置区。已经真实 GitHub 仓库（miguchn/webhook-test）验证 ping/closed/reopened/synchronize 四类投递，GitHub 侧全部 200；
+- M3「真实代码审查全流程」已完成主链路与双方式整改（2026-08-01）：项目审查方式互斥二选一——`LLM_DIRECT`（平台模型服务 + 审查模板）或 `OCR_ENGINE`（本机 open-code-review）；项目表单按「基础信息 / 仓库与分支 / Webhook / 审查执行」分区，可配置主要语言；Webhook 建单时冻结方式/模板版本正文/模型或引擎快照，执行只读快照；失败可安全重试且不覆盖历史。审查模板（含 Java/Python/Go/Vue/React/全栈内置）挂在「代码审查」下。后端测试与前端生产构建已通过。2026-08-02 独立 Review 加固：执行异常统一落 FAILED（消除僵尸 RUNNING）、RUNNING 超 30 分钟可回收重试、快照冻结前建单的历史任务执行时按项目当前配置补冻结、PAT 经环境变量注入 git 进程、移除未建设的模板复制端点。不含 PR 评论回写、通知、问题台账完整整改、多引擎降级；真实仓库 E2E 需环境验收。详见 `docs/planning/review-pipeline-m3.md`、`docs/planning/review-template-config.md`；
+- 「统一审查评分与结构化结果协议」已落地（2026-08-01）：大模型路径平台追加五维评分（40/30/20/5/5）与 JSON 协议 v1.0；后端解析校验并重算总分；Top 3 重点问题与解析失败（`RESULT_FORMAT_INVALID`）落库；执行时拉取 PR 描述/Commit Message；任务详情结构化展示；`score_threshold` 预留且不做通知。详见 `docs/planning/review-scoring-result-protocol.md`；
 - 一个业务系统可关联多个代码仓库项目。业务系统数据和接口继续属于 `acr-system` 平台治理底座，唯一菜单入口移动到“代码审查”，避免与项目管理重复；
-- 现有通用 RBAC、部门数据范围和操作日志已用于项目接入，但尚不能证明后续审查任务/问题的项目级隔离、审查决策审计或审查链路可观测。
+- 现有通用 RBAC、部门数据范围和操作日志已用于项目接入，但尚不能证明后续审查问题的完整项目级隔离、审查决策审计或审查链路可观测。
 
 ### 2.2 原规划的核心问题与处置
 
@@ -290,15 +292,19 @@ MVP 建议按纵向切片交付：连接与项目 → 可信事件 → 任务骨
 
 M1「项目与 Git 接入」完成状态（2026-08-01）：GitHub 纵向切片已补齐到后续 PR 审查可消费的项目配置。已具备业务系统到多个仓库项目的一对多归属、PAT 加密与不回显、GitHub 地址解析/API 访问、仓库元数据与全部分支分页同步、`dev`/`develop` 默认推荐、真实 PR 目标分支多选、连接失败分类、项目默认停用和检测成功后启用约束，以及 13 项项目/凭据功能权限。未提供可用测试 PAT，因此浏览器验收验证了真实 GitHub API 的无效凭据失败路径；Provider 成功与分页路径由自动测试覆盖。Webhook 不在本次完成范围。
 
-M2「GitHub PR Webhook 事件接入」完成状态（2026-08-01）：主链路「GitHub PR 事件 → Webhook 验签 → 项目匹配 → 目标分支判断 → 事件去重 → 生成待审查任务 → 后台可查询」已闭环并通过真实仓库验收。事件全量落库可追溯（含忽略/失败原因），重复投递按 Delivery ID 判重计数；验证覆盖正常受理、重复重发、分支不匹配、动作白名单外、签名错误、载荷超限、缺 Delivery 头七类路径；单元测试 40 项全绿。本切片不含 Diff 拉取、引擎调用、回写与通知（后续切片）。设计详见 `docs/planning/github-pr-webhook-m2.md`。
+M2「GitHub PR Webhook 事件接入」完成状态（2026-08-01）：主链路「GitHub PR 事件 → Webhook 验签 → 项目匹配 → 目标分支判断 → 事件去重 → 生成待审查任务 → 后台可查询」已闭环并通过真实仓库验收。事件全量落库可追溯（含忽略/失败原因），重复投递按 Delivery ID 判重计数；验证覆盖正常受理、重复重发、分支不匹配、动作白名单外、签名错误、载荷超限、缺 Delivery 头七类路径。本切片不含 Diff 拉取、引擎调用、回写与通知。设计详见 `docs/planning/github-pr-webhook-m2.md`。
+
+M3「真实代码审查全流程」完成状态（2026-08-01）：主链路「PR 事件建单 → 异步领取 → 按审查方式分流（大模型 / 审查引擎）→ 配置与提示词快照 → 结构化结果落库 → 任务详情/失败重试」已打通；项目分区配置与提示词管理已落地；执行与结论状态分离；历史 run 不覆盖。已完成自动化测试与前端生产构建。未完成且明确排除：GitHub 评论回写、通知、问题台账整改流、多引擎降级、正式质量门禁、真实仓库双方式 E2E（需环境）。设计详见 `docs/planning/review-pipeline-m3.md`。
+
+统一评分协议完成状态（2026-08-01）：大模型审查已统一五维评分、Top 3 重点问题、可版本化 JSON 协议与后端重算落库；前端任务详情结构化展示；通知/预警分数线仍属后续「通知配置」范围。设计详见 `docs/planning/review-scoring-result-protocol.md`。
 
 - 单 Git 平台的项目接入、连接验证、加密凭据和停用；
 - MR/PR Webhook 验签、去重、接收审计和快速响应；
-- 审查任务、步骤、问题、策略快照和完整关联标识；
-- 单引擎路径的增量审查、超时、失败分类和安全重试；
-- 普通总结评论回写、一个通知渠道和独立投递记录；
-- 任务列表/详情、基础问题确认与人工关闭、基础工作台；
-- 项目级数据权限、关键业务审计、数据保留、业务 SLI 和异常告警。
+- 审查任务、步骤、策略/执行快照和完整关联标识（M3 已完成执行路径）；
+- 单引擎路径的增量审查、超时、失败分类和安全重试（M3 已完成）；
+- 普通总结评论回写、一个通知渠道和独立投递记录（未完成）；
+- 任务列表/详情（M3 已完成）、基础问题确认与人工关闭、基础工作台（未完成）；
+- 项目级数据权限、关键业务审计、数据保留、业务 SLI 和异常告警（部分复用现有能力，完整审查审计未完成）。
 
 验收：至少一个真实测试仓库连续运行两周；重复事件和重试不重复评论/通知；失败可定位并恢复；跨项目不可见；密钥不明文出现；覆盖率、成功率和时延可计算。
 

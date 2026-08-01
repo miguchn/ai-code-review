@@ -110,12 +110,15 @@ ai-code-review/
 │   └── src/
 │       ├── main/
 │       │   ├── java/com/acr/review/
-│       │   │   ├── domain/        # Git 凭据、代码项目、仓库读取结果及表单选项
-│       │   │   ├── git/           # 最小 Provider 契约与 GitHub 仓库/分支读取
-│       │   │   ├── mapper/        # 项目和凭据数据访问接口
-│       │   │   ├── security/      # PAT AES-256-GCM 加解密
-│       │   │   └── service/       # 项目/凭据用例及实现
-│       │   └── resources/mapper/review/
+│       │   │   ├── domain/        # 凭据、项目、模板、任务、执行记录、评分结果 DTO
+│       │   │   ├── engine/        # OCR CLI 适配与工作区管理
+│       │   │   ├── git/           # Provider / Webhook / PR 工作区、Diff、元数据
+│       │   │   ├── mapper/        # 审查业务数据访问
+│       │   │   ├── security/      # PAT / Webhook Secret AES-GCM
+│       │   │   └── service/       # 项目、模板、Webhook、任务执行、评分解析/协议组合
+│       │   └── resources/
+│       │       ├── mapper/review/
+│       │       └── review/schema/ # 评分结果 JSON Schema
 │       └── test/java/com/acr/review/
 ├── acr-system/
 ├── acr-framework/
@@ -125,26 +128,22 @@ ai-code-review/
 ├── docs/planning/
 │   ├── product-roadmap.md
 │   ├── architecture-scaffold.md
-│   └── github-project-access-m1.md
+│   ├── github-project-access-m1.md
+│   ├── github-pr-webhook-m2.md
+│   ├── review-pipeline-m3.md
+│   ├── review-template-config.md
+│   └── review-scoring-result-protocol.md
 ├── skills/
 │   └── plan-review-feature/
 ├── rules/
 │   ├── architecture.md
 │   └── delivery.md
 └── sql/
-    ├── 01_core_schema.sql
-    ├── 02_quartz_schema.sql
-    ├── 03_system_management.sql
-    ├── 04_github_project_access.sql
-    ├── 05_github_pr_scope.sql
-    ├── 06_llm_model_service.sql
-    ├── 07_review_engine.sql
-    └── 08_github_pr_webhook.sql
+    ├── 01_core_schema.sql … 17_review_project_engine_code_nullable.sql
+    └── 18_review_execution_hardening.sql
 ```
 
-`acr-admin` 中仅增加项目与凭据 REST Controller，页面和 API 位于 `acr-ui/src/views/review` 与 `acr-ui/src/api/review`。当前目录均由已实现的 GitHub 项目接入用例驱动，没有创建 GitLab、Gitee 或 Gitea 空实现，也没有为 Webhook、任务、Diff、通知等后续能力预建占位结构。
-
-Git 平台扩展边界保持轻量：项目用例依赖统一 `GitProvider`，通过 `providerCode` 标识实现；地址解析、认证、仓库授权、API 状态码和分页差异由具体 Provider 收口。当前只存在 GitHub 实现。Webhook 和 PR 平台适配在对应纵向切片开始时按真实用例扩展，不在本阶段预建空接口或空实现。
+`acr-admin` 承担 REST/Webhook 接入；页面和 API 位于 `acr-ui/src/views/review`、`acr-ui/src/views/system/aimodelconfig` 与 `acr-ui/src/api/review`。审查方式在项目级二选一（大模型审查 / 审查引擎）；审查模板为代码审查下的公共配置；大模型路径的评分与 JSON 协议由平台统一追加，模板页通过 `GET /review/template/platform-rules` 只读展示同一数据源。当前仅实现 GitHub，没有为 GitLab/Gitee/Gitea、通知或回写预建空实现。
 
 ## 7. 暂不做
 

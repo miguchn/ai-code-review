@@ -16,6 +16,12 @@
 10. `10_llm_menu_charset_fix.sql`：修复大模型配置菜单中文乱码（须 utf8mb4 连接）。
 11. `11_llm_column_comment_charset_fix.sql`：修复 `custom_provider_name` 列注释乱码（须 utf8mb4 连接）。
 12. `12_review_engine_button_fix.sql`：修复 07 引擎按钮号段冲突（改用 1136-1138），并清除角色 2 被误授的凭据按钮权限。
+13. `13_review_pipeline_m3.sql`：M3 审查执行配置、任务执行摘要、执行历史表、重试权限与字典。
+14. `14_review_dual_mode_prompt.sql`：双审查方式（`LLM_DIRECT`/`OCR_ENGINE`）、提示词表与菜单、任务详情权限补齐、执行快照提示词字段。
+15. `15_review_template_config.sql`：将提示词升级为审查模板，并增加项目技术栈与模板执行快照。
+16. `16_review_scoring_result_protocol.sql`：统一评分与结构化结果协议字段、失败类型字典、内置模板正文升级。
+17. `17_review_project_engine_code_nullable.sql`：放宽 `review_project.engine_code` 可空，修复大模型审查保存失败。
+18. `18_review_execution_hardening.sql`：放宽 `review_task_run.snapshot_review_mode` 可空、失败类型字典补 `RATE_LIMIT`、下线未使用的模板复制按钮（1148）。
 
 含中文的增量脚本执行时请显式指定连接字符集，例如：
 
@@ -23,6 +29,12 @@
 mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/09_llm_custom_provider.sql
 mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/10_llm_menu_charset_fix.sql
 mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/11_llm_column_comment_charset_fix.sql
+mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/13_review_pipeline_m3.sql
+mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/14_review_dual_mode_prompt.sql
+mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/15_review_template_config.sql
+mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/16_review_scoring_result_protocol.sql
+mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/17_review_project_engine_code_nullable.sql
+mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/18_review_execution_hardening.sql
 ```
 
 ## 命名规则

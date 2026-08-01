@@ -2,7 +2,7 @@
 
 > **语言**：[English](README.en.md) | 简体中文
 >
-> ⚠️ **研发阶段声明**：本项目处于早期研发阶段，暂不可直接用于生产环境。当前已完成 GitHub 项目接入（M1）与 PR Webhook 事件可信接入（M2）两个纵向切片，但 Diff 获取、审查执行、结果回写和通知等核心闭环尚未实现。欢迎关注进展，但请勿在生产中依赖。
+> ⚠️ **研发阶段声明**：本项目处于早期研发阶段，暂不可直接用于生产环境。当前已完成 GitHub 项目接入（M1）、PR Webhook 事件可信接入（M2）与真实审查执行主链路（M3）；结果回写、通知和问题整改闭环尚未实现。欢迎关注进展，但请勿在生产中依赖。
 
 ## 项目定位
 
@@ -80,7 +80,7 @@ ai-code-review/
 2. [架构与目录骨架](docs/planning/architecture-scaffold.md)：实际技术基线、模块归属和关键流程
 3. [协作入口](AGENTS.md)：规划技能、开发规则和基础验证
 
-当前仓库已具备业务系统归属管理，以及模型配置、启停、默认模型和连接测试的基础能力；P0/M1 已完成 GitHub 项目、加密 PAT 凭据、GitHub Provider、连接检测及对应权限和页面；M2 已完成 GitHub PR Webhook 验签接入、事件幂等落库和 PENDING 审查任务生成（真实仓库已验收）。一个业务系统可关联多个代码仓库项目；业务系统的代码和接口仍由 `acr-system` 提供，唯一菜单入口已移动到“代码审查”。实际完成度以产品路线图的“当前基线”为准。
+当前仓库已具备业务系统归属管理，以及模型配置、启停、默认模型和连接测试的基础能力；P0/M1 已完成 GitHub 项目、加密 PAT 凭据、GitHub Provider、连接检测及对应权限和页面；M2 已完成 GitHub PR Webhook 验签接入、事件幂等落库和 PENDING 审查任务生成；M3 已打通任务异步执行、工作区准备、OCR 审查、结果快照与失败重试（回写/通知仍未做）。一个业务系统可关联多个代码仓库项目；业务系统的代码和接口仍由 `acr-system` 提供，唯一菜单入口已移动到“代码审查”。实际完成度以产品路线图的“当前基线”为准。
 
 ## 功能模块
 
@@ -99,7 +99,7 @@ ai-code-review/
 | 定时任务 | 任务 CRUD、执行日志 |
 | 系统监控 | CPU/内存/JVM、Redis、Druid 监控 |
 
-### 已完成（P0/M1 + M2 纵向切片）
+### 已完成（P0/M1 + M2 + M3 纵向切片）
 
 | 模块 | 功能 |
 |------|------|
@@ -110,7 +110,10 @@ ai-code-review/
 | Git Provider | 统一地址解析、凭据校验、仓库授权和仓库信息读取契约；当前只实现 GitHub Provider |
 | GitHub Provider | GitHub API 访问、仓库/默认分支/全部分支获取及地址/凭据/权限/仓库/网络/超时失败分类 |
 | PR Webhook 接入（M2） | HMAC-SHA256 验签、项目匹配、动作白名单与目标分支判断、Delivery 幂等去重、事件全过程落库 |
-| 审查任务（M2） | 事件 1:1 生成 PENDING 最小任务（PR 号、源/目标分支、base/head SHA），列表页可筛选查询 |
+| 审查任务（M2/M3） | 事件建单后异步执行；状态流转、失败分类、安全重试；详情展示步骤、快照、结论与结构化评分结果；禁用操作有中文说明 |
+| 审查执行（M3） | 审查方式二选一：大模型审查（模型服务+审查模板）或审查引擎（open-code-review）；建单冻结快照 |
+| 审查模板（M3） | 代码审查下模板管理；内置 Java/Python/Go/Vue/React/全栈；模板正文仅技术栈重点；修改不影响历史任务 |
+| 统一评分协议 | 大模型路径五维评分（40/30/20/5/5）+ Top 3 重点问题 + JSON 协议 v1.0；后端校验重算总分；解析失败单独标记 |
 | 项目 Webhook 配置（M2） | 回调地址展示与复制、Secret 加密保存不回显、最近接收时间与结果 |
 
 ### 规划中（代码审查业务）
@@ -150,15 +153,11 @@ ai-code-review/
 ### 后端启动
 
 ```bash
-# 1. 初始化数据库
+# 1. 初始化数据库（01-03 建库建表；04 起为业务增量，按序号执行；含中文内容须带 utf8mb4 参数）
 mysql -u root -p < sql/01_core_schema.sql
 mysql -u root -p < sql/02_quartz_schema.sql
 mysql -u root -p < sql/03_system_management.sql
-mysql -u root -p < sql/04_github_project_access.sql
-mysql -u root -p < sql/05_github_pr_scope.sql
-mysql -u root -p < sql/06_llm_model_service.sql
-mysql -u root -p < sql/07_review_engine.sql
-mysql -u root -p < sql/08_github_pr_webhook.sql
+for f in sql/{04..18}_*.sql; do mysql --default-character-set=utf8mb4 -u root -p ai_code_review < "$f"; done
 
 # 2. 为 GitHub PAT 配置稳定的 32 字节 Base64 主密钥
 export ACR_CREDENTIAL_MASTER_KEY="$(openssl rand -base64 32)"
