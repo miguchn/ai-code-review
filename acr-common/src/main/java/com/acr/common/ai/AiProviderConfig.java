@@ -23,6 +23,10 @@ public class AiProviderConfig
     private int timeout;
     /** 最大 token 数 */
     private int maxTokens;
+    /** Temperature */
+    private Double temperature;
+    /** 上下文长度 */
+    private Integer contextLength;
 
     public String getProviderName() { return providerName; }
     public void setProviderName(String providerName) { this.providerName = providerName; }
@@ -50,4 +54,10 @@ public class AiProviderConfig
 
     public int getMaxTokens() { return maxTokens; }
     public void setMaxTokens(int maxTokens) { this.maxTokens = maxTokens; }
+
+    public Double getTemperature() { return temperature; }
+    public void setTemperature(Double temperature) { this.temperature = temperature; }
+
+    public Integer getContextLength() { return contextLength; }
+    public void setContextLength(Integer contextLength) { this.contextLength = contextLength; }
 }

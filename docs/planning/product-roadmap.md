@@ -53,6 +53,8 @@ AI Code Review 面向企业内部研发团队，是部署在代码托管平台�
 - 已具备用户、角色、部门、菜单、字典、参数、公告、登录/操作日志、在线用户、Quartz、服务器/Redis/Druid 监控等管理底座；
 - 已具备 `SysBusinessSystem` 的部门和负责人归属，以及基于当前用户的列表访问控制；
 - 已具备 `SysAiModelConfig` 的 CRUD、启停、默认模型、连接测试和展示脱敏，以及基础 AI Client；
+- 已具备 LLM 模型服务基础：`LlmProviderCode` 标准厂商枚举、`LlmCallService` 统一调用、`LlmCallResult` 结构化结果、API Key AES-GCM 加密存储、连接/模型调用测试及最近检测记录；管理页迁入「模型服务」一级目录；
+- 已具备本地 `open-code-review` CLI 审查引擎适配：统一请求/结果契约、安全进程调用、环境检测、内置样例测试调用，以及「模型服务 → 审查引擎」管理页；尚未接入正式 PR 审查任务消费；
 - P0/M1 第一个纵向切片已完成：`acr-review` 已实现 GitHub 项目、加密 PAT 凭据、GitHub Provider、连接检测、Mapper 和用例服务，`acr-admin` 提供对应 REST 与权限入口，`acr-ui` 提供业务系统、项目和凭据页面；
 - 一个业务系统可关联多个代码仓库项目。业务系统数据和接口继续属于 `acr-system` 平台治理底座，唯一菜单入口移动到“代码审查”，避免与项目管理重复；
 - 现有通用 RBAC、部门数据范围和操作日志已用于项目接入，但尚不能证明后续审查任务/问题的项目级隔离、审查决策审计或审查链路可观测。

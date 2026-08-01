@@ -1,6 +1,5 @@
 import request from '@/utils/request'
 
-// 查询 AI 大模型配置列表
 export function listAiModelConfig(query) {
   return request({
     url: '/system/aimodelconfig/list',
@@ -9,7 +8,6 @@ export function listAiModelConfig(query) {
   })
 }
 
-// 查询 AI 大模型配置详细
 export function getAiModelConfig(modelId) {
   return request({
     url: '/system/aimodelconfig/' + modelId,
@@ -17,7 +15,13 @@ export function getAiModelConfig(modelId) {
   })
 }
 
-// 新增 AI 大模型配置
+export function listLlmProviders() {
+  return request({
+    url: '/system/aimodelconfig/providers',
+    method: 'get'
+  })
+}
+
 export function addAiModelConfig(data) {
   return request({
     url: '/system/aimodelconfig',
@@ -26,7 +30,6 @@ export function addAiModelConfig(data) {
   })
 }
 
-// 修改 AI 大模型配置
 export function updateAiModelConfig(data) {
   return request({
     url: '/system/aimodelconfig',
@@ -35,7 +38,6 @@ export function updateAiModelConfig(data) {
   })
 }
 
-// 删除 AI 大模型配置
 export function delAiModelConfig(modelId) {
   return request({
     url: '/system/aimodelconfig/' + modelId,
@@ -43,7 +45,6 @@ export function delAiModelConfig(modelId) {
   })
 }
 
-// 启用/禁用模型
 export function enableAiModel(modelId, enabled) {
   return request({
     url: '/system/aimodelconfig/' + modelId + '/enable?enabled=' + enabled,
@@ -51,7 +52,6 @@ export function enableAiModel(modelId, enabled) {
   })
 }
 
-// 设为默认模型
 export function setDefaultModel(modelId) {
   return request({
     url: '/system/aimodelconfig/' + modelId + '/default',
@@ -59,10 +59,17 @@ export function setDefaultModel(modelId) {
   })
 }
 
-// 测试大模型连接
-export function testAiModel(data) {
+export function testAiModelConnection(data) {
   return request({
     url: '/system/aimodelconfig/test',
+    method: 'post',
+    data: data
+  })
+}
+
+export function testAiModelCall(data) {
+  return request({
+    url: '/system/aimodelconfig/test-call',
     method: 'post',
     data: data
   })

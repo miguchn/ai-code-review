@@ -14,6 +14,7 @@ import com.acr.review.git.GitRepositoryCoordinates;
 import com.acr.review.git.GitRepositoryInfoResult;
 import com.acr.review.mapper.GitCredentialMapper;
 import com.acr.review.mapper.ReviewProjectMapper;
+import com.acr.review.security.CredentialCryptoService;
 import com.acr.review.service.IGitCredentialService;
 import com.acr.system.service.ISysBusinessSystemService;
 import com.acr.system.service.ISysConfigService;
@@ -40,7 +41,8 @@ class ReviewProjectServiceImplTest
 
         ReviewProjectServiceImpl service = new ReviewProjectServiceImpl(projectMapper, credentialMapper,
             credentialService, gitProvider, mock(ISysBusinessSystemService.class), configService,
-            mock(ISysDeptService.class), mock(ISysUserService.class));
+            mock(ISysDeptService.class), mock(ISysUserService.class),
+            mock(CredentialCryptoService.class), "http://localhost:8080");
         GitRepositoryReadRequest request = new GitRepositoryReadRequest();
         request.setRepositoryUrl(repository.canonicalUrl());
         request.setCredentialId(1L);

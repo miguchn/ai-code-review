@@ -210,6 +210,10 @@ public class OpenAiCompatibleClient implements AiClient
         JSONObject body = new JSONObject();
         body.put("model", config.getModel());
         body.put("max_tokens", maxTokens);
+        if (config.getTemperature() != null)
+        {
+            body.put("temperature", config.getTemperature());
+        }
         JSONArray messages = new JSONArray();
         JSONObject userMsg = new JSONObject();
         userMsg.put("role", "user");

@@ -65,6 +65,18 @@ public class SysAiModelConfig extends BaseEntity
     @Excel(name = "排序")
     private Integer sortOrder;
 
+    /** Temperature */
+    private Double temperature;
+
+    /** 上下文长度 */
+    private Integer contextLength;
+
+    /** 最近检测结果 */
+    private String lastCheckResult;
+
+    /** 最近检测时间 */
+    private java.util.Date lastCheckTime;
+
     public Long getModelId()
     {
         return modelId;
@@ -121,7 +133,8 @@ public class SysAiModelConfig extends BaseEntity
         this.apiKey = apiKey;
     }
 
-    @Size(max = 64, message = "Model名称不能超过64个字符")
+    @NotBlank(message = "模型标识不能为空")
+    @Size(max = 64, message = "模型标识不能超过64个字符")
     public String getModel()
     {
         return model;
@@ -202,6 +215,46 @@ public class SysAiModelConfig extends BaseEntity
         this.sortOrder = sortOrder;
     }
 
+    public Double getTemperature()
+    {
+        return temperature;
+    }
+
+    public void setTemperature(Double temperature)
+    {
+        this.temperature = temperature;
+    }
+
+    public Integer getContextLength()
+    {
+        return contextLength;
+    }
+
+    public void setContextLength(Integer contextLength)
+    {
+        this.contextLength = contextLength;
+    }
+
+    public String getLastCheckResult()
+    {
+        return lastCheckResult;
+    }
+
+    public void setLastCheckResult(String lastCheckResult)
+    {
+        this.lastCheckResult = lastCheckResult;
+    }
+
+    public java.util.Date getLastCheckTime()
+    {
+        return lastCheckTime;
+    }
+
+    public void setLastCheckTime(java.util.Date lastCheckTime)
+    {
+        this.lastCheckTime = lastCheckTime;
+    }
+
     @Override
     public String toString()
     {
@@ -218,6 +271,10 @@ public class SysAiModelConfig extends BaseEntity
             .append("timeout", getTimeout())
             .append("maxTokens", getMaxTokens())
             .append("sortOrder", getSortOrder())
+            .append("temperature", getTemperature())
+            .append("contextLength", getContextLength())
+            .append("lastCheckResult", getLastCheckResult())
+            .append("lastCheckTime", getLastCheckTime())
             .append("remark", getRemark())
             .toString();
     }

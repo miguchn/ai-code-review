@@ -212,6 +212,36 @@
           </el-collapse-item>
         </el-collapse>
 
+        <el-divider content-position="left">Webhook 配置</el-divider>
+        <el-form-item label="回调地址">
+          <div class="webhook-callback">
+            <el-input :model-value="webhookCallbackDisplay" readonly>
+              <template #append>
+                <el-button :disabled="!webhookCallbackDisplay" @click="copyWebhookCallback">复制</el-button>
+              </template>
+            </el-input>
+            <div class="inline-tip">在 GitHub 仓库 Settings → Webhooks 中按此地址添加，Content type 选择 application/json。</div>
+          </div>
+        </el-form-item>
+        <el-form-item label="Webhook Secret" prop="webhookSecret">
+          <div>
+            <el-input v-model="form.webhookSecret" type="password" show-password clearable
+              :placeholder="form.projectId ? '留空保持不变，输入则更新' : '与 GitHub Webhook Secret 保持一致'" />
+            <div class="inline-tip">
+              用于校验 GitHub 事件签名，加密保存且不回显。
+              <el-tag :type="form.webhookSecretConfigured ? 'success' : 'info'" size="small">
+                {{ form.webhookSecretConfigured ? '已配置' : '未配置' }}
+              </el-tag>
+            </div>
+          </div>
+        </el-form-item>
+        <el-form-item v-if="form.projectId" label="最近接收">
+          <div>
+            <span v-if="form.lastWebhookTime">{{ form.lastWebhookTime }} · {{ form.lastWebhookResult }}</span>
+            <span v-else class="inline-tip">尚未接收 Webhook 事件</span>
+          </div>
+        </el-form-item>
+
         <el-divider content-position="left">状态与备注</el-divider>
         <el-form-item label="项目状态">
           <div>
@@ -318,6 +348,16 @@ const filteredBranches = computed(() => {
     .map(name => ({ name }))
 })
 const currentRepositorySignature = computed(() => repositorySignature(form.value))
+const webhookCallbackDisplay = computed(() => form.value.webhookCallbackUrl || options.webhookCallbackUrl || '')
+
+function copyWebhookCallback() {
+  if (!webhookCallbackDisplay.value) return
+  navigator.clipboard.writeText(webhookCallbackDisplay.value).then(() => {
+    proxy.$modal.msgSuccess('回调地址已复制')
+  }).catch(() => {
+    proxy.$modal.msgError('复制失败，请手动选择复制')
+  })
+}
 
 function getList() {
   loading.value = true
@@ -339,7 +379,9 @@ function reset() {
     repositoryOwner: undefined, repositoryName: undefined, defaultBranch: undefined,
     prReviewEnabled: '0', prTargetBranches: [], businessSystemId: undefined, deptId: undefined,
     ownerUserId: undefined, credentialId: undefined, status: '1', lastBranchSyncStatus: 'UNSYNCED',
-    lastBranchSyncMessage: undefined, lastBranchSyncTime: undefined, remark: undefined
+    lastBranchSyncMessage: undefined, lastBranchSyncTime: undefined, remark: undefined,
+    webhookSecret: undefined, webhookSecretConfigured: false, webhookCallbackUrl: undefined,
+    lastWebhookTime: undefined, lastWebhookResult: undefined
   }
   repositoryInfoLoaded.value = false
   loadedRepositorySignature.value = ''

@@ -2,7 +2,7 @@
 -- AI Code Review 系统管理扩展 - 数据库脚本
 -- 日期: 2026-05-12
 -- 说明: 新增 AI 大模型配置、业务系统管理相关表、菜单、权限
--- 执行: 在 ry_20260417.sql + quartz.sql 之后执行此脚本
+-- 执行: 在 01_core_schema.sql + 02_quartz_schema.sql 之后执行此脚本
 -- ----------------------------
 
 -- ----------------------------
@@ -12,23 +12,29 @@ drop table if exists sys_ai_model_config;
 create table sys_ai_model_config (
   model_id          bigint(20)      not null auto_increment    comment '模型配置ID',
   model_name        varchar(64)     not null                   comment '模型名称',
-  provider          varchar(32)     not null                   comment '模型厂商(openai/anthropic/qwen/deepseek/custom)',
+  provider          varchar(32)     not null                   comment '模型厂商(deepseek/kimi/qwen/bailian/doubao/openai/claude)',
   api_url           varchar(500)    not null                   comment '模型地址',
-  api_key           varchar(500)    not null                   comment 'API Key(接入审查前必须加密存储)',
+  api_key           varchar(500)    not null                   comment 'API Key(AES-256-GCM 加密存储)',
   model             varchar(64)     default ''                 comment 'Model 名称',
   embedding_model   varchar(64)     default ''                 comment 'Embedding Model 名称',
   embedding_api_url varchar(500)    default ''                 comment 'Embedding 接口地址',
   enabled           char(1)         default '0'                comment '是否启用(0否 1是)',
   is_default        char(1)         default '0'                comment '是否默认模型(0否 1是)',
+  default_slot      tinyint         generated always as (if(is_default = '1', 1, null)) stored comment '默认模型唯一槽位',
   timeout           int(4)          default 60000              comment '超时时间(ms)',
   max_tokens        int(6)          default 8000               comment '最大 Token 数',
+  temperature       double          default null               comment 'Temperature',
+  context_length    int(4)          default null               comment '上下文长度',
+  last_check_result varchar(500)    default ''                 comment '最近检测结果',
+  last_check_time   datetime        default null               comment '最近检测时间',
   sort_order        int(4)          default 0                  comment '排序',
   remark            varchar(500)    default '',
   create_by         varchar(64)     default '',
   create_time       datetime,
   update_by         varchar(64)     default '',
   update_time       datetime,
-  primary key (model_id)
+  primary key (model_id),
+  unique key uk_ai_model_default_slot (default_slot)
 ) engine=innodb auto_increment=100 comment = 'AI 大模型配置表';
 
 -- ----------------------------
@@ -55,8 +61,11 @@ create table sys_business_system (
 -- 3、菜单权限 SQL
 -- ----------------------------
 
--- AI 大模型配置 菜单（挂在 系统管理 下，order_num=10）
-insert into sys_menu values('120', 'AI大模型配置', '1', '10', 'ai-model-config', 'system/aimodelconfig/index', '', 'SysAiModelConfig', 1, 0, 'C', '0', '0', 'system:aimodelconfig:list', 'ai', 'admin', sysdate(), '', null, 'AI大模型配置菜单');
+-- 模型服务 一级目录（order_num=2，位于代码审查之后）
+insert into sys_menu values('4', '模型服务', '0', '2', 'model-service', null, '', '', 1, 0, 'M', '0', '0', '', 'server', 'admin', sysdate(), '', null, '模型服务一级目录');
+
+-- AI 大模型配置 菜单（挂在 模型服务 下）
+insert into sys_menu values('120', '大模型配置', '4', '1', 'ai-model-config', 'system/aimodelconfig/index', '', 'SysAiModelConfig', 1, 0, 'C', '0', '0', 'system:aimodelconfig:list', 'ai', 'admin', sysdate(), '', null, '模型服务 - 大模型配置');
 
 -- 业务系统管理 菜单（挂在 系统管理 下，order_num=11）
 insert into sys_menu values('121', '业务系统管理', '1', '11', 'business-system', 'system/businesssystem/index', '', 'BusinessSystemManage', 1, 0, 'C', '0', '0', 'system:businesssystem:list', 'tree-table', 'admin', sysdate(), '', null, '业务系统管理菜单');
@@ -76,6 +85,7 @@ insert into sys_menu values('1123', '业务系统删除', '121', '4', '#', '', '
 -- ----------------------------
 -- 4、角色权限关联（超级管理员自动拥有全部权限，此处补充普通角色）
 -- ----------------------------
+insert into sys_role_menu values ('2', '4');
 insert into sys_role_menu values ('2', '120');
 insert into sys_role_menu values ('2', '121');
 insert into sys_role_menu values ('2', '1116');

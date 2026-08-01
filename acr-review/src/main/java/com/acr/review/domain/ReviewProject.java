@@ -7,6 +7,7 @@ import jakarta.validation.constraints.Size;
 import com.acr.common.core.domain.BaseEntity;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 /** 代码审查项目 review_project。 */
 public class ReviewProject extends BaseEntity
@@ -42,6 +43,24 @@ public class ReviewProject extends BaseEntity
 
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private Date lastBranchSyncTime;
+
+    /** Webhook Secret 明文（只写，编辑留空保留原值）。 */
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
+    private String webhookSecret;
+
+    @JsonIgnore
+    private String webhookSecretCiphertext;
+
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    private Date lastWebhookTime;
+
+    private String lastWebhookResult;
+
+    /** 响应只读：是否已配置 Webhook Secret。 */
+    private Boolean webhookSecretConfigured;
+
+    /** 响应只读：Webhook 回调地址（配置项拼接，不持久化）。 */
+    private String webhookCallbackUrl;
 
     @JsonIgnore
     private Long accessUserId;
@@ -294,6 +313,66 @@ public class ReviewProject extends BaseEntity
     public void setLastBranchSyncTime(Date lastBranchSyncTime)
     {
         this.lastBranchSyncTime = lastBranchSyncTime;
+    }
+
+    public String getWebhookSecret()
+    {
+        return webhookSecret;
+    }
+
+    public void setWebhookSecret(String webhookSecret)
+    {
+        this.webhookSecret = webhookSecret;
+    }
+
+    public String getWebhookSecretCiphertext()
+    {
+        return webhookSecretCiphertext;
+    }
+
+    public void setWebhookSecretCiphertext(String webhookSecretCiphertext)
+    {
+        this.webhookSecretCiphertext = webhookSecretCiphertext;
+    }
+
+    public Date getLastWebhookTime()
+    {
+        return lastWebhookTime;
+    }
+
+    public void setLastWebhookTime(Date lastWebhookTime)
+    {
+        this.lastWebhookTime = lastWebhookTime;
+    }
+
+    public String getLastWebhookResult()
+    {
+        return lastWebhookResult;
+    }
+
+    public void setLastWebhookResult(String lastWebhookResult)
+    {
+        this.lastWebhookResult = lastWebhookResult;
+    }
+
+    public Boolean getWebhookSecretConfigured()
+    {
+        return webhookSecretConfigured;
+    }
+
+    public void setWebhookSecretConfigured(Boolean webhookSecretConfigured)
+    {
+        this.webhookSecretConfigured = webhookSecretConfigured;
+    }
+
+    public String getWebhookCallbackUrl()
+    {
+        return webhookCallbackUrl;
+    }
+
+    public void setWebhookCallbackUrl(String webhookCallbackUrl)
+    {
+        this.webhookCallbackUrl = webhookCallbackUrl;
     }
 
     public Long getAccessUserId()

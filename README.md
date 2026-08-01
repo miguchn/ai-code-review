@@ -148,11 +148,14 @@ ai-code-review/
 
 ```bash
 # 1. 初始化数据库
-mysql -u root -p < sql/ry_20260417.sql
-mysql -u root -p < sql/quartz.sql
-mysql -u root -p < sql/sys_manage_20260512.sql
-mysql -u root -p < sql/review_project_github_20260801.sql
-mysql -u root -p < sql/review_project_pr_scope_20260801.sql
+mysql -u root -p < sql/01_core_schema.sql
+mysql -u root -p < sql/02_quartz_schema.sql
+mysql -u root -p < sql/03_system_management.sql
+mysql -u root -p < sql/04_github_project_access.sql
+mysql -u root -p < sql/05_github_pr_scope.sql
+mysql -u root -p < sql/06_llm_model_service.sql
+mysql -u root -p < sql/07_review_engine.sql
+mysql -u root -p < sql/08_github_pr_webhook.sql
 
 # 2. 为 GitHub PAT 配置稳定的 32 字节 Base64 主密钥
 export ACR_CREDENTIAL_MASTER_KEY="$(openssl rand -base64 32)"

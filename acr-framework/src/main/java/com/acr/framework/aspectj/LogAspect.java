@@ -46,7 +46,7 @@ public class LogAspect
 
     /** 排除敏感属性字段 */
     public static final String[] EXCLUDE_PROPERTIES = { "password", "oldPassword", "newPassword", "confirmPassword",
-            "token", "tokenCiphertext" };
+            "apiKey", "token", "tokenCiphertext", "webhookSecret", "webhookSecretCiphertext" };
 
     /** 计算操作消耗时间 */
     private static final ThreadLocal<Long> TIME_THREADLOCAL = new NamedThreadLocal<Long>("Cost Time");

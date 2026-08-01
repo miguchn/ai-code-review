@@ -21,10 +21,21 @@
 mysql -u root -p -e "CREATE DATABASE ai_code_review DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;"
 
 # 导入基础表结构
-mysql -u root -p ai_code_review < sql/ry_20260417.sql
-mysql -u root -p ai_code_review < sql/quartz.sql
-mysql -u root -p ai_code_review < sql/sys_manage_20260512.sql
+mysql -u root -p ai_code_review < sql/01_core_schema.sql
+mysql -u root -p ai_code_review < sql/02_quartz_schema.sql
+mysql -u root -p ai_code_review < sql/03_system_management.sql
+mysql -u root -p ai_code_review < sql/04_github_project_access.sql
+mysql -u root -p ai_code_review < sql/05_github_pr_scope.sql
+mysql -u root -p ai_code_review < sql/06_llm_model_service.sql
+mysql -u root -p ai_code_review < sql/07_review_engine.sql
+mysql -u root -p ai_code_review < sql/08_github_pr_webhook.sql
 ```
+
+启动后端前必须配置 `ACR_CREDENTIAL_MASTER_KEY`（Base64 编码的 32 字节密钥，可用
+`openssl rand -base64 32` 生成）。升级环境首次启动时会使用该密钥将历史明文模型 API Key
+原地迁移为 AES-256-GCM 密文；未配置或密钥无效时应用会拒绝带明文凭据启动。
+模型调用地址默认仅允许公网 HTTPS。可信开发环境如需连接本机或内网兼容服务，可显式设置
+`ACR_LLM_ALLOW_HTTP=true` 和 `ACR_LLM_ALLOW_PRIVATE_ENDPOINTS=true`；生产环境不应开启。
 
 ### 2. 后端配置
 
@@ -85,13 +96,23 @@ npm run dev
 # 安装
 npm install -g @alibaba-group/open-code-review
 
-# 配置模型
-ocr config provider    # 选择供应商
-ocr config model       # 选择模型
-
 # 验证
-ocr --version
+ocr version
 ```
+
+平台通过 `review.engine.*` 或以下环境变量配置本地 CLI 适配，不在业务代码中写死路径：
+
+| 环境变量 | 说明 | 默认值 |
+|---------|------|--------|
+| `ACR_OCR_EXECUTABLE` | CLI 可执行文件路径 | `ocr` |
+| `ACR_OCR_WORKSPACE_ROOT` | 独立工作目录根路径 | `${java.io.tmpdir}/acr-review-engine` |
+| `ACR_OCR_TIMEOUT_SECONDS` | 单次调用超时（秒） | `600` |
+| `ACR_OCR_MAX_CONCURRENCY` | 最大并发数 | `2` |
+| `ACR_OCR_MAX_OUTPUT_BYTES` | stdout/stderr 输出上限 | `1048576` |
+
+测试调用时，平台会将已配置的 AI 模型映射为 `OCR_LLM_URL` / `OCR_LLM_TOKEN` / `OCR_LLM_MODEL` 等环境变量注入子进程，密钥不会写入日志。
+
+管理入口：**模型服务 → 审查引擎**，提供环境检测与内置样例测试调用。
 
 ## 生产环境部署（Docker Compose）
 

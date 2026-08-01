@@ -25,28 +25,52 @@ public class OkHttpUtils
      */
     public static String postJson(String url, String apiKey, String jsonBody, int timeoutMs) throws IOException
     {
-        OkHttpClient client = new OkHttpClient.Builder()
+        HttpPostResult result = postJsonDetailed(url, apiKey, jsonBody, timeoutMs);
+        if (result.getException() != null)
+        {
+            if (result.getException() instanceof IOException io)
+            {
+                throw io;
+            }
+            throw new IOException(result.getException());
+        }
+        return result.getBody();
+    }
+
+    /**
+     * 发送 POST JSON 请求并返回状态码与耗时（非 2xx 仍返回 body，便于错误分类）。
+     */
+    public static HttpPostResult postJsonDetailed(String url, String apiKey, String jsonBody, int timeoutMs)
+    {
+        long start = System.currentTimeMillis();
+        try
+        {
+            OkHttpClient client = new OkHttpClient.Builder()
                 .connectTimeout(timeoutMs, TimeUnit.MILLISECONDS)
                 .readTimeout(timeoutMs, TimeUnit.MILLISECONDS)
+                .followRedirects(false)
+                .followSslRedirects(false)
                 .build();
 
-        Request.Builder builder = new Request.Builder()
+            Request.Builder builder = new Request.Builder()
                 .url(url)
                 .post(RequestBody.create(jsonBody, JSON));
 
-        if (apiKey != null && !apiKey.isEmpty())
-        {
-            builder.addHeader("Authorization", "Bearer " + apiKey);
-        }
-        builder.addHeader("Content-Type", "application/json");
-
-        try (Response response = client.newCall(builder.build()).execute())
-        {
-            if (response.body() != null)
+            if (apiKey != null && !apiKey.isEmpty())
             {
-                return response.body().string();
+                builder.addHeader("Authorization", "Bearer " + apiKey);
             }
-            return null;
+            builder.addHeader("Content-Type", "application/json");
+
+            try (Response response = client.newCall(builder.build()).execute())
+            {
+                String body = response.body() != null ? response.body().string() : null;
+                return new HttpPostResult(response.code(), body, System.currentTimeMillis() - start, null);
+            }
+        }
+        catch (Exception e)
+        {
+            return new HttpPostResult(0, null, System.currentTimeMillis() - start, e);
         }
     }
 
