@@ -57,7 +57,9 @@
           <dict-tag :options="review_trigger_type" :value="scope.row.triggerType" />
         </template>
       </el-table-column>
-      <el-table-column label="触发时间" prop="createTime" width="165" />
+      <el-table-column label="触发时间" width="170">
+        <template #default="scope">{{ formatDateTime(scope.row.createTime) }}</template>
+      </el-table-column>
       <el-table-column label="失败原因" min-width="150">
         <template #default="scope">
           <span v-if="scope.row.failureMessage" class="failure-message" :title="scope.row.failureMessage">{{ scope.row.failureMessage }}</span>

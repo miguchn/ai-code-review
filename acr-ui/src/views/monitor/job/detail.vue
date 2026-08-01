@@ -21,15 +21,15 @@
           </el-row>
           <el-row class="detail-row">
             <el-col :span="12">
-              <div class="detail-item"><span class="detail-label">开始时间</span><span class="detail-value">{{ form.startTime }}</span></div>
+              <div class="detail-item"><span class="detail-label">开始时间</span><span class="detail-value">{{ formatDateTime(form.startTime) }}</span></div>
             </el-col>
             <el-col :span="12">
-              <div class="detail-item"><span class="detail-label">结束时间</span><span class="detail-value">{{ form.endTime }}</span></div>
+              <div class="detail-item"><span class="detail-label">结束时间</span><span class="detail-value">{{ formatDateTime(form.endTime) }}</span></div>
             </el-col>
           </el-row>
           <el-row class="detail-row">
             <el-col :span="12">
-              <div class="detail-item"><span class="detail-label">记录时间</span><span class="detail-value">{{ form.createTime }}</span></div>
+              <div class="detail-item"><span class="detail-label">记录时间</span><span class="detail-value">{{ formatDateTime(form.createTime) }}</span></div>
             </el-col>
             <el-col :span="12" v-if="form.status == 0 && form.startTime && form.endTime">
               <div class="detail-item"><span class="detail-label">执行耗时</span><span class="detail-value">{{ costTime }} 毫秒</span></div>
@@ -116,7 +116,7 @@
               <div class="detail-item"><span class="detail-label">cron 表达式</span><span class="detail-value mono">{{ form.cronExpression }}</span></div>
             </el-col>
             <el-col :span="12">
-              <div class="detail-item"><span class="detail-label">下次执行时间</span><span class="detail-value">{{ parseTime(form.nextValidTime) }}</span></div>
+              <div class="detail-item"><span class="detail-label">下次执行时间</span><span class="detail-value">{{ formatDateTime(form.nextValidTime) }}</span></div>
             </el-col>
           </el-row>
           <el-row class="detail-row">
@@ -157,7 +157,7 @@
               <div class="detail-item"><span class="detail-label">创建人</span><span class="detail-value">{{ form.createBy || '-' }}</span></div>
             </el-col>
             <el-col :span="12">
-              <div class="detail-item"><span class="detail-label">创建时间</span><span class="detail-value">{{ form.createTime }}</span></div>
+              <div class="detail-item"><span class="detail-label">创建时间</span><span class="detail-value">{{ formatDateTime(form.createTime) }}</span></div>
             </el-col>
           </el-row>
           <el-row class="detail-row">
@@ -165,7 +165,7 @@
               <div class="detail-item"><span class="detail-label">更新人</span><span class="detail-value">{{ form.updateBy || '-' }}</span></div>
             </el-col>
             <el-col :span="12">
-              <div class="detail-item"><span class="detail-label">更新时间</span><span class="detail-value">{{ form.updateTime || '-' }}</span></div>
+              <div class="detail-item"><span class="detail-label">更新时间</span><span class="detail-value">{{ formatDateTime(form.updateTime) }}</span></div>
             </el-col>
           </el-row>
           <el-row class="detail-row" v-if="form.remark">

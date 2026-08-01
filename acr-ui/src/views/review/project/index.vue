@@ -63,7 +63,7 @@
               {{ syncStatusText(scope.row.lastBranchSyncStatus) }}
             </el-tag>
           </el-tooltip>
-          <div v-if="scope.row.lastBranchSyncTime" class="text-muted">{{ scope.row.lastBranchSyncTime }}</div>
+          <div v-if="scope.row.lastBranchSyncTime" class="text-muted">{{ formatDateTime(scope.row.lastBranchSyncTime) }}</div>
         </template>
       </el-table-column>
       <el-table-column label="最近检测" width="150">
@@ -73,7 +73,7 @@
               {{ checkStatusText(scope.row.lastCheckStatus) }}
             </el-tag>
           </el-tooltip>
-          <div v-if="scope.row.lastCheckTime" class="text-muted">{{ scope.row.lastCheckTime }}</div>
+          <div v-if="scope.row.lastCheckTime" class="text-muted">{{ formatDateTime(scope.row.lastCheckTime) }}</div>
         </template>
       </el-table-column>
       <el-table-column label="状态 / 操作" width="310" fixed="right" class-name="small-padding fixed-width">
@@ -143,7 +143,7 @@
             <div><span>仓库</span><strong>{{ form.repositoryOwner }}/{{ form.repositoryName }}</strong></div>
             <div><span>默认分支</span><strong>{{ form.defaultBranch || '-' }}</strong></div>
             <div><span>分支数量</span><strong>{{ branchCount ?? '刷新后显示' }}</strong></div>
-            <div><span>最近同步</span><strong>{{ form.lastBranchSyncTime || '尚未同步' }}</strong></div>
+            <div><span>最近同步</span><strong>{{ form.lastBranchSyncTime ? formatDateTime(form.lastBranchSyncTime) : '尚未同步' }}</strong></div>
           </div>
         </el-form-item>
 
@@ -237,7 +237,7 @@
         </el-form-item>
         <el-form-item v-if="form.projectId" label="最近接收">
           <div>
-            <span v-if="form.lastWebhookTime">{{ form.lastWebhookTime }} · {{ form.lastWebhookResult }}</span>
+            <span v-if="form.lastWebhookTime">{{ formatDateTime(form.lastWebhookTime) }} · {{ form.lastWebhookResult }}</span>
             <span v-else class="inline-tip">尚未接收 Webhook 事件</span>
           </div>
         </el-form-item>

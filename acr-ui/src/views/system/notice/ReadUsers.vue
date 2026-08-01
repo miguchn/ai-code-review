@@ -30,7 +30,7 @@
       <el-table-column label="手机号码" prop="phonenumber" align="center" width="120" />
       <el-table-column label="阅读时间" prop="readTime" align="center" width="160">
         <template #default="scope">
-          <span>{{ parseTime(scope.row.readTime) }}</span>
+          <span>{{ formatDateTime(scope.row.readTime) }}</span>
         </template>
       </el-table-column>
     </el-table>
