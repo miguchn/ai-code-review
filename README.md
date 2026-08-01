@@ -2,7 +2,7 @@
 
 > **语言**：[English](README.en.md) | 简体中文
 >
-> ⚠️ **研发阶段声明**：本项目处于早期研发阶段，核心代码审查业务尚未落地，暂不可直接用于生产环境。当前仓库提供基础管理底座、业务系统归属、模型配置等基础能力，以及完整的产品规划与架构骨架，供协作与参考。欢迎关注进展，但请勿在生产中依赖。
+> ⚠️ **研发阶段声明**：本项目处于早期研发阶段，暂不可直接用于生产环境。当前已完成 GitHub 项目与加密 PAT 凭据接入的首个纵向切片，但 Webhook、审查任务、Diff、结果回写和通知等核心闭环尚未实现。欢迎关注进展，但请勿在生产中依赖。
 
 ## 项目定位
 
@@ -61,7 +61,7 @@ AI Code Review 是一个面向企业内部研发团队的**代码审查治理平
 ai-code-review/
 ├── acr-common/          # 公共工具层（utils、基类、AI Client 抽象、XSS 过滤）
 ├── acr-system/          # 平台治理（RBAC、组织、字典、业务系统、模型配置）
-├── acr-review/          # 代码审核主业务边界（当前仅 Maven 模块说明）
+├── acr-review/          # 代码审核主业务（项目、Git 凭据、Provider 与连接测试）
 ├── acr-framework/       # 框架胶水层（Security、JWT、Druid、Redis、AOP、限流）
 ├── acr-admin/           # 启动、配置与 Web 接入
 ├── acr-quartz/          # 通用定时任务管理与触发
@@ -80,7 +80,7 @@ ai-code-review/
 2. [架构与目录骨架](docs/planning/architecture-scaffold.md)：实际技术基线、模块归属和关键流程
 3. [协作入口](AGENTS.md)：规划技能、开发规则和基础验证
 
-当前仓库已具备业务系统归属管理，以及模型配置、启停、默认模型和连接测试的基础能力；它们只覆盖后续“项目接入”和“模型管理”的一部分。`acr-review` 当前只建立依赖边界，没有实现任何代码审核业务。实际完成度以产品路线图的“当前基线”为准。
+当前仓库已具备业务系统归属管理，以及模型配置、启停、默认模型和连接测试的基础能力；P0/M1 已完成 GitHub 项目、加密 PAT 凭据、GitHub Provider、连接检测及对应权限和页面。一个业务系统可关联多个代码仓库项目；业务系统的代码和接口仍由 `acr-system` 提供，唯一菜单入口已移动到“代码审查”。实际完成度以产品路线图的“当前基线”为准。
 
 ## 功能模块
 
@@ -99,6 +99,17 @@ ai-code-review/
 | 定时任务 | 任务 CRUD、执行日志 |
 | 系统监控 | CPU/内存/JVM、Redis、Druid 监控 |
 
+### 已完成（P0/M1 第一个纵向切片）
+
+| 模块 | 功能 |
+|------|------|
+| 业务系统归属 | 一个业务系统关联多个代码仓库项目，入口位于“代码审查”一级目录 |
+| GitHub 凭据 | PAT 加密存储、响应不回显、编辑留空保留、引用删除保护、连接检测 |
+| GitHub 项目 | 仓库信息自动读取、全部分支分页同步、业务系统/部门/负责人/凭据绑定、启停、连接检测 |
+| PR 审查范围 | 默认启用 PR 审查、从真实分支中多选目标分支、优先推荐 `dev`/`develop`、平台统一事件默认值 |
+| Git Provider | 统一地址解析、凭据校验、仓库授权和仓库信息读取契约；当前只实现 GitHub Provider |
+| GitHub Provider | GitHub API 访问、仓库/默认分支/全部分支获取及地址/凭据/权限/仓库/网络/超时失败分类 |
+
 ### 规划中（代码审查业务）
 
 路线图不再按“同时做全平台、全渠道”排列，而按真实纵向闭环分期。P0 同时包含安全、权限、审计和运行保障，不把它们留到功能上线之后。
@@ -111,7 +122,7 @@ ai-code-review/
 | 规模化版（V1.1） | 扩平台并引入受控强治理 | 第二 Git Provider、强制门禁与旁路、预算限额、更多通知渠道、全量扫描和资源隔离 |
 | 后续候选 | 经场景验证后独立立项 | SARIF、审批式误报优化、Session 回放、主动哨兵等 |
 
-目标左侧一级菜单为：工作台、审查中心、项目接入、策略配置、数据洞察、通知预警、系统治理、运维中心。审查记录并入审查任务，缺陷统一为问题台账，Quartz 调度任务与审查任务保持分离。完整子菜单、指标口径、优先级和验收门槛见[产品路线图](docs/planning/product-roadmap.md)。
+当前左侧一级菜单以“代码审查”为核心业务入口，依次包含业务系统管理、项目管理和访问凭据；系统管理、系统监控等治理与运维入口靠后。后续目标菜单随实际纵向切片逐步增加，不预建空入口。完整子菜单、指标口径、优先级和验收门槛见[产品路线图](docs/planning/product-roadmap.md)。
 
 ## 参考项目
 
@@ -140,15 +151,22 @@ ai-code-review/
 mysql -u root -p < sql/ry_20260417.sql
 mysql -u root -p < sql/quartz.sql
 mysql -u root -p < sql/sys_manage_20260512.sql
+mysql -u root -p < sql/review_project_github_20260801.sql
+mysql -u root -p < sql/review_project_pr_scope_20260801.sql
 
-# 2. 修改数据库配置
+# 2. 为 GitHub PAT 配置稳定的 32 字节 Base64 主密钥
+export ACR_CREDENTIAL_MASTER_KEY="$(openssl rand -base64 32)"
+
+# 3. 修改数据库配置
 # 编辑 acr-admin/src/main/resources/application-dev.yml
 
-# 3. 编译运行
+# 4. 编译运行
 mvn clean install -DskipTests
 cd acr-admin
 mvn spring-boot:run
 ```
+
+`ACR_CREDENTIAL_MASTER_KEY` 必须由部署环境的密钥管理机制提供，并在重启、扩容和恢复时保持一致；更换主密钥前需要先设计并执行凭据轮换，仓库中不提供默认值。
 
 ### 前端启动
 

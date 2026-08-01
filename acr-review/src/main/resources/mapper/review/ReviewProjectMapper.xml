@@ -1,0 +1,188 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.acr.review.mapper.ReviewProjectMapper">
+
+    <resultMap type="com.acr.review.domain.ReviewProject" id="ReviewProjectResult">
+        <id property="projectId" column="project_id" />
+        <result property="projectName" column="project_name" />
+        <result property="provider" column="provider" />
+        <result property="repositoryUrl" column="repository_url" />
+        <result property="repositoryOwner" column="repository_owner" />
+        <result property="repositoryName" column="repository_name" />
+        <result property="defaultBranch" column="default_branch" />
+        <result property="prReviewEnabled" column="pr_review_enabled" />
+        <result property="prTargetBranches" column="pr_target_branches" />
+        <result property="businessSystemId" column="business_system_id" />
+        <result property="businessSystemName" column="business_system_name" />
+        <result property="deptId" column="dept_id" />
+        <result property="deptName" column="dept_name" />
+        <result property="ownerUserId" column="owner_user_id" />
+        <result property="ownerName" column="owner_name" />
+        <result property="credentialId" column="credential_id" />
+        <result property="credentialName" column="credential_name" />
+        <result property="status" column="status" />
+        <result property="lastCheckStatus" column="last_check_status" />
+        <result property="lastCheckMessage" column="last_check_message" />
+        <result property="lastCheckTime" column="last_check_time" />
+        <result property="lastBranchSyncStatus" column="last_branch_sync_status" />
+        <result property="lastBranchSyncMessage" column="last_branch_sync_message" />
+        <result property="lastBranchSyncTime" column="last_branch_sync_time" />
+        <result property="remark" column="remark" />
+        <result property="createBy" column="create_by" />
+        <result property="createTime" column="create_time" />
+        <result property="updateBy" column="update_by" />
+        <result property="updateTime" column="update_time" />
+    </resultMap>
+
+    <sql id="projectSelect">
+        select p.project_id, p.project_name, p.provider, p.repository_url,
+               p.repository_owner, p.repository_name, p.default_branch,
+               p.pr_review_enabled, p.pr_target_branches,
+               p.business_system_id, bs.system_name as business_system_name,
+               p.dept_id, d.dept_name,
+               p.owner_user_id, owner.nick_name as owner_name,
+               p.credential_id, c.credential_name,
+               p.status, p.last_check_status, p.last_check_message, p.last_check_time,
+               p.last_branch_sync_status, p.last_branch_sync_message, p.last_branch_sync_time,
+               p.remark, p.create_by, p.create_time, p.update_by, p.update_time
+        from review_project p
+        inner join sys_business_system bs on bs.system_id = p.business_system_id
+        inner join sys_dept d on d.dept_id = p.dept_id
+        inner join sys_user owner on owner.user_id = p.owner_user_id
+        inner join review_git_credential c on c.credential_id = p.credential_id
+    </sql>
+
+    <select id="selectReviewProjectById" resultMap="ReviewProjectResult">
+        <include refid="projectSelect" />
+        where p.project_id = #{projectId}
+    </select>
+
+    <select id="selectReviewProjectList" parameterType="com.acr.review.domain.ReviewProject" resultMap="ReviewProjectResult">
+        <include refid="projectSelect" />
+        where 1 = 1
+        <if test="projectId != null">
+            and p.project_id = #{projectId}
+        </if>
+        <if test="projectName != null and projectName != ''">
+            and p.project_name like concat('%', #{projectName}, '%')
+        </if>
+        <if test="provider != null and provider != ''">
+            and p.provider = #{provider}
+        </if>
+        <if test="businessSystemId != null">
+            and p.business_system_id = #{businessSystemId}
+        </if>
+        <if test="deptId != null">
+            and p.dept_id = #{deptId}
+        </if>
+        <if test="ownerUserId != null">
+            and p.owner_user_id = #{ownerUserId}
+        </if>
+        <if test="status != null and status != ''">
+            and p.status = #{status}
+        </if>
+        <if test="lastCheckStatus != null and lastCheckStatus != ''">
+            and p.last_check_status = #{lastCheckStatus}
+        </if>
+        <if test="accessUserId != null">
+            and (p.owner_user_id = #{accessUserId} or find_in_set(#{accessUserId}, bs.manager_ids))
+        </if>
+        ${params.dataScope}
+        order by p.project_id desc
+    </select>
+
+    <select id="selectByRepository" resultMap="ReviewProjectResult">
+        select project_id, provider, repository_owner, repository_name
+        from review_project
+        where provider = #{provider}
+          and repository_owner = #{repositoryOwner}
+          and repository_name = #{repositoryName}
+        <if test="excludeProjectId != null">
+          and project_id != #{excludeProjectId}
+        </if>
+        limit 1
+    </select>
+
+    <insert id="insertReviewProject" parameterType="com.acr.review.domain.ReviewProject" useGeneratedKeys="true" keyProperty="projectId">
+        insert into review_project
+        (project_name, provider, repository_url, repository_owner, repository_name,
+         default_branch, pr_review_enabled, pr_target_branches, business_system_id, dept_id, owner_user_id,
+         credential_id, status, last_check_status, last_check_message, last_check_time,
+         last_branch_sync_status, last_branch_sync_message, last_branch_sync_time,
+         remark, create_by, create_time)
+        values
+        (#{projectName}, #{provider}, #{repositoryUrl}, #{repositoryOwner}, #{repositoryName},
+         #{defaultBranch}, #{prReviewEnabled}, #{prTargetBranches}, #{businessSystemId}, #{deptId}, #{ownerUserId},
+         #{credentialId}, #{status}, #{lastCheckStatus}, #{lastCheckMessage}, #{lastCheckTime},
+         #{lastBranchSyncStatus}, #{lastBranchSyncMessage}, #{lastBranchSyncTime},
+         #{remark}, #{createBy}, sysdate())
+    </insert>
+
+    <update id="updateReviewProject" parameterType="com.acr.review.domain.ReviewProject">
+        update review_project
+        set project_name = #{projectName},
+            repository_url = #{repositoryUrl},
+            repository_owner = #{repositoryOwner},
+            repository_name = #{repositoryName},
+            default_branch = #{defaultBranch},
+            pr_review_enabled = #{prReviewEnabled},
+            pr_target_branches = #{prTargetBranches},
+            business_system_id = #{businessSystemId},
+            dept_id = #{deptId},
+            owner_user_id = #{ownerUserId},
+            credential_id = #{credentialId},
+            last_check_status = #{lastCheckStatus},
+            last_check_message = #{lastCheckMessage},
+            last_check_time = #{lastCheckTime},
+            last_branch_sync_status = #{lastBranchSyncStatus},
+            last_branch_sync_message = #{lastBranchSyncMessage},
+            last_branch_sync_time = #{lastBranchSyncTime},
+            remark = #{remark},
+            update_by = #{updateBy},
+            update_time = sysdate()
+        where project_id = #{projectId}
+    </update>
+
+    <update id="updateProjectStatus">
+        update review_project
+        set status = #{status}, update_by = #{updateBy}, update_time = sysdate()
+        where project_id = #{projectId}
+    </update>
+
+    <update id="updateConnectionCheck" parameterType="com.acr.review.domain.ReviewProject">
+        update review_project
+        set last_check_status = #{lastCheckStatus},
+            last_check_message = #{lastCheckMessage},
+            last_check_time = #{lastCheckTime},
+            <if test="defaultBranch != null and defaultBranch != ''">default_branch = #{defaultBranch},</if>
+            update_by = #{updateBy},
+            update_time = sysdate()
+        where project_id = #{projectId}
+    </update>
+
+    <update id="updateRepositorySync" parameterType="com.acr.review.domain.ReviewProject">
+        update review_project
+        set last_check_status = #{lastCheckStatus},
+            last_check_message = #{lastCheckMessage},
+            last_check_time = #{lastCheckTime},
+            last_branch_sync_status = #{lastBranchSyncStatus},
+            last_branch_sync_message = #{lastBranchSyncMessage},
+            last_branch_sync_time = #{lastBranchSyncTime},
+            <if test="repositoryUrl != null and repositoryUrl != ''">repository_url = #{repositoryUrl},</if>
+            <if test="repositoryOwner != null and repositoryOwner != ''">repository_owner = #{repositoryOwner},</if>
+            <if test="repositoryName != null and repositoryName != ''">repository_name = #{repositoryName},</if>
+            <if test="defaultBranch != null and defaultBranch != ''">default_branch = #{defaultBranch},</if>
+            update_by = #{updateBy},
+            update_time = sysdate()
+        where project_id = #{projectId}
+    </update>
+
+    <delete id="deleteReviewProjectByIds">
+        delete from review_project where project_id in
+        <foreach item="projectId" collection="array" open="(" separator="," close=")">
+            #{projectId}
+        </foreach>
+    </delete>
+</mapper>

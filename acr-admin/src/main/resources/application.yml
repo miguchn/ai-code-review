@@ -95,3 +95,12 @@ xss:
   enabled: true
   excludes: /system/notice
   urlPatterns: /system/*,/monitor/*,/review/*
+
+# GitHub 项目接入（主密钥不得写入配置文件）
+review:
+  credential:
+    master-key: ${ACR_CREDENTIAL_MASTER_KEY:}
+  github:
+    api-url: ${GITHUB_API_URL:https://api.github.com}
+    connect-timeout-ms: 5000
+    read-timeout-ms: 10000

@@ -44,7 +44,7 @@ acr-ui ──HTTP──> acr-admin
 
 | 产品域 | 主要对象/能力 | 代码归属 | 边界说明 |
 |---|---|---|---|
-| 平台治理 | 用户、角色、部门、菜单、字典、参数、业务系统、模型服务基础配置 | `acr-system` | 模型密钥安全和连接由平台治理提供；项目实际使用策略仍属于审查业务 |
+| 平台治理 | 用户、角色、部门、菜单、字典、参数、业务系统、模型服务基础配置 | `acr-system` | 业务系统继续作为通用治理数据和接口；因当前实际消费者是代码仓库项目，其唯一菜单入口位于“代码审查”，不改变代码归属 |
 | 项目接入 | 代码项目、Provider 连接引用、分支/事件范围、连通性 | `acr-review` | 不把 Git 仓库当作业务系统；一个业务系统可关联多个代码项目 |
 | 审查闭环 | 事件、审查任务、步骤、问题、整改复核、策略快照 | `acr-review` | “任务”只表示一次执行，“问题”跨任务跟踪整改 |
 | 策略控制 | 审查方案、规则版本、模型选择、阈值、门禁策略 | `acr-review` | 引用 `acr-system` 的模型服务，不复制密钥或供应商配置 |
@@ -99,14 +99,24 @@ Webhook 接入
 
 这些是产品语义，不要求首个切片一次性创建全部对象或状态。每个切片仍以最小可验收范围为准。
 
-## 6. 当前最小目录
+## 6. 当前最小目录（P0/M1）
 
 ```text
 ai-code-review/
 ├── acr-admin/
 ├── acr-review/
 │   ├── pom.xml
-│   └── README.md
+│   ├── README.md
+│   └── src/
+│       ├── main/
+│       │   ├── java/com/acr/review/
+│       │   │   ├── domain/        # Git 凭据、代码项目、仓库读取结果及表单选项
+│       │   │   ├── git/           # 最小 Provider 契约与 GitHub 仓库/分支读取
+│       │   │   ├── mapper/        # 项目和凭据数据访问接口
+│       │   │   ├── security/      # PAT AES-256-GCM 加解密
+│       │   │   └── service/       # 项目/凭据用例及实现
+│       │   └── resources/mapper/review/
+│       └── test/java/com/acr/review/
 ├── acr-system/
 ├── acr-framework/
 ├── acr-common/
@@ -114,16 +124,21 @@ ai-code-review/
 ├── acr-ui/
 ├── docs/planning/
 │   ├── product-roadmap.md
-│   └── architecture-scaffold.md
+│   ├── architecture-scaffold.md
+│   └── github-project-access-m1.md
 ├── skills/
 │   └── plan-review-feature/
 ├── rules/
 │   ├── architecture.md
 │   └── delivery.md
 └── sql/
+    ├── review_project_github_20260801.sql
+    └── review_project_pr_scope_20260801.sql
 ```
 
-`acr-review` 暂不建立 `src`、空类或分层占位目录；首个正式业务切片应先完成单项计划，再按实际类落地目录。
+`acr-admin` 中仅增加项目与凭据 REST Controller，页面和 API 位于 `acr-ui/src/views/review` 与 `acr-ui/src/api/review`。当前目录均由已实现的 GitHub 项目接入用例驱动，没有创建 GitLab、Gitee 或 Gitea 空实现，也没有为 Webhook、任务、Diff、通知等后续能力预建占位结构。
+
+Git 平台扩展边界保持轻量：项目用例依赖统一 `GitProvider`，通过 `providerCode` 标识实现；地址解析、认证、仓库授权、API 状态码和分页差异由具体 Provider 收口。当前只存在 GitHub 实现。Webhook 和 PR 平台适配在对应纵向切片开始时按真实用例扩展，不在本阶段预建空接口或空实现。
 
 ## 7. 暂不做
 
