@@ -22,12 +22,16 @@ public class SysAiModelConfig extends BaseEntity
     @Excel(name = "模型名称")
     private String modelName;
 
-    /** 模型厂商 */
-    @Excel(name = "模型厂商")
+    /** 服务厂商编码（deepseek/kimi/qwen/.../custom） */
+    @Excel(name = "服务厂商")
     private String provider;
 
-    /** 模型地址 */
-    @Excel(name = "模型地址")
+    /** 自定义厂商名称（provider=custom 时使用） */
+    @Excel(name = "自定义厂商")
+    private String customProviderName;
+
+    /** API 地址 */
+    @Excel(name = "API 地址")
     private String apiUrl;
 
     /** API Key */
@@ -87,8 +91,8 @@ public class SysAiModelConfig extends BaseEntity
         this.modelId = modelId;
     }
 
-    @NotBlank(message = "模型名称不能为空")
-    @Size(max = 64, message = "模型名称不能超过64个字符")
+    @NotBlank(message = "配置名称不能为空")
+    @Size(max = 64, message = "配置名称不能超过64个字符")
     public String getModelName()
     {
         return modelName;
@@ -99,8 +103,8 @@ public class SysAiModelConfig extends BaseEntity
         this.modelName = modelName;
     }
 
-    @NotBlank(message = "模型厂商不能为空")
-    @Size(max = 32, message = "模型厂商不能超过32个字符")
+    @NotBlank(message = "服务厂商不能为空")
+    @Size(max = 32, message = "服务厂商不能超过32个字符")
     public String getProvider()
     {
         return provider;
@@ -111,8 +115,19 @@ public class SysAiModelConfig extends BaseEntity
         this.provider = provider;
     }
 
-    @NotBlank(message = "模型地址不能为空")
-    @Size(max = 500, message = "模型地址不能超过500个字符")
+    @Size(max = 64, message = "自定义厂商名称不能超过64个字符")
+    public String getCustomProviderName()
+    {
+        return customProviderName;
+    }
+
+    public void setCustomProviderName(String customProviderName)
+    {
+        this.customProviderName = customProviderName;
+    }
+
+    @NotBlank(message = "API 地址不能为空")
+    @Size(max = 500, message = "API 地址不能超过500个字符")
     public String getApiUrl()
     {
         return apiUrl;
@@ -262,6 +277,7 @@ public class SysAiModelConfig extends BaseEntity
             .append("modelId", getModelId())
             .append("modelName", getModelName())
             .append("provider", getProvider())
+            .append("customProviderName", getCustomProviderName())
             .append("apiUrl", getApiUrl())
             .append("model", getModel())
             .append("embeddingModel", getEmbeddingModel())

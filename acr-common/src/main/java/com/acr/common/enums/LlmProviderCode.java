@@ -11,7 +11,8 @@ public enum LlmProviderCode
     BAILIAN("bailian", "百炼", true),
     DOUBAO("doubao", "豆包", true),
     OPENAI("openai", "OpenAI", false),
-    CLAUDE("claude", "Claude", false);
+    CLAUDE("claude", "Claude", false),
+    CUSTOM("custom", "其他/自定义", false);
 
     private final String code;
     private final String label;
@@ -39,6 +40,11 @@ public enum LlmProviderCode
         return domestic;
     }
 
+    public boolean isCustom()
+    {
+        return this == CUSTOM;
+    }
+
     public static LlmProviderCode fromCode(String code)
     {
         if (code == null || code.isBlank())
@@ -58,5 +64,11 @@ public enum LlmProviderCode
     public static boolean isValid(String code)
     {
         return fromCode(code) != null;
+    }
+
+    public static boolean isCustomCode(String code)
+    {
+        LlmProviderCode provider = fromCode(code);
+        return provider != null && provider.isCustom();
     }
 }

@@ -18,7 +18,7 @@ import com.acr.system.mapper.SysAiModelConfigMapper;
 import com.acr.system.service.ISysAiModelConfigService;
 
 /**
- * AI 大模型配置 服务层实现
+ * 大模型配置 服务层实现
  */
 @Service
 public class SysAiModelConfigServiceImpl implements ISysAiModelConfigService
@@ -83,7 +83,7 @@ public class SysAiModelConfigServiceImpl implements ISysAiModelConfigService
     @Transactional
     public int insertSysAiModelConfig(SysAiModelConfig sysAiModelConfig)
     {
-        validateProvider(sysAiModelConfig.getProvider());
+        normalizeAndValidateProvider(sysAiModelConfig);
         prepareForPersist(sysAiModelConfig, true);
         if (StringUtils.isEmpty(sysAiModelConfig.getEnabled()))
         {
@@ -106,12 +106,12 @@ public class SysAiModelConfigServiceImpl implements ISysAiModelConfigService
         {
             throw new ServiceException("模型配置不存在");
         }
-        validateProvider(sysAiModelConfig.getProvider());
+        normalizeAndValidateProvider(sysAiModelConfig);
         boolean keepsStoredKey = ApiKeyMaskUtils.isMaskedOrBlank(sysAiModelConfig.getApiKey());
         if (keepsStoredKey && (!sameText(existing.getApiUrl(), sysAiModelConfig.getApiUrl())
             || !sameText(existing.getProvider(), sysAiModelConfig.getProvider())))
         {
-            throw new ServiceException("修改服务厂商或模型地址时必须重新填写 API Key");
+            throw new ServiceException("修改服务厂商或 API 地址时必须重新填写 API Key");
         }
         String requestedEnabled = sysAiModelConfig.getEnabled();
         String requestedDefault = sysAiModelConfig.getIsDefault();
@@ -290,12 +290,24 @@ public class SysAiModelConfigServiceImpl implements ISysAiModelConfigService
         }
     }
 
-    private void validateProvider(String provider)
+    private void normalizeAndValidateProvider(SysAiModelConfig config)
     {
-        if (!LlmProviderCode.isValid(provider))
+        LlmProviderCode providerCode = LlmProviderCode.fromCode(config.getProvider());
+        if (providerCode == null)
         {
-            throw new ServiceException("不支持的模型厂商: " + provider);
+            throw new ServiceException("不支持的服务厂商: " + config.getProvider());
         }
+        config.setProvider(providerCode.getCode());
+        if (providerCode.isCustom())
+        {
+            if (StringUtils.isEmpty(config.getCustomProviderName()))
+            {
+                throw new ServiceException("自定义厂商名称不能为空");
+            }
+            config.setCustomProviderName(config.getCustomProviderName().trim());
+            return;
+        }
+        config.setCustomProviderName("");
     }
 
     private void prepareForPersist(SysAiModelConfig config, boolean creating)

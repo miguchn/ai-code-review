@@ -178,4 +178,34 @@ class SysAiModelConfigServiceImplTest
 
         assertEquals("sk-runtime", result.getApiKey());
     }
+
+    @Test
+    void requiresCustomProviderNameForCustomProvider()
+    {
+        SysAiModelConfig config = new SysAiModelConfig();
+        config.setProvider("custom");
+        config.setModelName("Local LLM");
+        config.setApiUrl("https://llm.example/v1/chat/completions");
+        config.setApiKey("plain-key");
+        config.setCustomProviderName("");
+
+        assertThrows(ServiceException.class, () -> service.insertSysAiModelConfig(config));
+    }
+
+    @Test
+    void clearsCustomProviderNameForBuiltInProvider()
+    {
+        when(apiKeyCryptoService.encrypt("plain-key")).thenReturn("v1:encrypted");
+        when(aiModelConfigMapper.insertSysAiModelConfig(any())).thenReturn(1);
+        SysAiModelConfig config = new SysAiModelConfig();
+        config.setProvider("deepseek");
+        config.setModelName("DeepSeek");
+        config.setApiUrl("https://api.deepseek.com/v1/chat/completions");
+        config.setApiKey("plain-key");
+        config.setCustomProviderName("should-clear");
+
+        service.insertSysAiModelConfig(config);
+
+        assertEquals("", config.getCustomProviderName());
+    }
 }

@@ -8,6 +8,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <id     property="modelId"     column="model_id"     />
         <result property="modelName"   column="model_name"   />
         <result property="provider"    column="provider"     />
+        <result property="customProviderName" column="custom_provider_name" />
         <result property="apiUrl"      column="api_url"      />
         <result property="apiKey"      column="api_key"      />
         <result property="model"       column="model"        />
@@ -30,7 +31,8 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     </resultMap>
 
     <sql id="selectSysAiModelConfigVo">
-        select model_id, model_name, provider, api_url, api_key, model, embedding_model, embedding_api_url,
+        select model_id, model_name, provider, custom_provider_name, api_url, api_key, model,
+               embedding_model, embedding_api_url,
                enabled, is_default, timeout, max_tokens, sort_order, temperature, context_length,
                last_check_result, last_check_time,
                remark, create_by, create_time, update_by, update_time
@@ -63,6 +65,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <trim prefix="(" suffix=")" suffixOverrides=",">
             <if test="modelName != null and modelName != ''">model_name,</if>
             <if test="provider != null and provider != ''">provider,</if>
+            <if test="customProviderName != null">custom_provider_name,</if>
             <if test="apiUrl != null and apiUrl != ''">api_url,</if>
             <if test="apiKey != null and apiKey != ''">api_key,</if>
             <if test="model != null">model,</if>
@@ -84,6 +87,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <trim prefix="values (" suffix=")" suffixOverrides=",">
             <if test="modelName != null and modelName != ''">#{modelName},</if>
             <if test="provider != null and provider != ''">#{provider},</if>
+            <if test="customProviderName != null">#{customProviderName},</if>
             <if test="apiUrl != null and apiUrl != ''">#{apiUrl},</if>
             <if test="apiKey != null and apiKey != ''">#{apiKey},</if>
             <if test="model != null">#{model},</if>
@@ -109,6 +113,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <trim prefix="SET" suffixOverrides=",">
             <if test="modelName != null and modelName != ''">model_name = #{modelName},</if>
             <if test="provider != null and provider != ''">provider = #{provider},</if>
+            <if test="customProviderName != null">custom_provider_name = #{customProviderName},</if>
             <if test="apiUrl != null and apiUrl != ''">api_url = #{apiUrl},</if>
             <if test="apiKey != null">api_key = #{apiKey},</if>
             <if test="model != null">model = #{model},</if>

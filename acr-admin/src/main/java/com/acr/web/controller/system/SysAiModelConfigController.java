@@ -18,7 +18,7 @@ import com.acr.system.domain.SysAiModelConfig;
 import com.acr.system.service.ISysAiModelConfigService;
 
 /**
- * AI 大模型配置 信息操作处理
+ * 大模型配置 信息操作处理
  */
 @RestController
 @RequestMapping("/system/aimodelconfig")
@@ -64,7 +64,7 @@ public class SysAiModelConfigController extends BaseController
     }
 
     @PreAuthorize("@ss.hasPermi('system:aimodelconfig:add')")
-    @Log(title = "AI大模型配置", businessType = BusinessType.INSERT)
+    @Log(title = "大模型配置", businessType = BusinessType.INSERT)
     @PostMapping
     public AjaxResult add(@Validated @RequestBody SysAiModelConfig sysAiModelConfig)
     {
@@ -73,7 +73,7 @@ public class SysAiModelConfigController extends BaseController
     }
 
     @PreAuthorize("@ss.hasPermi('system:aimodelconfig:edit')")
-    @Log(title = "AI大模型配置", businessType = BusinessType.UPDATE)
+    @Log(title = "大模型配置", businessType = BusinessType.UPDATE)
     @PutMapping
     public AjaxResult edit(@Validated @RequestBody SysAiModelConfig sysAiModelConfig)
     {
@@ -82,7 +82,7 @@ public class SysAiModelConfigController extends BaseController
     }
 
     @PreAuthorize("@ss.hasPermi('system:aimodelconfig:remove')")
-    @Log(title = "AI大模型配置", businessType = BusinessType.DELETE)
+    @Log(title = "大模型配置", businessType = BusinessType.DELETE)
     @DeleteMapping("/{modelIds}")
     public AjaxResult remove(@PathVariable Long[] modelIds)
     {

@@ -5,7 +5,7 @@ import com.acr.common.ai.LlmCallResult;
 import com.acr.system.domain.SysAiModelConfig;
 
 /**
- * AI 大模型配置 服务层
+ * 大模型配置 服务层
  */
 public interface ISysAiModelConfigService
 {
