@@ -7,7 +7,7 @@
 3. `rules/architecture.md`
 4. `rules/delivery.md`
 
-涉及 `acr-ui` 页面、组件、样式、图标或插图时，还必须阅读 `rules/UI_THEME_RULES.md`。
+`rules/` 目录下的项目规则均为强制约束，开发前必须读取并遵守。涉及 `acr-ui` 页面、组件、样式、图标或插图时，还必须阅读 `rules/UI_THEME_RULES.md`。
 
 基础验证命令：
 

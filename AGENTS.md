@@ -9,6 +9,8 @@
 3. `docs/planning/architecture-scaffold.md`：模块归属与最小结构；
 4. `rules/architecture.md`、`rules/delivery.md`：开发与交付约束。
 
+`rules/` 目录下的项目规则均为强制约束，开发前必须读取并遵守。
+
 ## 工作方式
 
 - 开始单项业务开发前，使用 `skills/plan-review-feature/` 收敛范围、依赖和验收；
