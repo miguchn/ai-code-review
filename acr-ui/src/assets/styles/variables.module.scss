@@ -238,6 +238,49 @@ $--color-info: #4F7F9D;
 
 // 暗黑模式变量
 html.dark {
+  color-scheme: dark;
+
+  /* 项目自定义主题令牌 */
+  --brand-bg-soft: rgba(22, 163, 74, 0.18);
+  --brand-bg-selected: rgba(22, 163, 74, 0.24);
+  --brand-border: rgba(134, 239, 172, 0.38);
+  --brand-text: #8fe0a9;
+  --brand-on-solid: #08110b;
+
+  --neutral-page: #0f1115;
+  --neutral-content: #15181e;
+  --neutral-card: #1b1f26;
+  --neutral-overlay: #22262e;
+  --neutral-code: #171b21;
+  --text-primary: #f2f4f7;
+  --text-regular: #d7dce3;
+  --text-secondary: #a7b0bc;
+  --text-assist: #8c96a3;
+  --text-placeholder: #747f8d;
+  --text-disabled: #69727e;
+  --border-default: rgba(255, 255, 255, 0.12);
+  --border-light: rgba(255, 255, 255, 0.08);
+  --divider: rgba(255, 255, 255, 0.06);
+  --bg-hover: rgba(255, 255, 255, 0.08);
+  --bg-selected: rgba(22, 163, 74, 0.18);
+  --mask: rgba(0, 0, 0, 0.58);
+
+  --status-success-text: #8fe0a9;
+  --status-success-icon: #76ce91;
+  --status-success-bg: rgba(61, 139, 97, 0.18);
+  --status-success-border: rgba(118, 206, 145, 0.34);
+  --status-warning-text: #e6bf72;
+  --status-warning-icon: #d2a64f;
+  --status-warning-bg: rgba(183, 121, 31, 0.18);
+  --status-warning-border: rgba(230, 191, 114, 0.34);
+  --status-danger-text: #f08a83;
+  --status-danger-bg: rgba(185, 56, 50, 0.18);
+  --status-danger-border: rgba(240, 138, 131, 0.34);
+  --status-info-text: #8eb8d1;
+  --status-info-icon: #79a9c5;
+  --status-info-bg: rgba(63, 111, 143, 0.18);
+  --status-info-border: rgba(142, 184, 209, 0.34);
+
   /* 默认通用 */
   --el-bg-color: #141414;
   --el-bg-color-overlay: #1d1e1f;

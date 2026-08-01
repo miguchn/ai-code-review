@@ -2,7 +2,7 @@ import { defineConfig, loadEnv } from 'vite'
 import path from 'path'
 import createVitePlugins from './vite/plugins'
 
-const baseUrl = 'http://localhost:8080' // 后端接口
+const baseUrl = 'http://127.0.0.1:8080' // 后端接口（强制 IPv4，避免 Node 解析 localhost 走 IPv6 ::1 连不上）
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode, command }) => {

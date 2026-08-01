@@ -8,7 +8,7 @@
   width: 100%;
   max-width: 1440px;
   margin: 0 auto;
-  padding: 24px 32px 32px;
+  padding: 24px 24px 32px;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -39,12 +39,22 @@
   color: var(--text-regular);
 }
 
+#app .main-container .app-main .app-container > form.el-form--inline .el-form-item:last-child {
+  margin-left: 4px;
+}
+
+#app .main-container .app-main .app-container > form.el-form--inline .el-form-item:last-child .el-button + .el-button {
+  margin-left: 8px;
+}
+
 /* ========== 工具按钮行 ========== */
 #app .main-container .app-main .app-container .el-row.mb8 {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 0;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
   padding: 12px 16px;
   margin-bottom: 16px !important;
   border-radius: var(--radius-card);
@@ -135,6 +145,16 @@
 #app .main-container .app-main .top-right-btn .el-row.toolbar-actions .el-button.is-circle {
   box-shadow: none;
   border-color: var(--border-default);
+}
+
+#app .main-container .app-main .top-right-btn .el-row.toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#app .main-container .app-main .top-right-btn .el-row.toolbar-actions .el-button + .el-button {
+  margin-left: 0;
 }
 
 #app .main-container .app-main .top-right-btn .el-row.toolbar-actions .el-button.is-circle:hover {

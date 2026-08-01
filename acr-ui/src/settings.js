@@ -62,6 +62,6 @@ export default {
   /**
    * 底部版权文本内容
    */
-  footerContent: 'Copyright © 2026 AI Code Review. All Rights Reserved.'
+  footerContent: '© 2026 AI Code Review. All rights reserved. · MiguCHN'
 }
 

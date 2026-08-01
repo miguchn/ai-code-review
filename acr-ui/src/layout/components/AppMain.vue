@@ -52,7 +52,7 @@ function addIframe() {
 }
 
 .app-main:has(.copyright) {
-  padding-bottom: 36px;
+  padding-bottom: 40px;
 }
 
 .fixed-header + .app-main {
@@ -117,7 +117,7 @@ function addIframe() {
 }
 
 ::-webkit-scrollbar-thumb {
-  background-color: #AFC0B6;
+  background-color: var(--text-disabled);
   border-radius: 3px;
 }
 </style>
