@@ -16,9 +16,11 @@ import com.acr.common.utils.SecurityUtils;
 import com.acr.common.utils.StringUtils;
 import com.acr.review.domain.GitCredential;
 import com.acr.review.domain.GitRepositoryReadRequest;
+import com.acr.review.domain.ReviewPipelineConstants;
 import com.acr.review.domain.ReviewProject;
 import com.acr.review.domain.ReviewProjectOptions;
 import com.acr.review.domain.ReviewRepositoryInfo;
+import com.acr.review.domain.ReviewTemplate;
 import com.acr.review.git.GitConnectionFailure;
 import com.acr.review.git.GitConnectionResult;
 import com.acr.review.git.GitProvider;
@@ -29,7 +31,10 @@ import com.acr.review.mapper.ReviewProjectMapper;
 import com.acr.review.security.CredentialCryptoService;
 import com.acr.review.service.IGitCredentialService;
 import com.acr.review.service.IReviewProjectService;
+import com.acr.review.service.IReviewTemplateService;
+import com.acr.system.domain.SysAiModelConfig;
 import com.acr.system.domain.SysBusinessSystem;
+import com.acr.system.service.ISysAiModelConfigService;
 import com.acr.system.service.ISysBusinessSystemService;
 import com.acr.system.service.ISysConfigService;
 import com.acr.system.service.ISysDeptService;
@@ -55,6 +60,8 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
     private final ISysConfigService configService;
     private final ISysDeptService deptService;
     private final ISysUserService userService;
+    private final ISysAiModelConfigService aiModelConfigService;
+    private final IReviewTemplateService templateService;
     private final CredentialCryptoService cryptoService;
     private final String webhookCallbackBaseUrl;
 
@@ -66,6 +73,8 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
                                     ISysConfigService configService,
                                     ISysDeptService deptService,
                                     ISysUserService userService,
+                                    ISysAiModelConfigService aiModelConfigService,
+                                    IReviewTemplateService templateService,
                                     CredentialCryptoService cryptoService,
                                     @Value("${review.webhook.callback-base-url:http://localhost:8080}") String webhookCallbackBaseUrl)
     {
@@ -77,6 +86,8 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
         this.configService = configService;
         this.deptService = deptService;
         this.userService = userService;
+        this.aiModelConfigService = aiModelConfigService;
+        this.templateService = templateService;
         this.cryptoService = cryptoService;
         this.webhookCallbackBaseUrl = webhookCallbackBaseUrl;
     }
@@ -131,6 +142,32 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
         options.setCredentials(credentialMapper.selectGitCredentialList(credentialQuery).stream()
             .map(credential -> new ReviewProjectOptions.Option(credential.getCredentialId(), credential.getCredentialName(), null, null, credential.getStatus()))
             .toList());
+
+        SysAiModelConfig modelQuery = new SysAiModelConfig();
+        modelQuery.setEnabled("1");
+        options.setModels(aiModelConfigService.selectSysAiModelConfigList(modelQuery).stream()
+            .map(model -> {
+                String label = model.getModelName();
+                if ("1".equals(model.getIsDefault()))
+                {
+                    label = label + "（平台默认）";
+                }
+                return new ReviewProjectOptions.Option(model.getModelId(), label, null, null, model.getEnabled());
+            })
+            .toList());
+
+        ReviewTemplate templateQuery = new ReviewTemplate();
+        templateQuery.setStatus("0");
+        options.setTemplates(templateService.selectReviewTemplateList(templateQuery).stream()
+            .map(template -> {
+                ReviewProjectOptions.Option option = new ReviewProjectOptions.Option(
+                    template.getTemplateId(), template.getTemplateName(), null, null, template.getStatus());
+                option.setTechStack(template.getTechStack());
+                option.setVersionNo(template.getVersionNo());
+                return option;
+            })
+            .toList());
+
         options.setLongLivedBranches(configValues(LONG_LIVED_BRANCHES_KEY, DEFAULT_LONG_LIVED_BRANCHES));
         options.setRobotBranchPrefixes(configValues(ROBOT_BRANCH_PREFIXES_KEY, DEFAULT_ROBOT_BRANCH_PREFIXES));
         options.setPrEvents(configValues(PR_EVENTS_KEY, DEFAULT_PR_EVENTS));
@@ -279,6 +316,11 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
     private void normalizeAndValidate(ReviewProject project, Long excludeProjectId)
     {
         project.setProjectName(project.getProjectName().trim());
+        if (StringUtils.isEmpty(project.getPrimaryStack()))
+        {
+            throw new ServiceException("项目主要语言/技术栈不能为空");
+        }
+        project.setPrimaryStack(project.getPrimaryStack().trim());
         project.setProvider(PROVIDER);
         GitRepositoryCoordinates repository;
         try
@@ -326,10 +368,61 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
         {
             throw new ServiceException("GitHub 凭据不存在或已停用");
         }
+
+        validateReviewExecutionConfig(project);
+
         if (!"0".equals(project.getStatus()) && !"1".equals(project.getStatus()))
         {
             project.setStatus("1");
         }
+    }
+
+    /** 审查方式二选一：大模型审查绑定模型+模板；审查引擎绑定引擎，不绑定项目级模型/模板。 */
+    private void validateReviewExecutionConfig(ReviewProject project)
+    {
+        if (StringUtils.isEmpty(project.getPrimaryStack()))
+        {
+            project.setPrimaryStack("FULLSTACK");
+        }
+        String reviewMode = ReviewPipelineConstants.normalizeReviewMode(
+            StringUtils.defaultIfEmpty(project.getReviewMode(), ReviewPipelineConstants.REVIEW_MODE_OCR_ENGINE));
+        project.setReviewMode(reviewMode);
+
+        if (ReviewPipelineConstants.isLlmDirectMode(reviewMode))
+        {
+            if (project.getModelId() == null)
+            {
+                throw new ServiceException("大模型审查必须选择模型服务中的模型配置");
+            }
+            if (project.getTemplateId() == null)
+            {
+                throw new ServiceException("大模型审查必须选择审查模板");
+            }
+            SysAiModelConfig model = aiModelConfigService.selectSysAiModelConfigById(project.getModelId());
+            if (model == null || !"1".equals(model.getEnabled()))
+            {
+                throw new ServiceException("所选模型不存在或未启用，请先在「模型服务」启用");
+            }
+            templateService.selectEnabledTemplateById(project.getTemplateId());
+            project.setEngineCode(null);
+            return;
+        }
+
+        if (!ReviewPipelineConstants.isOcrEngineMode(reviewMode))
+        {
+            throw new ServiceException("审查方式仅支持「大模型审查」或「审查引擎」二选一");
+        }
+        if (StringUtils.isEmpty(project.getEngineCode()))
+        {
+            project.setEngineCode(ReviewPipelineConstants.ENGINE_OPEN_CODE_REVIEW);
+        }
+        if (!ReviewPipelineConstants.ENGINE_OPEN_CODE_REVIEW.equals(project.getEngineCode()))
+        {
+            throw new ServiceException("当前仅支持 open-code-review 审查引擎");
+        }
+        // 引擎路径禁止混用项目级模型/模板，运行时使用平台默认模型注入 OCR
+        project.setModelId(null);
+        project.setTemplateId(null);
     }
 
     private void checkProjectAccess(ReviewProject project)

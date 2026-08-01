@@ -17,7 +17,38 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="headSha" column="head_sha" />
         <result property="triggerType" column="trigger_type" />
         <result property="taskStatus" column="task_status" />
+        <result property="reviewConclusion" column="review_conclusion" />
+        <result property="currentStep" column="current_step" />
+        <result property="failureStep" column="failure_step" />
+        <result property="failureType" column="failure_type" />
         <result property="failureMessage" column="failure_message" />
+        <result property="attemptCount" column="attempt_count" />
+        <result property="latestRunId" column="latest_run_id" />
+        <result property="startedTime" column="started_time" />
+        <result property="finishedTime" column="finished_time" />
+        <result property="durationMs" column="duration_ms" />
+        <result property="totalScore" column="total_score" />
+        <result property="scoreCorrectness" column="score_correctness" />
+        <result property="scoreSecurity" column="score_security" />
+        <result property="scorePractice" column="score_practice" />
+        <result property="scorePerformance" column="score_performance" />
+        <result property="scoreCommitQuality" column="score_commit_quality" />
+        <result property="protocolVersion" column="protocol_version" />
+        <result property="focusIssueCount" column="focus_issue_count" />
+        <result property="hasCriticalSecurity" column="has_critical_security" />
+        <result property="parseStatus" column="parse_status" />
+        <result property="snapshotReviewMode" column="snapshot_review_mode" />
+        <result property="snapshotTemplateId" column="snapshot_template_id" />
+        <result property="snapshotTemplateName" column="snapshot_template_name" />
+        <result property="snapshotTemplateCode" column="snapshot_template_code" />
+        <result property="snapshotTemplateVersion" column="snapshot_template_version" />
+        <result property="snapshotPromptContent" column="snapshot_prompt_content" />
+        <result property="snapshotModelId" column="snapshot_model_id" />
+        <result property="snapshotModelName" column="snapshot_model_name" />
+        <result property="snapshotModelProvider" column="snapshot_model_provider" />
+        <result property="snapshotModel" column="snapshot_model" />
+        <result property="snapshotEngineCode" column="snapshot_engine_code" />
+        <result property="snapshotEngineName" column="snapshot_engine_name" />
         <result property="projectName" column="project_name" />
         <result property="remark" column="remark" />
         <result property="createBy" column="create_by" />
@@ -29,7 +60,34 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     <sql id="taskSelect">
         select t.task_id, t.project_id, t.event_id, t.provider,
                t.pr_number, t.pr_title, t.source_branch, t.target_branch, t.base_sha, t.head_sha,
-               t.trigger_type, t.task_status, t.failure_message,
+               t.trigger_type, t.task_status, t.review_conclusion, t.current_step, t.failure_step, t.failure_type,
+               t.failure_message, t.attempt_count, t.latest_run_id, t.started_time, t.finished_time, t.duration_ms,
+               t.total_score, t.score_correctness, t.score_security, t.score_practice, t.score_performance,
+               t.score_commit_quality, t.protocol_version, t.focus_issue_count, t.has_critical_security, t.parse_status,
+               t.snapshot_review_mode, t.snapshot_template_id, t.snapshot_template_name, t.snapshot_template_code,
+               t.snapshot_template_version, t.snapshot_prompt_content,
+               t.snapshot_model_id, t.snapshot_model_name, t.snapshot_model_provider, t.snapshot_model,
+               t.snapshot_engine_code, t.snapshot_engine_name,
+               p.project_name,
+               t.remark, t.create_by, t.create_time, t.update_by, t.update_time
+        from review_task t
+        inner join review_project p on p.project_id = t.project_id
+        inner join sys_dept d on d.dept_id = p.dept_id
+        inner join sys_user owner on owner.user_id = p.owner_user_id
+    </sql>
+
+    <!-- 列表查询不拉取 mediumtext 快照正文，仅详情查询使用完整字段 -->
+    <sql id="taskListSelect">
+        select t.task_id, t.project_id, t.event_id, t.provider,
+               t.pr_number, t.pr_title, t.source_branch, t.target_branch, t.base_sha, t.head_sha,
+               t.trigger_type, t.task_status, t.review_conclusion, t.current_step, t.failure_step, t.failure_type,
+               t.failure_message, t.attempt_count, t.latest_run_id, t.started_time, t.finished_time, t.duration_ms,
+               t.total_score, t.score_correctness, t.score_security, t.score_practice, t.score_performance,
+               t.score_commit_quality, t.protocol_version, t.focus_issue_count, t.has_critical_security, t.parse_status,
+               t.snapshot_review_mode, t.snapshot_template_id, t.snapshot_template_name, t.snapshot_template_code,
+               t.snapshot_template_version,
+               t.snapshot_model_id, t.snapshot_model_name, t.snapshot_model_provider, t.snapshot_model,
+               t.snapshot_engine_code, t.snapshot_engine_name,
                p.project_name,
                t.remark, t.create_by, t.create_time, t.update_by, t.update_time
         from review_task t
@@ -41,11 +99,83 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     <insert id="insertReviewTask" parameterType="com.acr.review.domain.ReviewTask" useGeneratedKeys="true" keyProperty="taskId">
         insert into review_task
         (project_id, event_id, provider, pr_number, pr_title, source_branch, target_branch,
-         base_sha, head_sha, trigger_type, task_status, failure_message, remark, create_by, create_time)
+         base_sha, head_sha, trigger_type, task_status, failure_message, attempt_count,
+         snapshot_review_mode, snapshot_template_id, snapshot_template_name, snapshot_template_code,
+         snapshot_template_version, snapshot_prompt_content,
+         snapshot_model_id, snapshot_model_name, snapshot_model_provider, snapshot_model,
+         snapshot_engine_code, snapshot_engine_name, remark, create_by, create_time)
         values
         (#{projectId}, #{eventId}, #{provider}, #{prNumber}, #{prTitle}, #{sourceBranch}, #{targetBranch},
-         #{baseSha}, #{headSha}, #{triggerType}, #{taskStatus}, #{failureMessage}, #{remark}, #{createBy}, sysdate())
+         #{baseSha}, #{headSha}, #{triggerType}, #{taskStatus}, #{failureMessage},
+         #{attemptCount,jdbcType=INTEGER},
+         #{snapshotReviewMode}, #{snapshotTemplateId}, #{snapshotTemplateName}, #{snapshotTemplateCode},
+         #{snapshotTemplateVersion}, #{snapshotPromptContent},
+         #{snapshotModelId}, #{snapshotModelName}, #{snapshotModelProvider}, #{snapshotModel},
+         #{snapshotEngineCode}, #{snapshotEngineName}, #{remark}, #{createBy}, sysdate())
     </insert>
+
+    <update id="claimTask">
+        update review_task
+        set task_status = 'RUNNING',
+            current_step = #{currentStep},
+            failure_step = null,
+            failure_type = null,
+            failure_message = null,
+            started_time = #{startedTime},
+            finished_time = null,
+            duration_ms = null,
+            update_time = sysdate()
+        where task_id = #{taskId}
+          and (task_status in ('PENDING', 'FAILED')
+               or (task_status = 'RUNNING'
+                   and started_time &lt; date_sub(sysdate(), interval #{staleRunningMinutes} minute)))
+    </update>
+
+    <update id="updateTaskExecution" parameterType="com.acr.review.domain.ReviewTask">
+        update review_task
+        set task_status = #{taskStatus},
+            review_conclusion = #{reviewConclusion},
+            current_step = #{currentStep},
+            failure_step = #{failureStep},
+            failure_type = #{failureType},
+            failure_message = #{failureMessage},
+            attempt_count = #{attemptCount},
+            latest_run_id = #{latestRunId},
+            started_time = #{startedTime},
+            finished_time = #{finishedTime},
+            duration_ms = #{durationMs},
+            total_score = #{totalScore},
+            score_correctness = #{scoreCorrectness},
+            score_security = #{scoreSecurity},
+            score_practice = #{scorePractice},
+            score_performance = #{scorePerformance},
+            score_commit_quality = #{scoreCommitQuality},
+            protocol_version = #{protocolVersion},
+            focus_issue_count = #{focusIssueCount},
+            has_critical_security = #{hasCriticalSecurity},
+            parse_status = #{parseStatus},
+            update_by = #{updateBy},
+            update_time = sysdate()
+        where task_id = #{taskId}
+    </update>
+
+    <update id="updateTaskSnapshot" parameterType="com.acr.review.domain.ReviewTask">
+        update review_task
+        set snapshot_review_mode = #{snapshotReviewMode},
+            snapshot_template_id = #{snapshotTemplateId},
+            snapshot_template_name = #{snapshotTemplateName},
+            snapshot_template_code = #{snapshotTemplateCode},
+            snapshot_template_version = #{snapshotTemplateVersion},
+            snapshot_prompt_content = #{snapshotPromptContent},
+            snapshot_model_id = #{snapshotModelId},
+            snapshot_model_name = #{snapshotModelName},
+            snapshot_model_provider = #{snapshotModelProvider},
+            snapshot_model = #{snapshotModel},
+            snapshot_engine_code = #{snapshotEngineCode},
+            snapshot_engine_name = #{snapshotEngineName},
+            update_time = sysdate()
+        where task_id = #{taskId}
+    </update>
 
     <select id="selectReviewTaskById" resultMap="ReviewTaskResult">
         <include refid="taskSelect" />
@@ -59,7 +189,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     </select>
 
     <select id="selectReviewTaskList" parameterType="com.acr.review.domain.ReviewTask" resultMap="ReviewTaskResult">
-        <include refid="taskSelect" />
+        <include refid="taskListSelect" />
         where 1 = 1
         <if test="projectId != null">
             and t.project_id = #{projectId}

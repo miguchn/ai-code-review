@@ -106,10 +106,15 @@ llm:
 review:
   credential:
     master-key: ${ACR_CREDENTIAL_MASTER_KEY:}
+  task:
+    # 大模型审查调用超时快照（秒），记录到 run 供审计；实际超时以模型配置为准
+    llm-timeout-seconds: ${ACR_REVIEW_LLM_TIMEOUT_SECONDS:120}
   github:
     api-url: ${GITHUB_API_URL:https://api.github.com}
     connect-timeout-ms: 5000
     read-timeout-ms: 10000
+    # PR 审查工作区准备（git fetch base/head）超时秒数
+    workspace-prepare-timeout-seconds: ${ACR_GITHUB_WORKSPACE_PREPARE_TIMEOUT_SECONDS:180}
   webhook:
     # Webhook 回调地址前缀（项目详情展示用，生产环境配置为公网可达地址）
     callback-base-url: ${ACR_WEBHOOK_CALLBACK_URL:http://localhost:8080}

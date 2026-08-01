@@ -4,19 +4,38 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 import com.acr.common.annotation.DataScope;
 import com.acr.common.exception.ServiceException;
+import com.acr.review.domain.ReviewProject;
 import com.acr.review.domain.ReviewTask;
+import com.acr.review.domain.ReviewTaskDetail;
+import com.acr.review.domain.ReviewTaskRun;
+import com.acr.review.mapper.ReviewProjectMapper;
 import com.acr.review.mapper.ReviewTaskMapper;
+import com.acr.review.mapper.ReviewTaskRunMapper;
+import com.acr.review.service.IReviewTaskExecutionService;
 import com.acr.review.service.IReviewTaskService;
+import com.acr.system.service.ISysDeptService;
 
-/** 审查任务查询。 */
+/** 审查任务查询与重试。 */
 @Service
 public class ReviewTaskServiceImpl implements IReviewTaskService
 {
     private final ReviewTaskMapper taskMapper;
+    private final ReviewTaskRunMapper runMapper;
+    private final ReviewProjectMapper projectMapper;
+    private final ISysDeptService deptService;
+    private final IReviewTaskExecutionService executionService;
 
-    public ReviewTaskServiceImpl(ReviewTaskMapper taskMapper)
+    public ReviewTaskServiceImpl(ReviewTaskMapper taskMapper,
+                                 ReviewTaskRunMapper runMapper,
+                                 ReviewProjectMapper projectMapper,
+                                 ISysDeptService deptService,
+                                 IReviewTaskExecutionService executionService)
     {
         this.taskMapper = taskMapper;
+        this.runMapper = runMapper;
+        this.projectMapper = projectMapper;
+        this.deptService = deptService;
+        this.executionService = executionService;
     }
 
     @Override
@@ -35,5 +54,33 @@ public class ReviewTaskServiceImpl implements IReviewTaskService
     public List<ReviewTask> selectReviewTaskList(ReviewTask task)
     {
         return taskMapper.selectReviewTaskList(task);
+    }
+
+    @Override
+    public ReviewTaskDetail selectReviewTaskDetail(Long taskId)
+    {
+        ReviewTask task = selectReviewTaskById(taskId);
+        checkTaskDataScope(task);
+        List<ReviewTaskRun> runs = runMapper.selectRunsByTaskId(taskId);
+        return new ReviewTaskDetail(task, runs);
+    }
+
+    @Override
+    public void retryTask(Long taskId)
+    {
+        ReviewTask task = selectReviewTaskById(taskId);
+        checkTaskDataScope(task);
+        executionService.retryTask(taskId);
+    }
+
+    /** 详情与重试不走列表的数据范围切面，按任务所属项目部门单独校验。 */
+    private void checkTaskDataScope(ReviewTask task)
+    {
+        ReviewProject project = projectMapper.selectReviewProjectById(task.getProjectId());
+        if (project == null)
+        {
+            throw new ServiceException("审查任务所属项目不存在");
+        }
+        deptService.checkDeptDataScope(project.getDeptId());
     }
 }

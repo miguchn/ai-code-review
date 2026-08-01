@@ -33,6 +33,12 @@ mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/09_llm_cus
 mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/10_llm_menu_charset_fix.sql
 mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/11_llm_column_comment_charset_fix.sql
 mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/12_review_engine_button_fix.sql
+mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/13_review_pipeline_m3.sql
+mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/14_review_dual_mode_prompt.sql
+mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/15_review_template_config.sql
+mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/16_review_scoring_result_protocol.sql
+mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/17_review_project_engine_code_nullable.sql
+mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/18_review_execution_hardening.sql
 ```
 
 > 含中文的 SQL 必须使用 `--default-character-set=utf8mb4`（或脚本内 `SET NAMES utf8mb4`）执行，避免菜单/字典文案乱码。
@@ -42,6 +48,13 @@ mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/12_review_
 原地迁移为 AES-256-GCM 密文；未配置或密钥无效时应用会拒绝带明文凭据启动。
 模型调用地址默认仅允许公网 HTTPS。可信开发环境如需连接本机或内网兼容服务，可显式设置
 `ACR_LLM_ALLOW_HTTP=true` 和 `ACR_LLM_ALLOW_PRIVATE_ENDPOINTS=true`；生产环境不应开启。
+
+其他可选环境变量：
+
+| 变量 | 默认值 | 说明 |
+|---|---|---|
+| `ACR_WEBHOOK_CALLBACK_URL` | `http://localhost:8080` | 生成 GitHub Webhook 回调地址的外网 base URL，生产环境必须改为公网可达地址 |
+| `ACR_REVIEW_LLM_TIMEOUT_SECONDS` | `120` | 大模型审查单次执行超时秒数，记录进任务运行快照 |
 
 ### 2. 后端配置
 

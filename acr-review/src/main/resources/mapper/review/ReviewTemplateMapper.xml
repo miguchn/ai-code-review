@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.acr.review.mapper.ReviewTemplateMapper">
+    <resultMap type="com.acr.review.domain.ReviewTemplate" id="ReviewTemplateResult">
+        <id property="templateId" column="template_id" />
+        <result property="templateName" column="template_name" />
+        <result property="templateCode" column="template_code" />
+        <result property="techStack" column="tech_stack" />
+        <result property="content" column="content" />
+        <result property="versionNo" column="version_no" />
+        <result property="builtinFlag" column="builtin_flag" />
+        <result property="status" column="status" />
+        <result property="remark" column="remark" />
+        <result property="createBy" column="create_by" />
+        <result property="createTime" column="create_time" />
+        <result property="updateBy" column="update_by" />
+        <result property="updateTime" column="update_time" />
+    </resultMap>
+    <sql id="selectTemplate">
+        select template_id, template_name, template_code, tech_stack, content, version_no, builtin_flag, status,
+               remark, create_by, create_time, update_by, update_time
+        from review_template
+    </sql>
+    <select id="selectReviewTemplateById" resultMap="ReviewTemplateResult">
+        <include refid="selectTemplate" /> where template_id = #{templateId}
+    </select>
+    <select id="selectReviewTemplateList" parameterType="com.acr.review.domain.ReviewTemplate" resultMap="ReviewTemplateResult">
+        <include refid="selectTemplate" />
+        where 1 = 1
+        <if test="templateName != null and templateName != ''">and template_name like concat('%', #{templateName}, '%')</if>
+        <if test="templateCode != null and templateCode != ''">and template_code like concat('%', #{templateCode}, '%')</if>
+        <if test="techStack != null and techStack != ''">and tech_stack = #{techStack}</if>
+        <if test="builtinFlag != null and builtinFlag != ''">and builtin_flag = #{builtinFlag}</if>
+        <if test="status != null and status != ''">and status = #{status}</if>
+        order by template_id desc
+    </select>
+    <select id="selectByTemplateCode" resultMap="ReviewTemplateResult">
+        <include refid="selectTemplate" /> where template_code = #{templateCode}
+        <if test="excludeTemplateId != null">and template_id != #{excludeTemplateId}</if>
+        limit 1
+    </select>
+    <select id="countProjectsByTemplateId" resultType="int">
+        select count(1) from review_project where template_id = #{templateId}
+    </select>
+    <insert id="insertReviewTemplate" parameterType="com.acr.review.domain.ReviewTemplate" useGeneratedKeys="true" keyProperty="templateId">
+        insert into review_template
+        (template_name, template_code, tech_stack, content, version_no, builtin_flag, status, remark, create_by, create_time)
+        values
+        (#{templateName}, #{templateCode}, #{techStack}, #{content}, #{versionNo}, #{builtinFlag}, #{status}, #{remark}, #{createBy}, sysdate())
+    </insert>
+    <update id="updateReviewTemplate" parameterType="com.acr.review.domain.ReviewTemplate">
+        update review_template set template_name = #{templateName}, template_code = #{templateCode},
+            tech_stack = #{techStack}, content = #{content}, version_no = #{versionNo}, status = #{status},
+            remark = #{remark}, update_by = #{updateBy}, update_time = sysdate()
+        where template_id = #{templateId}
+    </update>
+    <delete id="deleteReviewTemplateByIds">
+        delete from review_template where template_id in
+        <foreach item="templateId" collection="array" open="(" separator="," close=")">#{templateId}</foreach>
+    </delete>
+</mapper>

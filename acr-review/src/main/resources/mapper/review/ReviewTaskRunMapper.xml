@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.acr.review.mapper.ReviewTaskRunMapper">
+
+    <resultMap type="com.acr.review.domain.ReviewTaskRun" id="ReviewTaskRunResult">
+        <id property="runId" column="run_id" />
+        <result property="taskId" column="task_id" />
+        <result property="attemptNo" column="attempt_no" />
+        <result property="runStatus" column="run_status" />
+        <result property="currentStep" column="current_step" />
+        <result property="failureStep" column="failure_step" />
+        <result property="failureType" column="failure_type" />
+        <result property="failureMessage" column="failure_message" />
+        <result property="reviewConclusion" column="review_conclusion" />
+        <result property="snapshotReviewMode" column="snapshot_review_mode" />
+        <result property="snapshotEngineCode" column="snapshot_engine_code" />
+        <result property="snapshotEngineName" column="snapshot_engine_name" />
+        <result property="snapshotEngineVersion" column="snapshot_engine_version" />
+        <result property="snapshotModelId" column="snapshot_model_id" />
+        <result property="snapshotModelName" column="snapshot_model_name" />
+        <result property="snapshotModelProvider" column="snapshot_model_provider" />
+        <result property="snapshotModel" column="snapshot_model" />
+        <result property="snapshotTemplateId" column="snapshot_template_id" />
+        <result property="snapshotTemplateName" column="snapshot_template_name" />
+        <result property="snapshotTemplateCode" column="snapshot_template_code" />
+        <result property="snapshotTemplateVersion" column="snapshot_template_version" />
+        <result property="snapshotPromptContent" column="snapshot_prompt_content" />
+        <result property="snapshotTimeoutSeconds" column="snapshot_timeout_seconds" />
+        <result property="snapshotBaseSha" column="snapshot_base_sha" />
+        <result property="snapshotHeadSha" column="snapshot_head_sha" />
+        <result property="resultSummary" column="result_summary" />
+        <result property="resultJson" column="result_json" />
+        <result property="totalScore" column="total_score" />
+        <result property="scoreCorrectness" column="score_correctness" />
+        <result property="scoreSecurity" column="score_security" />
+        <result property="scorePractice" column="score_practice" />
+        <result property="scorePerformance" column="score_performance" />
+        <result property="scoreCommitQuality" column="score_commit_quality" />
+        <result property="protocolVersion" column="protocol_version" />
+        <result property="scoreWeightsJson" column="score_weights_json" />
+        <result property="scoreThreshold" column="score_threshold" />
+        <result property="focusIssueCount" column="focus_issue_count" />
+        <result property="hasCriticalSecurity" column="has_critical_security" />
+        <result property="topIssuesJson" column="top_issues_json" />
+        <result property="parseStatus" column="parse_status" />
+        <result property="parseError" column="parse_error" />
+        <result property="rawResponseExcerpt" column="raw_response_excerpt" />
+        <result property="renderedPrompt" column="rendered_prompt" />
+        <result property="prDescription" column="pr_description" />
+        <result property="commitMessages" column="commit_messages" />
+        <result property="durationMs" column="duration_ms" />
+        <result property="startedTime" column="started_time" />
+        <result property="finishedTime" column="finished_time" />
+        <result property="createBy" column="create_by" />
+        <result property="createTime" column="create_time" />
+        <result property="updateBy" column="update_by" />
+        <result property="updateTime" column="update_time" />
+    </resultMap>
+
+    <insert id="insertReviewTaskRun" parameterType="com.acr.review.domain.ReviewTaskRun" useGeneratedKeys="true" keyProperty="runId">
+        insert into review_task_run
+        (task_id, attempt_no, run_status, current_step, failure_step, failure_type, failure_message,
+         review_conclusion, snapshot_review_mode, snapshot_engine_code, snapshot_engine_name, snapshot_engine_version,
+         snapshot_model_id, snapshot_model_name, snapshot_model_provider, snapshot_model,
+         snapshot_template_id, snapshot_template_name, snapshot_template_code, snapshot_template_version,
+         snapshot_prompt_content, snapshot_timeout_seconds,
+         snapshot_base_sha, snapshot_head_sha, result_summary, result_json,
+         total_score, score_correctness, score_security, score_practice, score_performance, score_commit_quality,
+         protocol_version, score_weights_json, score_threshold, focus_issue_count, has_critical_security,
+         top_issues_json, parse_status, parse_error, raw_response_excerpt, rendered_prompt,
+         pr_description, commit_messages, duration_ms,
+         started_time, finished_time, create_by, create_time)
+        values
+        (#{taskId}, #{attemptNo}, #{runStatus}, #{currentStep}, #{failureStep}, #{failureType}, #{failureMessage},
+         #{reviewConclusion}, #{snapshotReviewMode}, #{snapshotEngineCode}, #{snapshotEngineName}, #{snapshotEngineVersion},
+         #{snapshotModelId}, #{snapshotModelName}, #{snapshotModelProvider}, #{snapshotModel},
+         #{snapshotTemplateId}, #{snapshotTemplateName}, #{snapshotTemplateCode}, #{snapshotTemplateVersion},
+         #{snapshotPromptContent}, #{snapshotTimeoutSeconds},
+         #{snapshotBaseSha}, #{snapshotHeadSha}, #{resultSummary}, #{resultJson},
+         #{totalScore}, #{scoreCorrectness}, #{scoreSecurity}, #{scorePractice}, #{scorePerformance}, #{scoreCommitQuality},
+         #{protocolVersion}, #{scoreWeightsJson}, #{scoreThreshold}, #{focusIssueCount}, #{hasCriticalSecurity},
+         #{topIssuesJson}, #{parseStatus}, #{parseError}, #{rawResponseExcerpt}, #{renderedPrompt},
+         #{prDescription}, #{commitMessages}, #{durationMs},
+         #{startedTime}, #{finishedTime}, #{createBy}, sysdate())
+    </insert>
+
+    <update id="updateReviewTaskRun" parameterType="com.acr.review.domain.ReviewTaskRun">
+        update review_task_run
+        set run_status = #{runStatus},
+            current_step = #{currentStep},
+            failure_step = #{failureStep},
+            failure_type = #{failureType},
+            failure_message = #{failureMessage},
+            review_conclusion = #{reviewConclusion},
+            snapshot_review_mode = #{snapshotReviewMode},
+            snapshot_engine_code = #{snapshotEngineCode},
+            snapshot_engine_name = #{snapshotEngineName},
+            snapshot_engine_version = #{snapshotEngineVersion},
+            snapshot_model_id = #{snapshotModelId},
+            snapshot_model_name = #{snapshotModelName},
+            snapshot_model_provider = #{snapshotModelProvider},
+            snapshot_model = #{snapshotModel},
+            snapshot_template_id = #{snapshotTemplateId},
+            snapshot_template_name = #{snapshotTemplateName},
+            snapshot_template_code = #{snapshotTemplateCode},
+            snapshot_template_version = #{snapshotTemplateVersion},
+            snapshot_prompt_content = #{snapshotPromptContent},
+            snapshot_timeout_seconds = #{snapshotTimeoutSeconds},
+            result_summary = #{resultSummary},
+            result_json = #{resultJson},
+            total_score = #{totalScore},
+            score_correctness = #{scoreCorrectness},
+            score_security = #{scoreSecurity},
+            score_practice = #{scorePractice},
+            score_performance = #{scorePerformance},
+            score_commit_quality = #{scoreCommitQuality},
+            protocol_version = #{protocolVersion},
+            score_weights_json = #{scoreWeightsJson},
+            score_threshold = #{scoreThreshold},
+            focus_issue_count = #{focusIssueCount},
+            has_critical_security = #{hasCriticalSecurity},
+            top_issues_json = #{topIssuesJson},
+            parse_status = #{parseStatus},
+            parse_error = #{parseError},
+            raw_response_excerpt = #{rawResponseExcerpt},
+            rendered_prompt = #{renderedPrompt},
+            pr_description = #{prDescription},
+            commit_messages = #{commitMessages},
+            duration_ms = #{durationMs},
+            finished_time = #{finishedTime},
+            update_by = #{updateBy},
+            update_time = sysdate()
+        where run_id = #{runId}
+    </update>
+
+    <select id="selectReviewTaskRunById" resultMap="ReviewTaskRunResult">
+        select * from review_task_run where run_id = #{runId}
+    </select>
+
+    <select id="selectRunsByTaskId" resultMap="ReviewTaskRunResult">
+        select * from review_task_run
+        where task_id = #{taskId}
+        order by attempt_no desc
+    </select>
+
+    <select id="selectMaxAttemptNo" resultType="java.lang.Integer">
+        select max(attempt_no) from review_task_run where task_id = #{taskId}
+    </select>
+</mapper>

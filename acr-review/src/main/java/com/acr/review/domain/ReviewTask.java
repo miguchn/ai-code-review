@@ -1,6 +1,8 @@
 package com.acr.review.domain;
 
+import java.util.Date;
 import com.acr.common.core.domain.BaseEntity;
+import com.fasterxml.jackson.annotation.JsonFormat;
 
 /** 审查任务 review_task：一次由事件触发的执行实例。 */
 public class ReviewTask extends BaseEntity
@@ -19,7 +21,43 @@ public class ReviewTask extends BaseEntity
     private String headSha;
     private String triggerType;
     private String taskStatus;
+    private String reviewConclusion;
+    private String currentStep;
+    private String failureStep;
+    private String failureType;
     private String failureMessage;
+    private Integer attemptCount;
+    private Long latestRunId;
+    private String snapshotReviewMode;
+    private Long snapshotTemplateId;
+    private String snapshotTemplateName;
+    private String snapshotTemplateCode;
+    private Integer snapshotTemplateVersion;
+    private String snapshotPromptContent;
+    private Long snapshotModelId;
+    private String snapshotModelName;
+    private String snapshotModelProvider;
+    private String snapshotModel;
+    private String snapshotEngineCode;
+    private String snapshotEngineName;
+
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    private Date startedTime;
+
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    private Date finishedTime;
+
+    private Long durationMs;
+    private Integer totalScore;
+    private Integer scoreCorrectness;
+    private Integer scoreSecurity;
+    private Integer scorePractice;
+    private Integer scorePerformance;
+    private Integer scoreCommitQuality;
+    private String protocolVersion;
+    private Integer focusIssueCount;
+    private String hasCriticalSecurity;
+    private String parseStatus;
 
     /** 列表展示用项目名称（join review_project，不持久化）。 */
     private String projectName;
@@ -144,6 +182,46 @@ public class ReviewTask extends BaseEntity
         this.taskStatus = taskStatus;
     }
 
+    public String getReviewConclusion()
+    {
+        return reviewConclusion;
+    }
+
+    public void setReviewConclusion(String reviewConclusion)
+    {
+        this.reviewConclusion = reviewConclusion;
+    }
+
+    public String getCurrentStep()
+    {
+        return currentStep;
+    }
+
+    public void setCurrentStep(String currentStep)
+    {
+        this.currentStep = currentStep;
+    }
+
+    public String getFailureStep()
+    {
+        return failureStep;
+    }
+
+    public void setFailureStep(String failureStep)
+    {
+        this.failureStep = failureStep;
+    }
+
+    public String getFailureType()
+    {
+        return failureType;
+    }
+
+    public void setFailureType(String failureType)
+    {
+        this.failureType = failureType;
+    }
+
     public String getFailureMessage()
     {
         return failureMessage;
@@ -152,6 +230,276 @@ public class ReviewTask extends BaseEntity
     public void setFailureMessage(String failureMessage)
     {
         this.failureMessage = failureMessage;
+    }
+
+    public Integer getAttemptCount()
+    {
+        return attemptCount;
+    }
+
+    public void setAttemptCount(Integer attemptCount)
+    {
+        this.attemptCount = attemptCount;
+    }
+
+    public Long getLatestRunId()
+    {
+        return latestRunId;
+    }
+
+    public void setLatestRunId(Long latestRunId)
+    {
+        this.latestRunId = latestRunId;
+    }
+
+    public String getSnapshotReviewMode()
+    {
+        return snapshotReviewMode;
+    }
+
+    public void setSnapshotReviewMode(String snapshotReviewMode)
+    {
+        this.snapshotReviewMode = snapshotReviewMode;
+    }
+
+    public Long getSnapshotTemplateId()
+    {
+        return snapshotTemplateId;
+    }
+
+    public void setSnapshotTemplateId(Long snapshotTemplateId)
+    {
+        this.snapshotTemplateId = snapshotTemplateId;
+    }
+
+    public String getSnapshotTemplateName()
+    {
+        return snapshotTemplateName;
+    }
+
+    public void setSnapshotTemplateName(String snapshotTemplateName)
+    {
+        this.snapshotTemplateName = snapshotTemplateName;
+    }
+
+    public String getSnapshotTemplateCode()
+    {
+        return snapshotTemplateCode;
+    }
+
+    public void setSnapshotTemplateCode(String snapshotTemplateCode)
+    {
+        this.snapshotTemplateCode = snapshotTemplateCode;
+    }
+
+    public Integer getSnapshotTemplateVersion()
+    {
+        return snapshotTemplateVersion;
+    }
+
+    public void setSnapshotTemplateVersion(Integer snapshotTemplateVersion)
+    {
+        this.snapshotTemplateVersion = snapshotTemplateVersion;
+    }
+
+    public String getSnapshotPromptContent()
+    {
+        return snapshotPromptContent;
+    }
+
+    public void setSnapshotPromptContent(String snapshotPromptContent)
+    {
+        this.snapshotPromptContent = snapshotPromptContent;
+    }
+
+    public Long getSnapshotModelId()
+    {
+        return snapshotModelId;
+    }
+
+    public void setSnapshotModelId(Long snapshotModelId)
+    {
+        this.snapshotModelId = snapshotModelId;
+    }
+
+    public String getSnapshotModelName()
+    {
+        return snapshotModelName;
+    }
+
+    public void setSnapshotModelName(String snapshotModelName)
+    {
+        this.snapshotModelName = snapshotModelName;
+    }
+
+    public String getSnapshotModelProvider()
+    {
+        return snapshotModelProvider;
+    }
+
+    public void setSnapshotModelProvider(String snapshotModelProvider)
+    {
+        this.snapshotModelProvider = snapshotModelProvider;
+    }
+
+    public String getSnapshotModel()
+    {
+        return snapshotModel;
+    }
+
+    public void setSnapshotModel(String snapshotModel)
+    {
+        this.snapshotModel = snapshotModel;
+    }
+
+    public String getSnapshotEngineCode()
+    {
+        return snapshotEngineCode;
+    }
+
+    public void setSnapshotEngineCode(String snapshotEngineCode)
+    {
+        this.snapshotEngineCode = snapshotEngineCode;
+    }
+
+    public String getSnapshotEngineName()
+    {
+        return snapshotEngineName;
+    }
+
+    public void setSnapshotEngineName(String snapshotEngineName)
+    {
+        this.snapshotEngineName = snapshotEngineName;
+    }
+
+    public Date getStartedTime()
+    {
+        return startedTime;
+    }
+
+    public void setStartedTime(Date startedTime)
+    {
+        this.startedTime = startedTime;
+    }
+
+    public Date getFinishedTime()
+    {
+        return finishedTime;
+    }
+
+    public void setFinishedTime(Date finishedTime)
+    {
+        this.finishedTime = finishedTime;
+    }
+
+    public Long getDurationMs()
+    {
+        return durationMs;
+    }
+
+    public void setDurationMs(Long durationMs)
+    {
+        this.durationMs = durationMs;
+    }
+
+    public Integer getTotalScore()
+    {
+        return totalScore;
+    }
+
+    public void setTotalScore(Integer totalScore)
+    {
+        this.totalScore = totalScore;
+    }
+
+    public Integer getScoreCorrectness()
+    {
+        return scoreCorrectness;
+    }
+
+    public void setScoreCorrectness(Integer scoreCorrectness)
+    {
+        this.scoreCorrectness = scoreCorrectness;
+    }
+
+    public Integer getScoreSecurity()
+    {
+        return scoreSecurity;
+    }
+
+    public void setScoreSecurity(Integer scoreSecurity)
+    {
+        this.scoreSecurity = scoreSecurity;
+    }
+
+    public Integer getScorePractice()
+    {
+        return scorePractice;
+    }
+
+    public void setScorePractice(Integer scorePractice)
+    {
+        this.scorePractice = scorePractice;
+    }
+
+    public Integer getScorePerformance()
+    {
+        return scorePerformance;
+    }
+
+    public void setScorePerformance(Integer scorePerformance)
+    {
+        this.scorePerformance = scorePerformance;
+    }
+
+    public Integer getScoreCommitQuality()
+    {
+        return scoreCommitQuality;
+    }
+
+    public void setScoreCommitQuality(Integer scoreCommitQuality)
+    {
+        this.scoreCommitQuality = scoreCommitQuality;
+    }
+
+    public String getProtocolVersion()
+    {
+        return protocolVersion;
+    }
+
+    public void setProtocolVersion(String protocolVersion)
+    {
+        this.protocolVersion = protocolVersion;
+    }
+
+    public Integer getFocusIssueCount()
+    {
+        return focusIssueCount;
+    }
+
+    public void setFocusIssueCount(Integer focusIssueCount)
+    {
+        this.focusIssueCount = focusIssueCount;
+    }
+
+    public String getHasCriticalSecurity()
+    {
+        return hasCriticalSecurity;
+    }
+
+    public void setHasCriticalSecurity(String hasCriticalSecurity)
+    {
+        this.hasCriticalSecurity = hasCriticalSecurity;
+    }
+
+    public String getParseStatus()
+    {
+        return parseStatus;
+    }
+
+    public void setParseStatus(String parseStatus)
+    {
+        this.parseStatus = parseStatus;
     }
 
     public String getProjectName()
