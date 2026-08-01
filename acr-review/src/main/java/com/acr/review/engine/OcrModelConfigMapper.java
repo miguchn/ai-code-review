@@ -38,19 +38,7 @@ public class OcrModelConfigMapper
         String trimmed = apiUrl.trim();
         if (useAnthropic)
         {
-            if (trimmed.endsWith("/v1/messages"))
-            {
-                return trimmed;
-            }
-            if (trimmed.endsWith("/"))
-            {
-                trimmed = trimmed.substring(0, trimmed.length() - 1);
-            }
-            if (trimmed.endsWith("/v1"))
-            {
-                return trimmed + "/messages";
-            }
-            return trimmed + "/v1/messages";
+            return normalizeAnthropicUrl(trimmed);
         }
         if (trimmed.endsWith("/v1/chat/completions") || trimmed.endsWith("/chat/completions"))
         {
@@ -65,5 +53,31 @@ public class OcrModelConfigMapper
             return trimmed + "/chat/completions";
         }
         return trimmed + "/v1/chat/completions";
+    }
+
+    /** 兼容用户误填 OpenAI Compatible 后缀的 Claude 地址。 */
+    private String normalizeAnthropicUrl(String trimmed)
+    {
+        if (trimmed.endsWith("/v1/messages"))
+        {
+            return trimmed;
+        }
+        if (trimmed.endsWith("/v1/chat/completions"))
+        {
+            trimmed = trimmed.substring(0, trimmed.length() - "/v1/chat/completions".length());
+        }
+        else if (trimmed.endsWith("/chat/completions"))
+        {
+            trimmed = trimmed.substring(0, trimmed.length() - "/chat/completions".length());
+        }
+        if (trimmed.endsWith("/"))
+        {
+            trimmed = trimmed.substring(0, trimmed.length() - 1);
+        }
+        if (trimmed.endsWith("/v1"))
+        {
+            return trimmed + "/messages";
+        }
+        return trimmed + "/v1/messages";
     }
 }

@@ -5,6 +5,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -44,44 +45,47 @@ public class OpenCodeReviewCliAdapter implements ReviewEngine
 
         try
         {
+            Map<String, String> environment = withPlainTextTerminal(request.getModelEnvironment());
             ReviewEngineProcessRunner.ProcessExecution execution = processRunner.execute(
-                command, workingDirectory, request.getModelEnvironment(), timeoutSeconds);
-            String version = parseVersionFromOutput(execution.stdout());
+                command, workingDirectory, environment, timeoutSeconds);
+            String stdout = AnsiTextCleaner.strip(execution.stdout());
+            String stderr = AnsiTextCleaner.strip(execution.stderr());
+            String version = parseVersionFromOutput(stdout);
             if (request.getInvocationType() == ReviewEngineInvocationType.VERSION && version == null)
             {
-                version = parseVersionFromOutput(execution.stdout() + "\n" + execution.stderr());
+                version = parseVersionFromOutput(stdout + "\n" + stderr);
             }
 
             if (execution.timedOut())
             {
                 return ReviewEngineResult.failure(engineName, version, execution.durationMs(),
-                    execution.stdout(), execution.stderr(), execution.exitCode(),
+                    stdout, stderr, execution.exitCode(),
                     ReviewEngineFailureType.TIMEOUT, "CLI 执行超时");
             }
 
             Map<String, Object> structured;
             try
             {
-                structured = outputParser.parse(execution.stdout(), request.getInvocationType());
+                structured = outputParser.parse(stdout, request.getInvocationType());
             }
             catch (IllegalArgumentException ex)
             {
                 return ReviewEngineResult.failure(engineName, version, execution.durationMs(),
-                    execution.stdout(), execution.stderr(), execution.exitCode(),
+                    stdout, stderr, execution.exitCode(),
                     ReviewEngineFailureType.OUTPUT_FORMAT_ERROR, ex.getMessage());
             }
 
             if (execution.exitCode() != 0)
             {
                 ReviewEngineFailureType failureType = ReviewEngineProcessRunner.classifyExitFailure(
-                    execution.exitCode(), execution.stdout(), execution.stderr(), request.getInvocationType());
+                    execution.exitCode(), stdout, stderr, request.getInvocationType());
                 return ReviewEngineResult.failure(engineName, version, execution.durationMs(),
-                    execution.stdout(), execution.stderr(), execution.exitCode(), failureType,
-                    summarizeFailure(execution.stderr(), execution.stdout()));
+                    stdout, stderr, execution.exitCode(), failureType,
+                    summarizeFailure(stderr, stdout));
             }
 
             return ReviewEngineResult.success(engineName, version, execution.durationMs(),
-                execution.stdout(), execution.stderr(), structured, execution.exitCode());
+                stdout, stderr, structured, execution.exitCode());
         }
         catch (IOException ex)
         {
@@ -189,5 +193,20 @@ public class OpenCodeReviewCliAdapter implements ReviewEngine
             return stdout.lines().findFirst().orElse(stdout).trim();
         }
         return "CLI 执行失败";
+    }
+
+    /** 尽量关闭 CLI 颜色输出；即使 CLI 仍输出 ANSI，也会在返回前再剥离一次。 */
+    private Map<String, String> withPlainTextTerminal(Map<String, String> modelEnvironment)
+    {
+        Map<String, String> environment = new HashMap<>();
+        if (modelEnvironment != null)
+        {
+            environment.putAll(modelEnvironment);
+        }
+        environment.put("NO_COLOR", "1");
+        environment.put("TERM", "dumb");
+        environment.put("CLICOLOR", "0");
+        environment.put("FORCE_COLOR", "0");
+        return environment;
     }
 }

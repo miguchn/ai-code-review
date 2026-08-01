@@ -38,4 +38,18 @@ class OcrModelConfigMapperTest
         assertEquals("https://api.deepseek.com/v1/chat/completions", env.get("OCR_LLM_URL"));
         assertEquals("false", env.get("OCR_USE_ANTHROPIC"));
     }
+
+    @Test
+    void stripsMistakenOpenAiSuffixForAnthropicUrl()
+    {
+        var config = new com.acr.system.domain.SysAiModelConfig();
+        config.setProvider("claude");
+        config.setApiUrl("https://api.anthropic.com/v1/chat/completions");
+        config.setApiKey("secret-key");
+        config.setModel("claude-3-5-sonnet-latest");
+
+        var env = mapper.toEnvironment(config);
+        assertEquals("https://api.anthropic.com/v1/messages", env.get("OCR_LLM_URL"));
+        assertEquals("true", env.get("OCR_USE_ANTHROPIC"));
+    }
 }

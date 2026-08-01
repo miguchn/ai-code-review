@@ -33,7 +33,7 @@
             <el-tag :type="engineInfo.lastDetectSuccess ? 'success' : 'info'" size="small">
               {{ engineInfo.lastDetectTime ? (engineInfo.lastDetectSuccess ? '成功' : '失败') : '未检测' }}
             </el-tag>
-            <span v-if="engineInfo.lastDetectTime" class="status-time">{{ engineInfo.lastDetectTime }}</span>
+            <span v-if="engineInfo.lastDetectTime" class="status-time">{{ formatDateTime(engineInfo.lastDetectTime) }}</span>
           </div>
           <div v-if="engineInfo.lastDetectMessage" class="status-message">{{ engineInfo.lastDetectMessage }}</div>
         </el-descriptions-item>
@@ -42,7 +42,7 @@
             <el-tag :type="engineInfo.lastTestSuccess ? 'success' : 'info'" size="small">
               {{ engineInfo.lastTestTime ? (engineInfo.lastTestSuccess ? '成功' : '失败') : '未测试' }}
             </el-tag>
-            <span v-if="engineInfo.lastTestTime" class="status-time">{{ engineInfo.lastTestTime }}</span>
+            <span v-if="engineInfo.lastTestTime" class="status-time">{{ formatDateTime(engineInfo.lastTestTime) }}</span>
           </div>
           <div v-if="engineInfo.lastTestMessage" class="status-message">{{ engineInfo.lastTestMessage }}</div>
         </el-descriptions-item>
@@ -78,20 +78,25 @@
       </el-collapse>
     </el-card>
 
-    <el-dialog title="测试调用" v-model="testDialogOpen" width="480px" append-to-body>
+    <el-dialog title="测试调用" v-model="testDialogOpen" width="520px" append-to-body>
       <el-form label-width="100px">
         <el-form-item label="模型配置">
-          <el-select v-model="testModelId" clearable placeholder="默认使用已启用的默认模型" style="width: 100%">
+          <el-select v-model="testModelId" clearable placeholder="请选择已启用的模型配置" style="width: 100%">
             <el-option v-for="item in modelOptions" :key="item.modelId"
-              :label="item.modelName + (item.isDefault === '1' ? '（默认）' : '')"
+              :label="formatModelOption(item)"
               :value="item.modelId" />
           </el-select>
         </el-form-item>
-        <el-alert title="测试将使用内置样例仓库，先验证 LLM 连通性，再执行 preview 审查，不会读取用户上传代码。" type="info" :closable="false" show-icon />
+        <el-alert
+          :title="modelOptions.length ? '将使用所选模型配置调用审查引擎；未选择时使用当前默认模型。测试使用内置样例仓库，不会读取用户代码。' : '暂无已启用的模型配置，请先在「大模型配置」中新增并启用。'"
+          :type="modelOptions.length ? 'info' : 'warning'"
+          :closable="false"
+          show-icon
+        />
       </el-form>
       <template #footer>
         <el-button @click="testDialogOpen = false">取消</el-button>
-        <el-button type="primary" :loading="testing" @click="submitTest">开始测试</el-button>
+        <el-button type="primary" :loading="testing" :disabled="!modelOptions.length" @click="submitTest">开始测试</el-button>
       </template>
     </el-dialog>
   </div>
@@ -100,6 +105,7 @@
 <script setup name="ReviewEngine">
 import { getReviewEngineInfo, detectReviewEngine, testReviewEngine } from '@/api/review/engine'
 import { listAiModelConfig } from '@/api/system/aiModelConfig'
+import { LLM_PROVIDER_FALLBACK, providerLabel } from '@/constants/llmProviders'
 
 const { proxy } = getCurrentInstance()
 
@@ -122,9 +128,28 @@ function loadInfo() {
 }
 
 function loadModels() {
-  listAiModelConfig({ pageNum: 1, pageSize: 100, enabled: '1' }).then(res => {
+  return listAiModelConfig({ pageNum: 1, pageSize: 100, enabled: '1' }).then(res => {
     modelOptions.value = res.rows || []
+    return modelOptions.value
+  }).catch(() => {
+    modelOptions.value = []
+    return modelOptions.value
   })
+}
+
+function formatModelOption(item) {
+  const provider = providerLabel(LLM_PROVIDER_FALLBACK, item.provider, item.customProviderName)
+  const modelTag = item.model ? ` / ${item.model}` : ''
+  const defaultTag = item.isDefault === '1' ? '（默认）' : ''
+  return `${item.modelName} · ${provider}${modelTag}${defaultTag}`
+}
+
+function pickDefaultModelId(models) {
+  if (!models || !models.length) {
+    return undefined
+  }
+  const preferred = models.find(item => item.isDefault === '1')
+  return preferred ? preferred.modelId : models[0].modelId
 }
 
 function handleDetect() {
@@ -139,14 +164,21 @@ function handleDetect() {
 }
 
 function handleTest() {
-  testModelId.value = undefined
-  loadModels()
-  testDialogOpen.value = true
+  testing.value = false
+  loadModels().then(models => {
+    testModelId.value = pickDefaultModelId(models)
+    testDialogOpen.value = true
+  })
 }
 
 function submitTest() {
+  if (!testModelId.value && !modelOptions.value.length) {
+    proxy.$modal.msgWarning('请先在「大模型配置」中配置并启用模型')
+    return
+  }
   testing.value = true
-  testReviewEngine({ modelId: testModelId.value }).then(res => {
+  const payload = testModelId.value != null ? { modelId: testModelId.value } : {}
+  testReviewEngine(payload).then(res => {
     lastResult.value = res.data
     testDialogOpen.value = false
     proxy.$modal.msgSuccess(res.data?.success ? '测试调用成功' : '测试调用失败')

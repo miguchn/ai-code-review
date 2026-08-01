@@ -14,7 +14,8 @@ public class ReviewEngineOutputParser
 
     public Map<String, Object> parse(String stdout, ReviewEngineInvocationType invocationType)
     {
-        if (stdout == null || stdout.isBlank())
+        String cleaned = AnsiTextCleaner.strip(stdout);
+        if (cleaned == null || cleaned.isBlank())
         {
             return Map.of();
         }
@@ -22,11 +23,11 @@ public class ReviewEngineOutputParser
         if (invocationType == ReviewEngineInvocationType.VERSION)
         {
             Map<String, Object> version = new HashMap<>();
-            version.put("rawVersionLine", stdout.lines().findFirst().orElse(stdout).trim());
+            version.put("rawVersionLine", cleaned.lines().findFirst().orElse(cleaned).trim());
             return version;
         }
 
-        String trimmed = stdout.trim();
+        String trimmed = cleaned.trim();
         if (trimmed.startsWith("{") || trimmed.startsWith("["))
         {
             try
