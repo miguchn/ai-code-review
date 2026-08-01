@@ -6,13 +6,9 @@
 
 ## Project Positioning
 
-AI Code Review is an **intelligent code review management platform** for enterprise internal use, addressing these core pain points:
+AI Code Review is an **enterprise-internal code review governance platform** deployed alongside GitLab, GitHub, Gitee, or Gitea. It turns code changes into a traceable review, remediation, verification, measurement, and audit loop; the Git platform remains the system of record for code collaboration and merging.
 
-1. **Developers don't read reviews** — push results to DingTalk / WeCom / Feishu groups to actively reach developers
-2. **All-English is hard to read** — native Chinese support, integrates domestic LLMs (DeepSeek / Qwen, etc.)
-3. **No admin console** — visually manage model config, projects, user permissions, review rules
-4. **No notifications or history** — graded notification push, persisted review results, issue tracking (fixed or not)
-5. **Insufficient whole-codebase understanding** — integrates alibaba/open-code-review engine, supports Agent-level full-repo exploration
+It focuses on reliable review coverage, actionable findings, governed rules and models, consistent quality metrics, and project-scoped security and auditability. It does not replace the Git platform, generic project or defect management, BI/APM, or human approval, and it does not provide individual performance rankings. See the [Product Roadmap](docs/planning/product-roadmap.md) for product boundaries, target navigation, and release gates.
 
 ## Architecture
 
@@ -21,15 +17,12 @@ AI Code Review is an **intelligent code review management platform** for enterpr
 │                  AI Code Review Platform                 │
 ├──────────────────────────────────────────────────────────┤
 │                                                          │
-│  Management Layer (this project)                         │
-│  ├── Web Admin Console (Vue3 + Element Plus)             │
-│  ├── DingTalk / WeCom / Feishu + Email notifications     │
-│  ├── Dashboard + statistical reports                     │
-│  ├── User / Role / Permission management (RBAC)          │
-│  ├── Project management + review rule config             │
-│  ├── Review record storage (MySQL) + history query       │
-│  ├── Model config management (API Key, provider switch)  │
-│  └── Daily / Weekly / Monthly reports auto-generation    │
+│  Product & Governance Layer (this project)               │
+│  ├── Workbench, review tasks, findings and onboarding    │
+│  ├── Review policies, rule library, models and gates      │
+│  ├── Writeback, notifications, dashboard and reports     │
+│  ├── Project-scoped access, secrets, audit and retention │
+│  └── Review SLI, recovery, capacity and cost governance  │
 │                                                          │
 │  Engine Layer (external integration)                      │
 │  ├── alibaba/open-code-review (OCR)                      │
@@ -37,7 +30,8 @@ AI Code Review is an **intelligent code review management platform** for enterpr
 │  │   ├── full scan (scheduled patrol)                    │
 │  │   ├── built-in rules for 29 languages                 │
 │  │   └── Agent repo exploration (read_file + code_search)│
-│  └── Fallback: direct LLM call (DeepSeek / Qwen / OpenAI) │
+│  └── Optional direct LLM path, enabled only after release │
+│      validation                                          │
 │                                                          │
 └──────────────────────────────────────────────────────────┘
 ```
@@ -100,38 +94,27 @@ The repo already provides business-system ownership management, plus model confi
 
 ### Planned (Code Review Business)
 
-Priorities indicate product direction; detailed breakdowns, dependencies and acceptance are in `docs/planning/product-roadmap.md`.
+The roadmap is organized around a real vertical review loop rather than implementing every platform and channel at once. P0 includes security, authorization, audit, and operations readiness.
 
-| Module | Features | Priority |
-|------|------|:---:|
-| Multi-platform project onboarding | GitHub / GitLab / Gitee / Gitea support, unified Git Provider abstraction (auth, API adaptation), project↔business-system/dept binding | P0 |
-| Webhook receiver | Multi-platform event receiver (PR / MR / Push), signature verification, dedup, idempotency | P0 |
-| Engine integration | alibaba/OCR subprocess call, JSON parsing, timeout/retry, fallback to direct LLM | P0 |
-| Result writeback | Multi-platform MR / PR inline comment (GitHub / GitLab / Gitee / Gitea API adaptation) | P0 |
-| Review orchestration | webhook→fetch diff→invoke OCR→persist→writeback→notify full chain | P0 |
-| Notification push | DingTalk / WeCom / Feishu Webhook + Email, multi-channel strategy, severity-triggered, @committer, dedup | P0 |
-| Review records | Storage (task→result→comment 3-level), history query, detail view | P0 |
-| Defect workflow | Assign / claim, state flow (to-fix / fixed / ignored / false-positive), false-positive flag | P1 |
-| Model management | Multi-provider config, encrypted API Key, default model, timeout/token limits, fallback chain | P1 |
-| Review rules | Project-level rule config, custom prompts, rule library sharing, versioning | P1 |
-| Dashboard | Team / project / personal quality stats, trends, severity/category distribution | P1 |
-| Member analysis | Developer commit behavior, issue distribution, personal quality profile | P1 |
-| Cost stats | Token consumption, cost by project/model, quota & rate limiting | P2 |
-| Daily / Weekly reports | Auto-generated quality reports, scheduled push | P2 |
-| Full scan | Scheduled full-repo scan, local repo clone, per-project-path storage, legacy issue discovery | P2 |
-| Session replay | Review session visualization, multi-user shared replay (OCR Session Viewer rework) | P2 |
-| Project sentinel | Proactive monitoring + alert rules | P2 |
-| Merge gate | Auto-block MR / PR on HIGH issues (multi-platform status check API) | P2 |
-| False-positive feedback | Feedback sediment, rule / prompt optimization loop | P3 |
-| SARIF export | JSON→SARIF conversion, integrate SonarQube / GitHub Code Scanning | P3 |
+| Release | Product goal | Core scope |
+|------|------|------|
+| MVP (V0.1 internal pilot) | Minimum trustworthy loop on one platform | One Git provider and MR/PR event, onboarding, webhook, one review path, tasks/findings, summary writeback, one notification channel, scoped access, audit, recovery, and basic workbench |
+| Core (V0.2 controlled rollout) | Actionable findings and governed policy | Inline comments, remediation and verification, versioned rules/review policies, model strategy, notification policy, shadow gate, and role-based workbench |
+| Enterprise (V1.0 internal GA) | Enterprise-internal commercial readiness | Identity/account lifecycle, quality dashboard, report center, alerts, usage attribution, data lifecycle, backup/recovery, business SLI, and audit export |
+| Scale (V1.1) | More integrations and controlled enforcement | A second Git provider, enforced gates and bypass, budgets/limits, more channels, full scans, and resource isolation |
+| Later candidates | Independently justified initiatives | SARIF, approval-based false-positive optimization, session replay, and proactive sentinel capabilities |
+
+The target top-level navigation is: Workbench, Review Center, Project Onboarding, Policy Configuration, Insights, Notifications & Alerts, System Governance, and Operations. Review history is part of Review Tasks; findings use a dedicated ledger; Quartz schedules remain separate from review executions. Detailed submenus, metrics, priorities, and acceptance gates are in the [Product Roadmap](docs/planning/product-roadmap.md).
 
 ## Reference Projects
 
 | Project | Use | Notes |
 |------|------|------|
-| [PR-Agent](https://github.com/The-PR-Agent/pr-agent) | Reference | Engine design, prompt templates, Git Provider architecture |
-| [AI-Codereview-Gitlab](https://github.com/sunmh207/AI-Codereview-Gitlab) | Reference | Domestic enterprise landing solution, notifications, dashboard, reports |
-| [alibaba/open-code-review](https://github.com/alibaba/open-code-review) | Integration | Review engine, full scan, 29-language rules, Agent repo exploration |
+| [PR-Agent](https://github.com/The-PR-Agent/pr-agent) | Reference | Provider capability contracts, automatic/manual triggers, incremental review, large-change handling, and low-noise persistent comments |
+| [AI-Codereview-Gitlab](https://github.com/sunmh207/AI-Codereview-Gitlab) | Reference | China-oriented IM delivery, a lightweight webhook-to-writeback/report loop, and Agent sandbox/resource guidance |
+| [alibaba/open-code-review](https://github.com/alibaba/open-code-review) | Engine candidate | Deterministic file selection/grouping/rule matching, Agent context exploration, structured positioning, recovery, and telemetry |
+
+Reference projects validate capabilities and trade-offs; their entire feature sets are not copied into the MVP. See the [Product Roadmap](docs/planning/product-roadmap.md#23-本地参考项目能力审计) for the audit.
 
 ## Quick Start
 

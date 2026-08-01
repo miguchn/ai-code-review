@@ -117,9 +117,11 @@ services:
 
 ## GitLab Webhook 配置（待实现）
 
+以下仅为 MVP（V0.1）试点建议，最终 URL、Secret 和支持版本须在该切片开发前确认：
+
 1. 在 GitLab 项目设置中添加 Webhook
 2. URL: `http://your-server:8080/webhook/gitlab`
-3. Trigger Events: Push Events + Merge Request Events
+3. Trigger Events: Merge Request Events（Push Events 不进入 MVP）
 4. Secret Token: 配置在管理后台
 
 ## 通知推送配置（待实现）
