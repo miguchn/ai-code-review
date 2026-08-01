@@ -10,8 +10,20 @@
 4. `04_github_project_access.sql`：增加 GitHub 凭据与代码项目接入能力。
 5. `05_github_pr_scope.sql`：增加 GitHub PR 审查范围配置。
 6. `06_llm_model_service.sql`：升级 LLM 模型服务配置。
-7. `07_review_engine.sql`：增加本地审查引擎菜单与权限。
+7. `07_review_engine.sql`：增加本地审查引擎菜单与权限。（已知问题：引擎按钮号段 1130-1132 与 04 凭据按钮冲突，由 12 修复，脚本本身按变更约束不再修改）
 8. `08_github_pr_webhook.sql`：增加 GitHub PR Webhook 事件与审查任务。
+9. `09_llm_custom_provider.sql`：大模型配置支持自定义厂商，并统一菜单文案。
+10. `10_llm_menu_charset_fix.sql`：修复大模型配置菜单中文乱码（须 utf8mb4 连接）。
+11. `11_llm_column_comment_charset_fix.sql`：修复 `custom_provider_name` 列注释乱码（须 utf8mb4 连接）。
+12. `12_review_engine_button_fix.sql`：修复 07 引擎按钮号段冲突（改用 1136-1138），并清除角色 2 被误授的凭据按钮权限。
+
+含中文的增量脚本执行时请显式指定连接字符集，例如：
+
+```bash
+mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/09_llm_custom_provider.sql
+mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/10_llm_menu_charset_fix.sql
+mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/11_llm_column_comment_charset_fix.sql
+```
 
 ## 命名规则
 

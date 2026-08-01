@@ -29,7 +29,13 @@ mysql -u root -p ai_code_review < sql/05_github_pr_scope.sql
 mysql -u root -p ai_code_review < sql/06_llm_model_service.sql
 mysql -u root -p ai_code_review < sql/07_review_engine.sql
 mysql -u root -p ai_code_review < sql/08_github_pr_webhook.sql
+mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/09_llm_custom_provider.sql
+mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/10_llm_menu_charset_fix.sql
+mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/11_llm_column_comment_charset_fix.sql
+mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/12_review_engine_button_fix.sql
 ```
+
+> 含中文的 SQL 必须使用 `--default-character-set=utf8mb4`（或脚本内 `SET NAMES utf8mb4`）执行，避免菜单/字典文案乱码。
 
 启动后端前必须配置 `ACR_CREDENTIAL_MASTER_KEY`（Base64 编码的 32 字节密钥，可用
 `openssl rand -base64 32` 生成）。升级环境首次启动时会使用该密钥将历史明文模型 API Key
