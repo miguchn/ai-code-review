@@ -56,6 +56,7 @@ AI Code Review 面向企业内部研发团队，是部署在代码托管平台�
 - 已具备 LLM 模型服务基础：`LlmProviderCode` 标准厂商枚举、`LlmCallService` 统一调用、`LlmCallResult` 结构化结果、API Key AES-GCM 加密存储、连接/模型调用测试及最近检测记录；管理页迁入「模型服务」一级目录；
 - 已具备本地 `open-code-review` CLI 审查引擎适配：统一请求/结果契约、安全进程调用、环境检测、内置样例测试调用，以及「模型服务 → 审查引擎」管理页；尚未接入正式 PR 审查任务消费；
 - P0/M1 第一个纵向切片已完成：`acr-review` 已实现 GitHub 项目、加密 PAT 凭据、GitHub Provider、连接检测、Mapper 和用例服务，`acr-admin` 提供对应 REST 与权限入口，`acr-ui` 提供业务系统、项目和凭据页面；
+- M2「GitHub PR Webhook 事件接入」已完成（2026-08-01）：`POST /webhook/github` 匿名可达并以 HMAC-SHA256 验签（Secret 按项目 AES-GCM 加密、独立 AAD、不回显不进日志）；事件与审查任务 1:1 拆分，`review_webhook_event` 按 `(provider, delivery_id)` 唯一键幂等去重并记录 RECEIVED/ACCEPTED/IGNORED/DUPLICATE/FAILED 全过程，`review_task` 生成 PENDING 最小任务（项目、PR 号、源/目标分支、base/head SHA、事件关联）；动作白名单（opened/reopened/synchronize，参数 `review.github.prEvents` 可调）、目标分支匹配、项目启停与 PR 审查开关判断均在服务端完成；请求线程只落库不执行审查。后台提供「审查任务」列表页（项目/PR/分支/SHA/状态/触发方式/失败原因）与项目详情 Webhook 配置区（回调地址、Secret 配置状态、最近接收时间与结果）。已经真实 GitHub 仓库（miguchn/webhook-test）验证 ping/closed/reopened/synchronize 四类投递，GitHub 侧全部 200；
 - 一个业务系统可关联多个代码仓库项目。业务系统数据和接口继续属于 `acr-system` 平台治理底座，唯一菜单入口移动到“代码审查”，避免与项目管理重复；
 - 现有通用 RBAC、部门数据范围和操作日志已用于项目接入，但尚不能证明后续审查任务/问题的项目级隔离、审查决策审计或审查链路可观测。
 
@@ -288,6 +289,8 @@ MVP 建议按纵向切片交付：连接与项目 → 可信事件 → 任务骨
 ### 7.3 MVP（V0.1，内部试点）
 
 M1「项目与 Git 接入」完成状态（2026-08-01）：GitHub 纵向切片已补齐到后续 PR 审查可消费的项目配置。已具备业务系统到多个仓库项目的一对多归属、PAT 加密与不回显、GitHub 地址解析/API 访问、仓库元数据与全部分支分页同步、`dev`/`develop` 默认推荐、真实 PR 目标分支多选、连接失败分类、项目默认停用和检测成功后启用约束，以及 13 项项目/凭据功能权限。未提供可用测试 PAT，因此浏览器验收验证了真实 GitHub API 的无效凭据失败路径；Provider 成功与分页路径由自动测试覆盖。Webhook 不在本次完成范围。
+
+M2「GitHub PR Webhook 事件接入」完成状态（2026-08-01）：主链路「GitHub PR 事件 → Webhook 验签 → 项目匹配 → 目标分支判断 → 事件去重 → 生成待审查任务 → 后台可查询」已闭环并通过真实仓库验收。事件全量落库可追溯（含忽略/失败原因），重复投递按 Delivery ID 判重计数；验证覆盖正常受理、重复重发、分支不匹配、动作白名单外、签名错误、载荷超限、缺 Delivery 头七类路径；单元测试 40 项全绿。本切片不含 Diff 拉取、引擎调用、回写与通知（后续切片）。设计详见 `docs/planning/github-pr-webhook-m2.md`。
 
 - 单 Git 平台的项目接入、连接验证、加密凭据和停用；
 - MR/PR Webhook 验签、去重、接收审计和快速响应；

@@ -1,5 +1,7 @@
 # P0/M2 GitHub PR Webhook 事件接入设计
 
+> **实施状态（2026-08-01）：已实现并通过真实仓库验收。** 本文保留为链路公共语义的事实源；Diff 获取、审查执行、回写、通知等后续切片在此基础上扩展。验收记录：本地模拟七类场景（受理/判重/分支不匹配/白名单外/签名错误/超限/缺头）全部符合预期；真实仓库 miguchn/webhook-test 的 ping/closed/reopened/synchronize 投递 GitHub 侧全部 200，reopened 与 synchronize 分别生成 PENDING 任务。
+
 ## 1. 目标与范围
 
 本切片交付可独立验收的 GitHub PR 事件可信接入：GitHub 仓库配置 Webhook 后，PR 的 `opened`、`reopened`、`synchronize` 事件经签名校验、项目匹配、目标分支判断和事件幂等后生成待审查任务，后台可查询任务列表，项目详情可查看 Webhook 配置状态与最近接收结果。
