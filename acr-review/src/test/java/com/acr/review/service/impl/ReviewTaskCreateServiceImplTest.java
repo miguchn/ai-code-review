@@ -11,22 +11,36 @@ import org.springframework.dao.DuplicateKeyException;
 import com.acr.common.exception.ServiceException;
 import com.acr.review.domain.ReviewProject;
 import com.acr.review.domain.ReviewTask;
+import com.acr.review.domain.ReviewTemplate;
 import com.acr.review.domain.ReviewWebhookEvent;
+import com.acr.review.engine.config.ReviewEngineProperties;
 import com.acr.review.git.GitPullRequestEvent;
 import com.acr.review.mapper.ReviewTaskMapper;
 import com.acr.review.mapper.ReviewWebhookEventMapper;
+import com.acr.review.service.IReviewTaskExecutionService;
+import com.acr.review.service.IReviewTemplateService;
+import com.acr.system.domain.SysAiModelConfig;
+import com.acr.system.service.ISysAiModelConfigService;
 
 class ReviewTaskCreateServiceImplTest
 {
     private final ReviewTaskMapper taskMapper = mock(ReviewTaskMapper.class);
     private final ReviewWebhookEventMapper eventMapper = mock(ReviewWebhookEventMapper.class);
-    private final ReviewTaskCreateServiceImpl service = new ReviewTaskCreateServiceImpl(taskMapper, eventMapper);
+    private final IReviewTaskExecutionService executionService = mock(IReviewTaskExecutionService.class);
+    private final IReviewTemplateService templateService = mock(IReviewTemplateService.class);
+    private final ISysAiModelConfigService modelConfigService = mock(ISysAiModelConfigService.class);
+    private final ReviewTaskCreateServiceImpl service = new ReviewTaskCreateServiceImpl(
+        taskMapper, eventMapper, executionService,
+        new ReviewTaskSnapshotServiceImpl(templateService, modelConfigService, new ReviewEngineProperties()));
 
     @Test
-    void createsPendingTaskAndAcceptsEvent()
+    void createsPendingTaskAcceptsEventAndSchedulesExecution()
     {
         ReviewProject project = new ReviewProject();
         project.setProjectId(1L);
+        project.setReviewMode("LLM_DIRECT");
+        project.setModelId(3L);
+        project.setTemplateId(4L);
         ReviewWebhookEvent event = new ReviewWebhookEvent();
         event.setEventId(10L);
         event.setProvider("GITHUB");
@@ -38,6 +52,8 @@ class ReviewTaskCreateServiceImplTest
             task.setTaskId(100L);
             return 1;
         });
+        when(modelConfigService.selectRuntimeConfigById(3L)).thenReturn(enabledModel());
+        when(templateService.selectEnabledTemplateById(4L)).thenReturn(enabledTemplate());
 
         Long taskId = service.createTaskFromEvent(project, event, prEvent);
 
@@ -47,9 +63,16 @@ class ReviewTaskCreateServiceImplTest
                 && "PENDING".equals(task.getTaskStatus()) && "WEBHOOK".equals(task.getTriggerType())
                 && Integer.valueOf(12).equals(task.getPrNumber())
                 && "feature/login".equals(task.getSourceBranch()) && "dev".equals(task.getTargetBranch())
-                && task.getBaseSha().startsWith("aaaa") && task.getHeadSha().startsWith("ffff")));
+                && task.getBaseSha().startsWith("aaaa") && task.getHeadSha().startsWith("ffff")
+                && "LLM_DIRECT".equals(task.getSnapshotReviewMode())
+                && Long.valueOf(3L).equals(task.getSnapshotModelId())
+                && Long.valueOf(4L).equals(task.getSnapshotTemplateId())
+                && "builtin_java".equals(task.getSnapshotTemplateCode())
+                && Integer.valueOf(2).equals(task.getSnapshotTemplateVersion())
+                && "模板正文".equals(task.getSnapshotPromptContent())));
         verify(eventMapper).updateProcessResult(org.mockito.ArgumentMatchers.argThat(e ->
             "ACCEPTED".equals(e.getProcessStatus()) && Long.valueOf(100L).equals(e.getTaskId())));
+        verify(executionService).scheduleExecution(100L);
     }
 
     @Test
@@ -57,6 +80,7 @@ class ReviewTaskCreateServiceImplTest
     {
         ReviewProject project = new ReviewProject();
         project.setProjectId(1L);
+        project.setReviewMode("OCR_ENGINE");
         ReviewWebhookEvent event = new ReviewWebhookEvent();
         event.setEventId(10L);
         event.setProvider("GITHUB");
@@ -65,5 +89,45 @@ class ReviewTaskCreateServiceImplTest
         when(taskMapper.insertReviewTask(any())).thenThrow(new DuplicateKeyException("uk_task_event"));
 
         assertThrows(ServiceException.class, () -> service.createTaskFromEvent(project, event, prEvent));
+    }
+
+    @Test
+    void rejectsLlmTaskWithoutEnabledTemplateBeforeInsert()
+    {
+        ReviewProject project = new ReviewProject();
+        project.setProjectId(1L);
+        project.setReviewMode("LLM_DIRECT");
+        project.setModelId(3L);
+        project.setTemplateId(4L);
+        when(modelConfigService.selectRuntimeConfigById(3L)).thenReturn(enabledModel());
+        when(templateService.selectEnabledTemplateById(4L)).thenThrow(new ServiceException("审查模板已停用"));
+
+        assertThrows(ServiceException.class, () -> service.createTaskFromEvent(project, new ReviewWebhookEvent(),
+            new GitPullRequestEvent("d", "opened", "owner", "repo", 1, "t", "s", "t", "b", "h")));
+        verify(taskMapper, org.mockito.Mockito.never()).insertReviewTask(any());
+    }
+
+    private SysAiModelConfig enabledModel()
+    {
+        SysAiModelConfig model = new SysAiModelConfig();
+        model.setModelId(3L);
+        model.setModelName("DeepSeek");
+        model.setProvider("deepseek");
+        model.setModel("deepseek-chat");
+        model.setEnabled("1");
+        model.setApiKey("secret");
+        return model;
+    }
+
+    private ReviewTemplate enabledTemplate()
+    {
+        ReviewTemplate template = new ReviewTemplate();
+        template.setTemplateId(4L);
+        template.setTemplateName("Java");
+        template.setTemplateCode("builtin_java");
+        template.setVersionNo(2);
+        template.setContent("模板正文");
+        template.setStatus("0");
+        return template;
     }
 }

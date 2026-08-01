@@ -16,6 +16,8 @@ import com.acr.review.mapper.GitCredentialMapper;
 import com.acr.review.mapper.ReviewProjectMapper;
 import com.acr.review.security.CredentialCryptoService;
 import com.acr.review.service.IGitCredentialService;
+import com.acr.review.service.IReviewTemplateService;
+import com.acr.system.service.ISysAiModelConfigService;
 import com.acr.system.service.ISysBusinessSystemService;
 import com.acr.system.service.ISysConfigService;
 import com.acr.system.service.ISysDeptService;
@@ -41,8 +43,8 @@ class ReviewProjectServiceImplTest
 
         ReviewProjectServiceImpl service = new ReviewProjectServiceImpl(projectMapper, credentialMapper,
             credentialService, gitProvider, mock(ISysBusinessSystemService.class), configService,
-            mock(ISysDeptService.class), mock(ISysUserService.class),
-            mock(CredentialCryptoService.class), "http://localhost:8080");
+            mock(ISysDeptService.class), mock(ISysUserService.class), mock(ISysAiModelConfigService.class),
+            mock(IReviewTemplateService.class), mock(CredentialCryptoService.class), "http://localhost:8080");
         GitRepositoryReadRequest request = new GitRepositoryReadRequest();
         request.setRepositoryUrl(repository.canonicalUrl());
         request.setCredentialId(1L);
