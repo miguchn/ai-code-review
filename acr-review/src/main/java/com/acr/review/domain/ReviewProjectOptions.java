@@ -10,6 +10,8 @@ public class ReviewProjectOptions
     private List<Option> departments = new ArrayList<>();
     private List<Option> owners = new ArrayList<>();
     private List<Option> credentials = new ArrayList<>();
+    private List<Option> models = new ArrayList<>();
+    private List<Option> templates = new ArrayList<>();
     private List<String> longLivedBranches = new ArrayList<>();
     private List<String> robotBranchPrefixes = new ArrayList<>();
     private List<String> prEvents = new ArrayList<>();
@@ -53,6 +55,26 @@ public class ReviewProjectOptions
     public void setCredentials(List<Option> credentials)
     {
         this.credentials = credentials;
+    }
+
+    public List<Option> getModels()
+    {
+        return models;
+    }
+
+    public void setModels(List<Option> models)
+    {
+        this.models = models;
+    }
+
+    public List<Option> getTemplates()
+    {
+        return templates;
+    }
+
+    public void setTemplates(List<Option> templates)
+    {
+        this.templates = templates;
     }
 
     public List<String> getLongLivedBranches()
@@ -102,6 +124,8 @@ public class ReviewProjectOptions
         private Long deptId;
         private Long parentId;
         private String status;
+        private String techStack;
+        private Integer versionNo;
 
         public Option()
         {
@@ -164,6 +188,26 @@ public class ReviewProjectOptions
         public void setStatus(String status)
         {
             this.status = status;
+        }
+
+        public String getTechStack()
+        {
+            return techStack;
+        }
+
+        public void setTechStack(String techStack)
+        {
+            this.techStack = techStack;
+        }
+
+        public Integer getVersionNo()
+        {
+            return versionNo;
+        }
+
+        public void setVersionNo(Integer versionNo)
+        {
+            this.versionNo = versionNo;
         }
     }
 }

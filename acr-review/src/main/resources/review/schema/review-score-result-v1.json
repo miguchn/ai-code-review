@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-code-review.local/schema/review-score-result-v1.json",
+  "title": "ReviewScoreResult",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocolVersion",
+    "scores",
+    "totalScore",
+    "summary",
+    "topIssues",
+    "focusIssueCount",
+    "hasCriticalSecurityIssue"
+  ],
+  "properties": {
+    "protocolVersion": { "type": "string", "const": "1.0" },
+    "scores": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["dimension", "score", "maxScore", "reason"],
+        "properties": {
+          "dimension": {
+            "type": "string",
+            "enum": ["CORRECTNESS", "SECURITY", "PRACTICE", "PERFORMANCE", "COMMIT_QUALITY"]
+          },
+          "score": { "type": "integer", "minimum": 0 },
+          "maxScore": { "type": "integer", "minimum": 1 },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+    "totalScore": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "summary": { "type": "string" },
+    "topIssues": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "rank",
+          "severity",
+          "category",
+          "title",
+          "description",
+          "evidence",
+          "suggestion"
+        ],
+        "properties": {
+          "rank": { "type": "integer", "minimum": 1, "maximum": 3 },
+          "severity": {
+            "type": "string",
+            "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
+          },
+          "category": { "type": "string" },
+          "title": { "type": "string" },
+          "description": { "type": "string" },
+          "filePath": { "type": ["string", "null"] },
+          "startLine": { "type": ["integer", "null"], "minimum": 1 },
+          "endLine": { "type": ["integer", "null"], "minimum": 1 },
+          "evidence": { "type": "string" },
+          "suggestion": { "type": "string" }
+        }
+      }
+    },
+    "focusIssueCount": { "type": "integer", "minimum": 0, "maximum": 3 },
+    "hasCriticalSecurityIssue": { "type": "boolean" }
+  }
+}

@@ -22,6 +22,13 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="ownerName" column="owner_name" />
         <result property="credentialId" column="credential_id" />
         <result property="credentialName" column="credential_name" />
+        <result property="modelId" column="model_id" />
+        <result property="modelName" column="model_name" />
+        <result property="primaryStack" column="primary_stack" />
+        <result property="templateId" column="template_id" />
+        <result property="templateName" column="template_name" />
+        <result property="reviewMode" column="review_mode" />
+        <result property="engineCode" column="engine_code" />
         <result property="status" column="status" />
         <result property="lastCheckStatus" column="last_check_status" />
         <result property="lastCheckMessage" column="last_check_message" />
@@ -47,6 +54,9 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                p.dept_id, d.dept_name,
                p.owner_user_id, owner.nick_name as owner_name,
                p.credential_id, c.credential_name,
+               p.model_id, m.model_name, p.primary_stack,
+               p.template_id, rt.template_name,
+               p.review_mode, p.engine_code,
                p.status, p.last_check_status, p.last_check_message, p.last_check_time,
                p.last_branch_sync_status, p.last_branch_sync_message, p.last_branch_sync_time,
                p.last_webhook_time, p.last_webhook_result,
@@ -56,6 +66,8 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         inner join sys_dept d on d.dept_id = p.dept_id
         inner join sys_user owner on owner.user_id = p.owner_user_id
         inner join review_git_credential c on c.credential_id = p.credential_id
+        left join sys_ai_model_config m on m.model_id = p.model_id
+        left join review_template rt on rt.template_id = p.template_id
     </sql>
 
     <select id="selectReviewProjectById" resultMap="ReviewProjectResult">
@@ -99,7 +111,8 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 
     <select id="selectByRepository" resultMap="ReviewProjectResult">
         select project_id, project_name, provider, repository_owner, repository_name,
-               status, pr_review_enabled, pr_target_branches, webhook_secret_ciphertext, credential_id
+               status, pr_review_enabled, pr_target_branches, webhook_secret_ciphertext, credential_id,
+               model_id, primary_stack, template_id, review_mode, engine_code
         from review_project
         where provider = #{provider}
           and repository_owner = #{repositoryOwner}
@@ -114,14 +127,16 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         insert into review_project
         (project_name, provider, repository_url, repository_owner, repository_name,
          default_branch, pr_review_enabled, pr_target_branches, business_system_id, dept_id, owner_user_id,
-         credential_id, status, last_check_status, last_check_message, last_check_time,
+         credential_id, model_id, primary_stack, template_id, review_mode, engine_code,
+         status, last_check_status, last_check_message, last_check_time,
          last_branch_sync_status, last_branch_sync_message, last_branch_sync_time,
          webhook_secret_ciphertext,
          remark, create_by, create_time)
         values
         (#{projectName}, #{provider}, #{repositoryUrl}, #{repositoryOwner}, #{repositoryName},
          #{defaultBranch}, #{prReviewEnabled}, #{prTargetBranches}, #{businessSystemId}, #{deptId}, #{ownerUserId},
-         #{credentialId}, #{status}, #{lastCheckStatus}, #{lastCheckMessage}, #{lastCheckTime},
+         #{credentialId}, #{modelId}, #{primaryStack}, #{templateId}, #{reviewMode}, #{engineCode},
+         #{status}, #{lastCheckStatus}, #{lastCheckMessage}, #{lastCheckTime},
          #{lastBranchSyncStatus}, #{lastBranchSyncMessage}, #{lastBranchSyncTime},
          #{webhookSecretCiphertext},
          #{remark}, #{createBy}, sysdate())
@@ -140,6 +155,11 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             dept_id = #{deptId},
             owner_user_id = #{ownerUserId},
             credential_id = #{credentialId},
+            model_id = #{modelId},
+            primary_stack = #{primaryStack},
+            template_id = #{templateId},
+            review_mode = #{reviewMode},
+            engine_code = #{engineCode},
             last_check_status = #{lastCheckStatus},
             last_check_message = #{lastCheckMessage},
             last_check_time = #{lastCheckTime},

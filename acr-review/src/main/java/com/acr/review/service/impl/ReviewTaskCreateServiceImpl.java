@@ -12,18 +12,27 @@ import com.acr.review.git.GitPullRequestEvent;
 import com.acr.review.mapper.ReviewTaskMapper;
 import com.acr.review.mapper.ReviewWebhookEventMapper;
 import com.acr.review.service.IReviewTaskCreateService;
+import com.acr.review.service.IReviewTaskExecutionService;
+import com.acr.review.service.IReviewTaskSnapshotService;
 
-/** 审查任务创建（事务）：任务与事件受理结果同生共死。 */
+/** 审查任务创建（事务）：任务与事件受理结果同生共死；提交后调度异步执行。 */
 @Service
 public class ReviewTaskCreateServiceImpl implements IReviewTaskCreateService
 {
     private final ReviewTaskMapper taskMapper;
     private final ReviewWebhookEventMapper eventMapper;
+    private final IReviewTaskExecutionService executionService;
+    private final IReviewTaskSnapshotService snapshotService;
 
-    public ReviewTaskCreateServiceImpl(ReviewTaskMapper taskMapper, ReviewWebhookEventMapper eventMapper)
+    public ReviewTaskCreateServiceImpl(ReviewTaskMapper taskMapper,
+                                       ReviewWebhookEventMapper eventMapper,
+                                       IReviewTaskExecutionService executionService,
+                                       IReviewTaskSnapshotService snapshotService)
     {
         this.taskMapper = taskMapper;
         this.eventMapper = eventMapper;
+        this.executionService = executionService;
+        this.snapshotService = snapshotService;
     }
 
     @Override
@@ -42,7 +51,9 @@ public class ReviewTaskCreateServiceImpl implements IReviewTaskCreateService
         task.setHeadSha(prEvent.headSha());
         task.setTriggerType("WEBHOOK");
         task.setTaskStatus("PENDING");
+        task.setAttemptCount(0);
         task.setCreateBy("webhook");
+        snapshotService.freezeExecutionSnapshot(project, task);
         try
         {
             taskMapper.insertReviewTask(task);
@@ -57,6 +68,7 @@ public class ReviewTaskCreateServiceImpl implements IReviewTaskCreateService
         event.setProcessMessage("已受理，生成审查任务 #" + task.getTaskId());
         event.setProcessTime(new Date());
         eventMapper.updateProcessResult(event);
+        executionService.scheduleExecution(task.getTaskId());
         return task.getTaskId();
     }
 }

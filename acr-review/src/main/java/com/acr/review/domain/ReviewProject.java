@@ -31,6 +31,16 @@ public class ReviewProject extends BaseEntity
     private String ownerName;
     private Long credentialId;
     private String credentialName;
+    /** 大模型审查时绑定的模型配置 ID。 */
+    private Long modelId;
+    private String modelName;
+    /** 项目主要语言/技术栈。 */
+    private String primaryStack;
+    /** 大模型审查时绑定的审查模板 ID。 */
+    private Long templateId;
+    private String templateName;
+    private String reviewMode;
+    private String engineCode;
     private String status;
     private String lastCheckStatus;
     private String lastCheckMessage;
@@ -243,6 +253,76 @@ public class ReviewProject extends BaseEntity
     public void setCredentialName(String credentialName)
     {
         this.credentialName = credentialName;
+    }
+
+    public Long getModelId()
+    {
+        return modelId;
+    }
+
+    public void setModelId(Long modelId)
+    {
+        this.modelId = modelId;
+    }
+
+    public String getModelName()
+    {
+        return modelName;
+    }
+
+    public void setModelName(String modelName)
+    {
+        this.modelName = modelName;
+    }
+
+    public String getPrimaryStack()
+    {
+        return primaryStack;
+    }
+
+    public void setPrimaryStack(String primaryStack)
+    {
+        this.primaryStack = primaryStack;
+    }
+
+    public Long getTemplateId()
+    {
+        return templateId;
+    }
+
+    public void setTemplateId(Long templateId)
+    {
+        this.templateId = templateId;
+    }
+
+    public String getTemplateName()
+    {
+        return templateName;
+    }
+
+    public void setTemplateName(String templateName)
+    {
+        this.templateName = templateName;
+    }
+
+    public String getReviewMode()
+    {
+        return reviewMode;
+    }
+
+    public void setReviewMode(String reviewMode)
+    {
+        this.reviewMode = reviewMode;
+    }
+
+    public String getEngineCode()
+    {
+        return engineCode;
+    }
+
+    public void setEngineCode(String engineCode)
+    {
+        this.engineCode = engineCode;
     }
 
     public String getStatus()
