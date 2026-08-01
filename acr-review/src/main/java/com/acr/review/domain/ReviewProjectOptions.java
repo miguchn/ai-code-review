@@ -13,6 +13,7 @@ public class ReviewProjectOptions
     private List<String> longLivedBranches = new ArrayList<>();
     private List<String> robotBranchPrefixes = new ArrayList<>();
     private List<String> prEvents = new ArrayList<>();
+    private String webhookCallbackUrl;
 
     public List<Option> getBusinessSystems()
     {
@@ -82,6 +83,16 @@ public class ReviewProjectOptions
     public void setPrEvents(List<String> prEvents)
     {
         this.prEvents = prEvents;
+    }
+
+    public String getWebhookCallbackUrl()
+    {
+        return webhookCallbackUrl;
+    }
+
+    public void setWebhookCallbackUrl(String webhookCallbackUrl)
+    {
+        this.webhookCallbackUrl = webhookCallbackUrl;
     }
 
     public static class Option

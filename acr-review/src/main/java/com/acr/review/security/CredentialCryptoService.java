@@ -18,6 +18,7 @@ public class CredentialCryptoService
 {
     private static final String PREFIX = "v1:";
     private static final byte[] AAD = "acr-review:github-pat:v1".getBytes(StandardCharsets.UTF_8);
+    private static final byte[] WEBHOOK_SECRET_AAD = "acr-review:github-webhook-secret:v1".getBytes(StandardCharsets.UTF_8);
     private static final int IV_LENGTH = 12;
     private static final int TAG_LENGTH_BITS = 128;
 
@@ -31,10 +32,32 @@ public class CredentialCryptoService
 
     public String encrypt(String plaintext)
     {
+        return encrypt(plaintext, AAD, "GitHub Token 不能为空");
+    }
+
+    public String decrypt(String ciphertext)
+    {
+        return decrypt(ciphertext, AAD);
+    }
+
+    /** Webhook Secret 加密，使用独立 AAD 与 PAT 密文隔离。 */
+    public String encryptWebhookSecret(String plaintext)
+    {
+        return encrypt(plaintext, WEBHOOK_SECRET_AAD, "Webhook Secret 不能为空");
+    }
+
+    /** Webhook Secret 解密，仅供服务端验签使用。 */
+    public String decryptWebhookSecret(String ciphertext)
+    {
+        return decrypt(ciphertext, WEBHOOK_SECRET_AAD);
+    }
+
+    private String encrypt(String plaintext, byte[] aad, String emptyMessage)
+    {
         requireConfiguredKey();
         if (plaintext == null || plaintext.isBlank())
         {
-            throw new ServiceException("GitHub Token 不能为空");
+            throw new ServiceException(emptyMessage);
         }
         try
         {
@@ -42,7 +65,7 @@ public class CredentialCryptoService
             secureRandom.nextBytes(iv);
             Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
             cipher.init(Cipher.ENCRYPT_MODE, key, new GCMParameterSpec(TAG_LENGTH_BITS, iv));
-            cipher.updateAAD(AAD);
+            cipher.updateAAD(aad);
             byte[] encrypted = cipher.doFinal(plaintext.getBytes(StandardCharsets.UTF_8));
             byte[] payload = ByteBuffer.allocate(iv.length + encrypted.length).put(iv).put(encrypted).array();
             return PREFIX + Base64.getEncoder().encodeToString(payload);
@@ -53,7 +76,7 @@ public class CredentialCryptoService
         }
     }
 
-    public String decrypt(String ciphertext)
+    private String decrypt(String ciphertext, byte[] aad)
     {
         requireConfiguredKey();
         if (ciphertext == null || !ciphertext.startsWith(PREFIX))
@@ -73,7 +96,7 @@ public class CredentialCryptoService
             System.arraycopy(payload, IV_LENGTH, encrypted, 0, encrypted.length);
             Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
             cipher.init(Cipher.DECRYPT_MODE, key, new GCMParameterSpec(TAG_LENGTH_BITS, iv));
-            cipher.updateAAD(AAD);
+            cipher.updateAAD(aad);
             return new String(cipher.doFinal(encrypted), StandardCharsets.UTF_8);
         }
         catch (GeneralSecurityException | IllegalArgumentException e)

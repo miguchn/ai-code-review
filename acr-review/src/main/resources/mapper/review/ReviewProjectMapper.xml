@@ -29,6 +29,9 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="lastBranchSyncStatus" column="last_branch_sync_status" />
         <result property="lastBranchSyncMessage" column="last_branch_sync_message" />
         <result property="lastBranchSyncTime" column="last_branch_sync_time" />
+        <result property="webhookSecretCiphertext" column="webhook_secret_ciphertext" />
+        <result property="lastWebhookTime" column="last_webhook_time" />
+        <result property="lastWebhookResult" column="last_webhook_result" />
         <result property="remark" column="remark" />
         <result property="createBy" column="create_by" />
         <result property="createTime" column="create_time" />
@@ -46,6 +49,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                p.credential_id, c.credential_name,
                p.status, p.last_check_status, p.last_check_message, p.last_check_time,
                p.last_branch_sync_status, p.last_branch_sync_message, p.last_branch_sync_time,
+               p.last_webhook_time, p.last_webhook_result,
                p.remark, p.create_by, p.create_time, p.update_by, p.update_time
         from review_project p
         inner join sys_business_system bs on bs.system_id = p.business_system_id
@@ -94,7 +98,8 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     </select>
 
     <select id="selectByRepository" resultMap="ReviewProjectResult">
-        select project_id, provider, repository_owner, repository_name
+        select project_id, project_name, provider, repository_owner, repository_name,
+               status, pr_review_enabled, pr_target_branches, webhook_secret_ciphertext, credential_id
         from review_project
         where provider = #{provider}
           and repository_owner = #{repositoryOwner}
@@ -111,12 +116,14 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
          default_branch, pr_review_enabled, pr_target_branches, business_system_id, dept_id, owner_user_id,
          credential_id, status, last_check_status, last_check_message, last_check_time,
          last_branch_sync_status, last_branch_sync_message, last_branch_sync_time,
+         webhook_secret_ciphertext,
          remark, create_by, create_time)
         values
         (#{projectName}, #{provider}, #{repositoryUrl}, #{repositoryOwner}, #{repositoryName},
          #{defaultBranch}, #{prReviewEnabled}, #{prTargetBranches}, #{businessSystemId}, #{deptId}, #{ownerUserId},
          #{credentialId}, #{status}, #{lastCheckStatus}, #{lastCheckMessage}, #{lastCheckTime},
          #{lastBranchSyncStatus}, #{lastBranchSyncMessage}, #{lastBranchSyncTime},
+         #{webhookSecretCiphertext},
          #{remark}, #{createBy}, sysdate())
     </insert>
 
@@ -139,9 +146,17 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             last_branch_sync_status = #{lastBranchSyncStatus},
             last_branch_sync_message = #{lastBranchSyncMessage},
             last_branch_sync_time = #{lastBranchSyncTime},
+            <if test="webhookSecretCiphertext != null and webhookSecretCiphertext != ''">webhook_secret_ciphertext = #{webhookSecretCiphertext},</if>
             remark = #{remark},
             update_by = #{updateBy},
             update_time = sysdate()
+        where project_id = #{projectId}
+    </update>
+
+    <update id="updateLastWebhook">
+        update review_project
+        set last_webhook_time = sysdate(),
+            last_webhook_result = #{lastWebhookResult}
         where project_id = #{projectId}
     </update>
 

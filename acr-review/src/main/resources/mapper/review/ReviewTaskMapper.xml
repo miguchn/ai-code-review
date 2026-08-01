@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.acr.review.mapper.ReviewTaskMapper">
+
+    <resultMap type="com.acr.review.domain.ReviewTask" id="ReviewTaskResult">
+        <id property="taskId" column="task_id" />
+        <result property="projectId" column="project_id" />
+        <result property="eventId" column="event_id" />
+        <result property="provider" column="provider" />
+        <result property="prNumber" column="pr_number" />
+        <result property="prTitle" column="pr_title" />
+        <result property="sourceBranch" column="source_branch" />
+        <result property="targetBranch" column="target_branch" />
+        <result property="baseSha" column="base_sha" />
+        <result property="headSha" column="head_sha" />
+        <result property="triggerType" column="trigger_type" />
+        <result property="taskStatus" column="task_status" />
+        <result property="failureMessage" column="failure_message" />
+        <result property="projectName" column="project_name" />
+        <result property="remark" column="remark" />
+        <result property="createBy" column="create_by" />
+        <result property="createTime" column="create_time" />
+        <result property="updateBy" column="update_by" />
+        <result property="updateTime" column="update_time" />
+    </resultMap>
+
+    <sql id="taskSelect">
+        select t.task_id, t.project_id, t.event_id, t.provider,
+               t.pr_number, t.pr_title, t.source_branch, t.target_branch, t.base_sha, t.head_sha,
+               t.trigger_type, t.task_status, t.failure_message,
+               p.project_name,
+               t.remark, t.create_by, t.create_time, t.update_by, t.update_time
+        from review_task t
+        inner join review_project p on p.project_id = t.project_id
+        inner join sys_dept d on d.dept_id = p.dept_id
+        inner join sys_user owner on owner.user_id = p.owner_user_id
+    </sql>
+
+    <insert id="insertReviewTask" parameterType="com.acr.review.domain.ReviewTask" useGeneratedKeys="true" keyProperty="taskId">
+        insert into review_task
+        (project_id, event_id, provider, pr_number, pr_title, source_branch, target_branch,
+         base_sha, head_sha, trigger_type, task_status, failure_message, remark, create_by, create_time)
+        values
+        (#{projectId}, #{eventId}, #{provider}, #{prNumber}, #{prTitle}, #{sourceBranch}, #{targetBranch},
+         #{baseSha}, #{headSha}, #{triggerType}, #{taskStatus}, #{failureMessage}, #{remark}, #{createBy}, sysdate())
+    </insert>
+
+    <select id="selectReviewTaskById" resultMap="ReviewTaskResult">
+        <include refid="taskSelect" />
+        where t.task_id = #{taskId}
+    </select>
+
+    <select id="selectByEventId" resultMap="ReviewTaskResult">
+        <include refid="taskSelect" />
+        where t.event_id = #{eventId}
+        limit 1
+    </select>
+
+    <select id="selectReviewTaskList" parameterType="com.acr.review.domain.ReviewTask" resultMap="ReviewTaskResult">
+        <include refid="taskSelect" />
+        where 1 = 1
+        <if test="projectId != null">
+            and t.project_id = #{projectId}
+        </if>
+        <if test="prNumber != null">
+            and t.pr_number = #{prNumber}
+        </if>
+        <if test="taskStatus != null and taskStatus != ''">
+            and t.task_status = #{taskStatus}
+        </if>
+        <if test="triggerType != null and triggerType != ''">
+            and t.trigger_type = #{triggerType}
+        </if>
+        <if test="params.beginTime != null and params.beginTime != ''">
+            and date_format(t.create_time,'%y%m%d') &gt;= date_format(#{params.beginTime},'%y%m%d')
+        </if>
+        <if test="params.endTime != null and params.endTime != ''">
+            and date_format(t.create_time,'%y%m%d') &lt;= date_format(#{params.endTime},'%y%m%d')
+        </if>
+        ${params.dataScope}
+        order by t.task_id desc
+    </select>
+
+</mapper>

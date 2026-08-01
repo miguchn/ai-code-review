@@ -96,6 +96,12 @@ xss:
   excludes: /system/notice
   urlPatterns: /system/*,/monitor/*,/review/*
 
+# 模型服务端点安全策略；仅在可信开发网络中放开 HTTP/内网地址
+llm:
+  endpoint:
+    allow-http: ${ACR_LLM_ALLOW_HTTP:false}
+    allow-private: ${ACR_LLM_ALLOW_PRIVATE_ENDPOINTS:false}
+
 # GitHub 项目接入（主密钥不得写入配置文件）
 review:
   credential:
@@ -104,3 +110,18 @@ review:
     api-url: ${GITHUB_API_URL:https://api.github.com}
     connect-timeout-ms: 5000
     read-timeout-ms: 10000
+  webhook:
+    # Webhook 回调地址前缀（项目详情展示用，生产环境配置为公网可达地址）
+    callback-base-url: ${ACR_WEBHOOK_CALLBACK_URL:http://localhost:8080}
+    # Webhook 载荷大小上限（字节）
+    max-payload-bytes: 262144
+  engine:
+    # open-code-review CLI 可执行文件（需在 PATH 中或通过 ACR_OCR_EXECUTABLE 指定绝对路径）
+    executable-path: ${ACR_OCR_EXECUTABLE:ocr}
+    # 每次调用的独立工作目录根路径
+    workspace-root: ${ACR_OCR_WORKSPACE_ROOT:${java.io.tmpdir}/acr-review-engine}
+    default-timeout-seconds: ${ACR_OCR_TIMEOUT_SECONDS:600}
+    max-concurrency: ${ACR_OCR_MAX_CONCURRENCY:2}
+    max-output-bytes: ${ACR_OCR_MAX_OUTPUT_BYTES:1048576}
+    engine-name: open-code-review
+    engine-type: LOCAL_CLI

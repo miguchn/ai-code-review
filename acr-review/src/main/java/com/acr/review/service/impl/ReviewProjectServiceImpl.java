@@ -5,6 +5,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.acr.common.annotation.DataScope;
@@ -12,6 +13,7 @@ import com.acr.common.core.domain.entity.SysDept;
 import com.acr.common.core.domain.entity.SysUser;
 import com.acr.common.exception.ServiceException;
 import com.acr.common.utils.SecurityUtils;
+import com.acr.common.utils.StringUtils;
 import com.acr.review.domain.GitCredential;
 import com.acr.review.domain.GitRepositoryReadRequest;
 import com.acr.review.domain.ReviewProject;
@@ -24,6 +26,7 @@ import com.acr.review.git.GitRepositoryCoordinates;
 import com.acr.review.git.GitRepositoryInfoResult;
 import com.acr.review.mapper.GitCredentialMapper;
 import com.acr.review.mapper.ReviewProjectMapper;
+import com.acr.review.security.CredentialCryptoService;
 import com.acr.review.service.IGitCredentialService;
 import com.acr.review.service.IReviewProjectService;
 import com.acr.system.domain.SysBusinessSystem;
@@ -52,6 +55,8 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
     private final ISysConfigService configService;
     private final ISysDeptService deptService;
     private final ISysUserService userService;
+    private final CredentialCryptoService cryptoService;
+    private final String webhookCallbackBaseUrl;
 
     public ReviewProjectServiceImpl(ReviewProjectMapper projectMapper,
                                     GitCredentialMapper credentialMapper,
@@ -60,7 +65,9 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
                                     ISysBusinessSystemService businessSystemService,
                                     ISysConfigService configService,
                                     ISysDeptService deptService,
-                                    ISysUserService userService)
+                                    ISysUserService userService,
+                                    CredentialCryptoService cryptoService,
+                                    @Value("${review.webhook.callback-base-url:http://localhost:8080}") String webhookCallbackBaseUrl)
     {
         this.projectMapper = projectMapper;
         this.credentialMapper = credentialMapper;
@@ -70,6 +77,8 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
         this.configService = configService;
         this.deptService = deptService;
         this.userService = userService;
+        this.cryptoService = cryptoService;
+        this.webhookCallbackBaseUrl = webhookCallbackBaseUrl;
     }
 
     @Override
@@ -77,6 +86,7 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
     {
         ReviewProject project = projectMapper.selectReviewProjectById(projectId);
         checkProjectAccess(project);
+        fillWebhookView(project);
         return project;
     }
 
@@ -124,6 +134,7 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
         options.setLongLivedBranches(configValues(LONG_LIVED_BRANCHES_KEY, DEFAULT_LONG_LIVED_BRANCHES));
         options.setRobotBranchPrefixes(configValues(ROBOT_BRANCH_PREFIXES_KEY, DEFAULT_ROBOT_BRANCH_PREFIXES));
         options.setPrEvents(configValues(PR_EVENTS_KEY, DEFAULT_PR_EVENTS));
+        options.setWebhookCallbackUrl(buildWebhookCallbackUrl());
         return options;
     }
 
@@ -173,6 +184,7 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
         {
             throw new ServiceException("新项目需先保存并通过连接测试后再启用");
         }
+        applyWebhookSecret(project);
         project.setCreateBy(SecurityUtils.getUsername());
         return projectMapper.insertReviewProject(project);
     }
@@ -201,6 +213,7 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
             copyRepositoryState(existing, project);
         }
         project.setUpdateBy(SecurityUtils.getUsername());
+        applyWebhookSecret(project);
         int rows = projectMapper.updateReviewProject(project);
         if (connectionChanged && "0".equals(existing.getStatus()))
         {
@@ -406,6 +419,30 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
         project.setLastBranchSyncStatus(existing.getLastBranchSyncStatus());
         project.setLastBranchSyncMessage(existing.getLastBranchSyncMessage());
         project.setLastBranchSyncTime(existing.getLastBranchSyncTime());
+    }
+
+    /** Webhook Secret 只写：提交非空时加密更新，留空保留原值。 */
+    private void applyWebhookSecret(ReviewProject project)
+    {
+        if (StringUtils.isNotEmpty(project.getWebhookSecret()))
+        {
+            project.setWebhookSecretCiphertext(cryptoService.encryptWebhookSecret(project.getWebhookSecret().trim()));
+        }
+    }
+
+    /** 详情视图组装：配置状态与回调地址，Secret 密文不出服务端。 */
+    private void fillWebhookView(ReviewProject project)
+    {
+        project.setWebhookSecretConfigured(StringUtils.isNotEmpty(project.getWebhookSecretCiphertext()));
+        project.setWebhookCallbackUrl(buildWebhookCallbackUrl());
+    }
+
+    private String buildWebhookCallbackUrl()
+    {
+        String base = webhookCallbackBaseUrl.endsWith("/")
+            ? webhookCallbackBaseUrl.substring(0, webhookCallbackBaseUrl.length() - 1)
+            : webhookCallbackBaseUrl;
+        return base + "/webhook/github";
     }
 
     private List<String> recommendTargetBranches(List<String> branches, String defaultBranch)

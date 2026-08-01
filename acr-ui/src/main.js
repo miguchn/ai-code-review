@@ -28,6 +28,7 @@ import './permission' // permission control
 import { useDict } from '@/utils/dict'
 import { getConfigKey } from "@/api/system/config"
 import { parseTime, resetForm, addDateRange, handleTree, selectDictLabel, selectDictLabels } from '@/utils/common'
+import { formatDateTime, formatDate, formatTime, formatYearMonth, formatDateTimeMinute } from '@/utils/datetime'
 
 // 分页组件
 import Pagination from '@/components/Pagination'
@@ -61,6 +62,11 @@ const app = createApp(App)
 app.config.globalProperties.useDict = useDict
 app.config.globalProperties.download = download
 app.config.globalProperties.parseTime = parseTime
+app.config.globalProperties.formatDateTime = formatDateTime
+app.config.globalProperties.formatDate = formatDate
+app.config.globalProperties.formatTime = formatTime
+app.config.globalProperties.formatYearMonth = formatYearMonth
+app.config.globalProperties.formatDateTimeMinute = formatDateTimeMinute
 app.config.globalProperties.resetForm = resetForm
 app.config.globalProperties.handleTree = handleTree
 app.config.globalProperties.addDateRange = addDateRange

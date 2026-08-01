@@ -81,7 +81,7 @@
         <el-col :span="12">
           <div class="info-item">
             <label class="info-label">创建时间：</label>
-            <span class="info-value plaintext">{{ info.createTime }}</span>
+            <span class="info-value plaintext">{{ formatDateTime(info.createTime) }}</span>
           </div>
         </el-col>
       </el-row>
@@ -95,7 +95,7 @@
         <el-col :span="12">
           <div class="info-item">
             <label class="info-label">更新时间：</label>
-            <span class="info-value plaintext">{{ info.updateTime }}</span>
+            <span class="info-value plaintext">{{ formatDateTime(info.updateTime) }}</span>
           </div>
         </el-col>
       </el-row>
@@ -109,7 +109,7 @@
         <el-col :span="12">
           <div class="info-item">
             <label class="info-label">最后登录时间：</label>
-            <span class="info-value plaintext">{{ info.loginDate }}</span>
+            <span class="info-value plaintext">{{ formatDate(info.loginDate) }}</span>
           </div>
         </el-col>
       </el-row>

@@ -42,3 +42,9 @@ Thumbs.db
 # Build
 /build/
 /out/
+
+# Local database init (not tracked)
+sql/init-local.sh
+
+# MCP server config with credentials (not tracked)
+.mcp.json

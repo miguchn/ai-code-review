@@ -132,8 +132,14 @@ ai-code-review/
 │   ├── architecture.md
 │   └── delivery.md
 └── sql/
-    ├── review_project_github_20260801.sql
-    └── review_project_pr_scope_20260801.sql
+    ├── 01_core_schema.sql
+    ├── 02_quartz_schema.sql
+    ├── 03_system_management.sql
+    ├── 04_github_project_access.sql
+    ├── 05_github_pr_scope.sql
+    ├── 06_llm_model_service.sql
+    ├── 07_review_engine.sql
+    └── 08_github_pr_webhook.sql
 ```
 
 `acr-admin` 中仅增加项目与凭据 REST Controller，页面和 API 位于 `acr-ui/src/views/review` 与 `acr-ui/src/api/review`。当前目录均由已实现的 GitHub 项目接入用例驱动，没有创建 GitLab、Gitee 或 Gitea 空实现，也没有为 Webhook、任务、Diff、通知等后续能力预建占位结构。

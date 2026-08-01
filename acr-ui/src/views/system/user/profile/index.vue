@@ -35,7 +35,7 @@
                      </li>
                      <li class="list-group-item">
                         <svg-icon icon-class="date" />创建日期
-                        <div class="pull-right">{{ state.user.createTime }}</div>
+                        <div class="pull-right">{{ formatDateTime(state.user.createTime) }}</div>
                      </li>
                   </ul>
                </div>

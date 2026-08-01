@@ -28,5 +28,8 @@ public interface ReviewProjectMapper
 
     int updateRepositorySync(ReviewProject project);
 
+    /** 更新最近 Webhook 接收结果（Webhook 处理内部调用，不触碰其他字段）。 */
+    int updateLastWebhook(@Param("projectId") Long projectId, @Param("lastWebhookResult") String lastWebhookResult);
+
     int deleteReviewProjectByIds(Long[] projectIds);
 }

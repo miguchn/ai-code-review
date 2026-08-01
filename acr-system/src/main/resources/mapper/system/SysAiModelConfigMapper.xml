@@ -8,6 +8,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <id     property="modelId"     column="model_id"     />
         <result property="modelName"   column="model_name"   />
         <result property="provider"    column="provider"     />
+        <result property="customProviderName" column="custom_provider_name" />
         <result property="apiUrl"      column="api_url"      />
         <result property="apiKey"      column="api_key"      />
         <result property="model"       column="model"        />
@@ -18,6 +19,10 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="timeout"     column="timeout"      />
         <result property="maxTokens"   column="max_tokens"   />
         <result property="sortOrder"   column="sort_order"   />
+        <result property="temperature" column="temperature"  />
+        <result property="contextLength" column="context_length" />
+        <result property="lastCheckResult" column="last_check_result" />
+        <result property="lastCheckTime" column="last_check_time" />
         <result property="remark"      column="remark"       />
         <result property="createBy"    column="create_by"    />
         <result property="createTime"  column="create_time"  />
@@ -26,8 +31,10 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     </resultMap>
 
     <sql id="selectSysAiModelConfigVo">
-        select model_id, model_name, provider, api_url, api_key, model, embedding_model, embedding_api_url,
-               enabled, is_default, timeout, max_tokens, sort_order,
+        select model_id, model_name, provider, custom_provider_name, api_url, api_key, model,
+               embedding_model, embedding_api_url,
+               enabled, is_default, timeout, max_tokens, sort_order, temperature, context_length,
+               last_check_result, last_check_time,
                remark, create_by, create_time, update_by, update_time
         from sys_ai_model_config
     </sql>
@@ -58,6 +65,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <trim prefix="(" suffix=")" suffixOverrides=",">
             <if test="modelName != null and modelName != ''">model_name,</if>
             <if test="provider != null and provider != ''">provider,</if>
+            <if test="customProviderName != null">custom_provider_name,</if>
             <if test="apiUrl != null and apiUrl != ''">api_url,</if>
             <if test="apiKey != null and apiKey != ''">api_key,</if>
             <if test="model != null">model,</if>
@@ -68,6 +76,10 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="timeout != null">timeout,</if>
             <if test="maxTokens != null">max_tokens,</if>
             <if test="sortOrder != null">sort_order,</if>
+            <if test="temperature != null">temperature,</if>
+            <if test="contextLength != null">context_length,</if>
+            <if test="lastCheckResult != null">last_check_result,</if>
+            <if test="lastCheckTime != null">last_check_time,</if>
             <if test="remark != null">remark,</if>
             <if test="createBy != null">create_by,</if>
             create_time
@@ -75,6 +87,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <trim prefix="values (" suffix=")" suffixOverrides=",">
             <if test="modelName != null and modelName != ''">#{modelName},</if>
             <if test="provider != null and provider != ''">#{provider},</if>
+            <if test="customProviderName != null">#{customProviderName},</if>
             <if test="apiUrl != null and apiUrl != ''">#{apiUrl},</if>
             <if test="apiKey != null and apiKey != ''">#{apiKey},</if>
             <if test="model != null">#{model},</if>
@@ -85,6 +98,10 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="timeout != null">#{timeout},</if>
             <if test="maxTokens != null">#{maxTokens},</if>
             <if test="sortOrder != null">#{sortOrder},</if>
+            <if test="temperature != null">#{temperature},</if>
+            <if test="contextLength != null">#{contextLength},</if>
+            <if test="lastCheckResult != null">#{lastCheckResult},</if>
+            <if test="lastCheckTime != null">#{lastCheckTime},</if>
             <if test="remark != null">#{remark},</if>
             <if test="createBy != null">#{createBy},</if>
             sysdate()
@@ -96,6 +113,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <trim prefix="SET" suffixOverrides=",">
             <if test="modelName != null and modelName != ''">model_name = #{modelName},</if>
             <if test="provider != null and provider != ''">provider = #{provider},</if>
+            <if test="customProviderName != null">custom_provider_name = #{customProviderName},</if>
             <if test="apiUrl != null and apiUrl != ''">api_url = #{apiUrl},</if>
             <if test="apiKey != null">api_key = #{apiKey},</if>
             <if test="model != null">model = #{model},</if>
@@ -106,10 +124,22 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="timeout != null">timeout = #{timeout},</if>
             <if test="maxTokens != null">max_tokens = #{maxTokens},</if>
             <if test="sortOrder != null">sort_order = #{sortOrder},</if>
+            <if test="temperature != null">temperature = #{temperature},</if>
+            <if test="contextLength != null">context_length = #{contextLength},</if>
+            <if test="lastCheckResult != null">last_check_result = #{lastCheckResult},</if>
+            <if test="lastCheckTime != null">last_check_time = #{lastCheckTime},</if>
             <if test="remark != null">remark = #{remark},</if>
             <if test="updateBy != null">update_by = #{updateBy},</if>
             update_time = sysdate()
         </trim>
+        where model_id = #{modelId}
+    </update>
+
+    <update id="updateLastCheck" parameterType="com.acr.system.domain.SysAiModelConfig">
+        update sys_ai_model_config
+        set last_check_result = #{lastCheckResult},
+            last_check_time = #{lastCheckTime},
+            update_time = sysdate()
         where model_id = #{modelId}
     </update>
 
@@ -118,7 +148,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     </delete>
 
     <delete id="deleteSysAiModelConfigByIds" parameterType="Long">
-        delete from sys_ai_model_config where model_id in
+        delete from sys_ai_model_config where is_default = '0' and model_id in
         <foreach item="modelId" collection="array" open="(" separator="," close=")">
             #{modelId}
         </foreach>
@@ -126,6 +156,19 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 
     <update id="clearDefaultModel">
         update sys_ai_model_config set is_default = '0' where is_default = '1'
+    </update>
+
+    <update id="updateEnabledStatus">
+        update sys_ai_model_config
+        set enabled = #{enabled}, update_time = sysdate()
+        where model_id = #{modelId}
+          and not (#{enabled} = '0' and is_default = '1')
+    </update>
+
+    <update id="markDefaultIfEnabled" parameterType="Long">
+        update sys_ai_model_config
+        set is_default = '1', update_time = sysdate()
+        where model_id = #{modelId} and enabled = '1'
     </update>
 
 </mapper>

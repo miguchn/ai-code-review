@@ -49,13 +49,15 @@
           <el-tooltip :content="scope.row.lastCheckMessage || '尚未检测'" placement="top">
             <el-tag :type="checkTagType(scope.row.lastCheckStatus)" size="small">{{ checkStatusText(scope.row.lastCheckStatus) }}</el-tag>
           </el-tooltip>
-          <span v-if="scope.row.lastCheckTime" class="check-time">{{ scope.row.lastCheckTime }}</span>
+          <span v-if="scope.row.lastCheckTime" class="check-time">{{ formatDateTime(scope.row.lastCheckTime) }}</span>
         </template>
       </el-table-column>
       <el-table-column label="状态" width="90">
         <template #default="scope"><el-tag :type="scope.row.status === '0' ? 'success' : 'info'">{{ scope.row.status === '0' ? '启用' : '停用' }}</el-tag></template>
       </el-table-column>
-      <el-table-column label="修改时间" prop="updateTime" width="165" />
+      <el-table-column label="修改时间" width="170">
+        <template #default="scope">{{ formatDateTime(scope.row.updateTime) }}</template>
+      </el-table-column>
       <el-table-column label="操作" width="210" fixed="right" class-name="small-padding fixed-width">
         <template #default="scope">
           <el-button link type="primary" icon="Connection" :loading="testingId === scope.row.credentialId"

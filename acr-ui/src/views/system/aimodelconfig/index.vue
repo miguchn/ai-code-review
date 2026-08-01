@@ -1,22 +1,22 @@
 <template>
    <div class="app-container">
       <el-form :model="queryParams" ref="queryRef" :inline="true" v-show="showSearch" label-width="68px">
-         <el-form-item label="模型名称" prop="modelName">
+         <el-form-item label="配置名称" prop="modelName">
             <el-input
                v-model="queryParams.modelName"
-               placeholder="请输入模型名称"
+               placeholder="请输入配置名称"
                clearable
                style="width: 200px"
                @keyup.enter="handleQuery"
             />
          </el-form-item>
-         <el-form-item label="模型厂商" prop="provider">
+         <el-form-item label="服务厂商" prop="provider">
             <el-select v-model="queryParams.provider" placeholder="请选择厂商" clearable style="width: 160px">
                <el-option
                   v-for="item in providerOptions"
-                  :key="item.value"
+                  :key="item.code"
                   :label="item.label"
-                  :value="item.value"
+                  :value="item.code"
                />
             </el-select>
          </el-form-item>
@@ -46,15 +46,17 @@
       </el-row>
 
       <el-table v-loading="loading" :data="modelList">
-         <el-table-column label="模型名称" align="center" prop="modelName" :show-overflow-tooltip="true" />
-         <el-table-column label="厂商" align="center" prop="provider" width="100" />
-         <el-table-column label="Model" align="center" prop="model" :show-overflow-tooltip="true" />
-         <el-table-column label="API 地址" align="center" prop="apiUrl" :show-overflow-tooltip="true" />
-         <el-table-column label="API Key" align="center" prop="apiKey" width="120" :show-overflow-tooltip="true" />
-         <el-table-column label="超时(ms)" align="center" prop="timeout" width="90" />
-         <el-table-column label="最大Token" align="center" prop="maxTokens" width="100" />
-         <el-table-column label="排序" align="center" prop="sortOrder" width="70" />
-         <el-table-column label="状态" align="center" width="80">
+         <el-table-column label="配置名称" align="center" prop="modelName" :show-overflow-tooltip="true" />
+         <el-table-column label="服务厂商" align="center" prop="provider" width="160">
+            <template #default="scope">
+               <div class="provider-cell">
+                  <img v-if="scope.row.provider" :src="providerIconUrl(scope.row.provider)" :alt="scope.row.provider" class="provider-icon" />
+                  <span>{{ providerLabel(providerOptions, scope.row.provider, scope.row.customProviderName) }}</span>
+               </div>
+            </template>
+         </el-table-column>
+         <el-table-column label="模型标识" align="center" prop="model" :show-overflow-tooltip="true" />
+         <el-table-column label="启用状态" align="center" width="90">
             <template #default="scope">
                <el-switch
                   v-model="scope.row.enabled"
@@ -65,13 +67,18 @@
                />
             </template>
          </el-table-column>
-         <el-table-column label="默认" align="center" width="70">
+         <el-table-column label="默认状态" align="center" width="90">
             <template #default="scope">
                <el-tag v-if="scope.row.isDefault === '1'" type="success" size="small">默认</el-tag>
                <el-button v-else link type="primary" size="small" @click="handleSetDefault(scope.row)" v-hasPermi="['system:aimodelconfig:edit']">设为默认</el-button>
             </template>
          </el-table-column>
-         <el-table-column label="备注" align="center" prop="remark" :show-overflow-tooltip="true" />
+         <el-table-column label="最近检测结果" align="center" prop="lastCheckResult" min-width="160" :show-overflow-tooltip="true" />
+         <el-table-column label="最近检测时间" align="center" prop="lastCheckTime" width="170">
+            <template #default="scope">
+               <span>{{ formatDateTime(scope.row.lastCheckTime) }}</span>
+            </template>
+         </el-table-column>
          <el-table-column label="操作" align="center" width="150" class-name="small-padding fixed-width">
             <template #default="scope">
                <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-hasPermi="['system:aimodelconfig:edit']">修改</el-button>
@@ -88,69 +95,40 @@
          @pagination="getList"
       />
 
-      <!-- 添加或修改对话框 -->
-      <el-dialog :title="title" v-model="open" width="680px" append-to-body>
-         <el-form ref="modelRef" :model="form" :rules="rules" label-width="100px">
-            <el-row :gutter="20">
-               <el-col :span="12">
-                  <el-form-item label="模型名称" prop="modelName">
-                     <el-input v-model="form.modelName" placeholder="如: GPT-4o" />
-                  </el-form-item>
-               </el-col>
-               <el-col :span="12">
-                  <el-form-item label="模型厂商" prop="provider">
-                     <el-select v-model="form.provider" placeholder="请选择厂商" style="width: 100%">
-                        <el-option
-                           v-for="item in providerOptions"
-                           :key="item.value"
-                           :label="item.label"
-                           :value="item.value"
-                        />
-                     </el-select>
-                  </el-form-item>
-               </el-col>
-            </el-row>
-            <el-form-item label="模型地址" prop="apiUrl">
-               <el-input v-model="form.apiUrl" placeholder="如: https://api.openai.com/v1/chat/completions" />
+      <el-dialog :title="title" v-model="open" width="640px" append-to-body class="model-config-dialog" destroy-on-close>
+         <el-form ref="modelRef" :model="form" :rules="rules" label-width="100px" class="model-config-form">
+            <div class="form-section-title">基础配置</div>
+            <el-form-item label="配置名称" prop="modelName">
+               <el-input v-model="form.modelName" placeholder="如: DeepSeek 生产" maxlength="64" />
+            </el-form-item>
+            <el-form-item label="服务厂商" prop="provider">
+               <el-select v-model="form.provider" placeholder="请选择厂商" style="width: 100%" @change="handleProviderChange">
+                  <el-option
+                     v-for="item in providerOptions"
+                     :key="item.code"
+                     :label="item.label"
+                     :value="item.code"
+                  >
+                     <div class="provider-option">
+                        <img :src="providerIconUrl(item.code)" :alt="item.code" class="provider-icon" />
+                        <span>{{ item.label }}</span>
+                     </div>
+                  </el-option>
+               </el-select>
+            </el-form-item>
+            <el-form-item v-if="form.provider === 'custom'" label="厂商名称" prop="customProviderName">
+               <el-input v-model="form.customProviderName" placeholder="自定义厂商显示名称" maxlength="64" />
+            </el-form-item>
+            <el-form-item label="API 地址" prop="apiUrl">
+               <el-input v-model="form.apiUrl" placeholder="OpenAI Compatible Chat Completions 地址" />
+            </el-form-item>
+            <el-form-item label="模型标识" prop="model">
+               <el-input v-model="form.model" placeholder="如: deepseek-chat" maxlength="64" />
             </el-form-item>
             <el-form-item label="API Key" prop="apiKey">
-               <el-input v-model="form.apiKey" placeholder="请输入 API Key" show-password />
+               <el-input v-model="form.apiKey" :placeholder="form.modelId ? '留空则不修改' : '请输入 API Key'" show-password />
             </el-form-item>
-            <el-row :gutter="20">
-               <el-col :span="12">
-                  <el-form-item label="Model" prop="model">
-                     <el-input v-model="form.model" placeholder="如: gpt-4o" />
-                  </el-form-item>
-               </el-col>
-               <el-col :span="12">
-                  <el-form-item label="Embedding" prop="embeddingModel">
-                     <el-input v-model="form.embeddingModel" placeholder="如: text-embedding-3-small，空则按厂商默认" />
-                  </el-form-item>
-               </el-col>
-            </el-row>
-            <el-form-item label="Embedding URL" prop="embeddingApiUrl">
-               <el-input v-model="form.embeddingApiUrl" placeholder="可选，空则从模型地址自动推导 .../v1/embeddings" />
-            </el-form-item>
-            <el-row :gutter="20">
-               <el-col :span="12">
-                  <el-form-item label="排序" prop="sortOrder">
-                     <el-input-number v-model="form.sortOrder" :min="0" :max="999" style="width: 100%" />
-                  </el-form-item>
-               </el-col>
-               <el-col :span="12">
-                  <el-form-item label="超时时间(ms)" prop="timeout">
-                     <el-input-number v-model="form.timeout" :min="1000" :max="300000" :step="10000" style="width: 100%" />
-                  </el-form-item>
-               </el-col>
-            </el-row>
-            <el-row :gutter="20">
-               <el-col :span="12">
-                  <el-form-item label="最大 Token" prop="maxTokens">
-                     <el-input-number v-model="form.maxTokens" :min="100" :max="200000" :step="1000" style="width: 100%" />
-                  </el-form-item>
-               </el-col>
-            </el-row>
-            <el-row :gutter="20">
+            <el-row :gutter="16">
                <el-col :span="12">
                   <el-form-item label="是否启用" prop="enabled">
                      <el-radio-group v-model="form.enabled">
@@ -160,7 +138,7 @@
                   </el-form-item>
                </el-col>
                <el-col :span="12">
-                  <el-form-item label="默认模型" prop="isDefault">
+                  <el-form-item label="是否默认" prop="isDefault">
                      <el-radio-group v-model="form.isDefault">
                         <el-radio value="1">是</el-radio>
                         <el-radio value="0">否</el-radio>
@@ -168,13 +146,58 @@
                   </el-form-item>
                </el-col>
             </el-row>
-            <el-form-item label="备注" prop="remark">
-               <el-input v-model="form.remark" type="textarea" placeholder="请输入备注" />
-            </el-form-item>
+
+            <el-collapse v-model="advancedActive" class="advanced-collapse">
+               <el-collapse-item title="高级设置" name="advanced">
+                  <el-row :gutter="16">
+                     <el-col :span="12">
+                        <el-form-item label="超时(ms)" prop="timeout">
+                           <el-input-number v-model="form.timeout" :min="1000" :max="300000" :step="10000" controls-position="right" style="width: 100%" />
+                        </el-form-item>
+                     </el-col>
+                     <el-col :span="12">
+                        <el-form-item label="最大 Token" prop="maxTokens">
+                           <el-input-number v-model="form.maxTokens" :min="100" :max="200000" :step="1000" controls-position="right" style="width: 100%" />
+                        </el-form-item>
+                     </el-col>
+                     <el-col :span="12">
+                        <el-form-item label="Temperature" prop="temperature">
+                           <el-input-number v-model="form.temperature" :min="0" :max="2" :step="0.1" controls-position="right" style="width: 100%" />
+                        </el-form-item>
+                     </el-col>
+                     <el-col :span="12">
+                        <el-form-item label="上下文长度" prop="contextLength">
+                           <el-input-number v-model="form.contextLength" :min="1024" :max="1000000" :step="1024" controls-position="right" style="width: 100%" />
+                        </el-form-item>
+                     </el-col>
+                     <el-col :span="12">
+                        <el-form-item label="排序" prop="sortOrder">
+                           <el-input-number v-model="form.sortOrder" :min="0" :max="999" controls-position="right" style="width: 100%" />
+                        </el-form-item>
+                     </el-col>
+                     <el-col :span="24">
+                        <el-form-item label="备注" prop="remark">
+                           <el-input v-model="form.remark" type="textarea" :rows="2" placeholder="可选备注" maxlength="500" />
+                        </el-form-item>
+                     </el-col>
+                  </el-row>
+               </el-collapse-item>
+            </el-collapse>
+
+            <el-alert v-if="testResult" :title="testResultTitle" :type="testResult.success ? 'success' : 'error'" :closable="false" show-icon class="test-result-alert">
+               <template #default>
+                  <div v-if="testResult.latencyMs != null">时延: {{ testResult.latencyMs }} ms</div>
+                  <div v-if="testResult.errorType">错误类型: {{ testResult.errorType }}</div>
+                  <div v-if="testResult.errorMessage">{{ testResult.errorMessage }}</div>
+                  <div v-if="testResult.content">响应: {{ testResult.content }}</div>
+                  <div v-if="testResult.rawSnippet" class="raw-snippet">摘要: {{ testResult.rawSnippet }}</div>
+               </template>
+            </el-alert>
          </el-form>
          <template #footer>
             <div class="dialog-footer">
-               <el-button @click="handleTestConnection" :loading="testingConnection">测 试</el-button>
+               <el-button @click="handleTestConnection" :loading="testingConnection">连接测试</el-button>
+               <el-button @click="handleTestModelCall" :loading="testingModelCall">模型调用测试</el-button>
                <el-button type="primary" @click="submitForm">确 定</el-button>
                <el-button @click="cancel">取 消</el-button>
             </div>
@@ -184,18 +207,12 @@
 </template>
 
 <script setup name="SysAiModelConfig">
-import { listAiModelConfig, getAiModelConfig, delAiModelConfig, addAiModelConfig, updateAiModelConfig, enableAiModel, setDefaultModel, testAiModel } from "@/api/system/aiModelConfig"
-
-const providerOptions = [
-   { label: 'OpenAI', value: 'openai' },
-   { label: 'Anthropic', value: 'anthropic' },
-   { label: '通义千问', value: 'qwen' },
-   { label: 'DeepSeek', value: 'deepseek' },
-   { label: '自定义', value: 'custom' }
-]
+import { listAiModelConfig, getAiModelConfig, delAiModelConfig, addAiModelConfig, updateAiModelConfig, enableAiModel, setDefaultModel, testAiModelConnection, testAiModelCall, listLlmProviders } from "@/api/system/aiModelConfig"
+import { LLM_PROVIDER_FALLBACK, LLM_ADVANCED_DEFAULTS, providerIconUrl, providerLabel, syncProviderFields } from "@/constants/llmProviders"
 
 const { proxy } = getCurrentInstance()
 
+const providerOptions = ref([...LLM_PROVIDER_FALLBACK])
 const modelList = ref([])
 const open = ref(false)
 const loading = ref(true)
@@ -203,6 +220,18 @@ const showSearch = ref(true)
 const total = ref(0)
 const title = ref("")
 const testingConnection = ref(false)
+const testingModelCall = ref(false)
+const testResult = ref(null)
+const testResultTitle = ref("")
+const advancedActive = ref([])
+
+const validateCustomProviderName = (rule, value, callback) => {
+   if (form.value.provider === 'custom' && !value) {
+      callback(new Error('自定义厂商名称不能为空'))
+      return
+   }
+   callback()
+}
 
 const data = reactive({
    form: {},
@@ -214,15 +243,46 @@ const data = reactive({
       enabled: undefined
    },
    rules: {
-      modelName: [{ required: true, message: "模型名称不能为空", trigger: "blur" }],
-      provider: [{ required: true, message: "模型厂商不能为空", trigger: "change" }],
-      apiUrl: [{ required: true, message: "模型地址不能为空", trigger: "blur" }]
+      modelName: [{ required: true, message: "配置名称不能为空", trigger: "blur" }],
+      provider: [{ required: true, message: "服务厂商不能为空", trigger: "change" }],
+      customProviderName: [{ validator: validateCustomProviderName, trigger: "blur" }],
+      apiUrl: [{ required: true, message: "API 地址不能为空", trigger: "blur" }],
+      model: [{ required: true, message: "模型标识不能为空", trigger: "blur" }]
    }
 })
 
 const { queryParams, form, rules } = toRefs(data)
 
-/** 查询列表 */
+function mergeProviders(remoteProviders) {
+   const byCode = new Map(LLM_PROVIDER_FALLBACK.map(item => [item.code, { ...item }]))
+   for (const item of remoteProviders || []) {
+      if (!item || !item.code) {
+         continue
+      }
+      byCode.set(item.code, {
+         ...byCode.get(item.code),
+         ...item
+      })
+   }
+   // 保证「其他/自定义」始终存在，即使后端尚未升级到含 custom 的枚举
+   if (!byCode.has('custom')) {
+      byCode.set('custom', { code: 'custom', label: '其他/自定义', domestic: false })
+   }
+   const order = LLM_PROVIDER_FALLBACK.map(item => item.code)
+   return [
+      ...order.filter(code => byCode.has(code)).map(code => byCode.get(code)),
+      ...[...byCode.keys()].filter(code => !order.includes(code)).map(code => byCode.get(code))
+   ]
+}
+
+function loadProviders() {
+   listLlmProviders().then(response => {
+      providerOptions.value = mergeProviders(response.data)
+   }).catch(() => {
+      providerOptions.value = mergeProviders([])
+   })
+}
+
 function getList() {
    loading.value = true
    listAiModelConfig(queryParams.value).then(response => {
@@ -232,74 +292,91 @@ function getList() {
    })
 }
 
-/** 取消按钮 */
 function cancel() {
    open.value = false
    reset()
 }
 
-/** 表单重置 */
 function reset() {
    form.value = {
       modelId: undefined,
       modelName: undefined,
       provider: undefined,
+      customProviderName: undefined,
       apiUrl: undefined,
       apiKey: undefined,
       model: undefined,
       embeddingModel: undefined,
       embeddingApiUrl: undefined,
-      enabled: "0",
-      isDefault: "0",
-      timeout: 60000,
-      maxTokens: 8000,
-      sortOrder: 0,
+      enabled: LLM_ADVANCED_DEFAULTS.enabled,
+      isDefault: LLM_ADVANCED_DEFAULTS.isDefault,
+      timeout: LLM_ADVANCED_DEFAULTS.timeout,
+      maxTokens: LLM_ADVANCED_DEFAULTS.maxTokens,
+      temperature: LLM_ADVANCED_DEFAULTS.temperature,
+      contextLength: LLM_ADVANCED_DEFAULTS.contextLength,
+      sortOrder: LLM_ADVANCED_DEFAULTS.sortOrder,
       remark: undefined
    }
+   advancedActive.value = []
+   testResult.value = null
+   testResultTitle.value = ""
    proxy.resetForm("modelRef")
 }
 
-/** 搜索按钮操作 */
+function handleProviderChange(providerCode) {
+   syncProviderFields(form.value, providerCode)
+   // 厂商变更后旧检测结果不再有效
+   testResult.value = null
+   testResultTitle.value = ""
+   if (proxy.$refs["modelRef"]) {
+      proxy.$refs["modelRef"].clearValidate(['apiUrl', 'model', 'customProviderName'])
+   }
+}
+
 function handleQuery() {
    queryParams.value.pageNum = 1
    getList()
 }
 
-/** 重置按钮操作 */
 function resetQuery() {
    proxy.resetForm("queryRef")
    handleQuery()
 }
 
-/** 新增按钮操作 */
 function handleAdd() {
    reset()
    open.value = true
-   title.value = "新增 AI 大模型配置"
+   title.value = "新增大模型配置"
 }
 
-/** 修改按钮操作 */
 function handleUpdate(row) {
    reset()
    getAiModelConfig(row.modelId).then(response => {
-      form.value = response.data
+      form.value = {
+         ...form.value,
+         ...response.data,
+         apiKey: undefined
+      }
       open.value = true
-      title.value = "修改 AI 大模型配置"
+      title.value = "修改大模型配置"
    })
 }
 
-/** 提交按钮 */
 function submitForm() {
    proxy.$refs["modelRef"].validate(valid => {
       if (valid) {
-         if (form.value.modelId != undefined) {
-            updateAiModelConfig(form.value).then(() => {
+         const payload = { ...form.value }
+         if (payload.provider !== 'custom') {
+            payload.customProviderName = ''
+         }
+         if (payload.modelId != undefined) {
+            updateAiModelConfig(payload).then(() => {
                proxy.$modal.msgSuccess("修改成功")
                open.value = false
                getList()
             })
          } else {
-            addAiModelConfig(form.value).then(() => {
+            addAiModelConfig(payload).then(() => {
                proxy.$modal.msgSuccess("新增成功")
                open.value = false
                getList()
@@ -309,9 +386,8 @@ function submitForm() {
    })
 }
 
-/** 删除按钮操作 */
 function handleDelete(row) {
-   proxy.$modal.confirm('是否确认删除该 AI 模型配置？').then(() => {
+   proxy.$modal.confirm('是否确认删除该大模型配置？').then(() => {
       return delAiModelConfig(row.modelId)
    }).then(() => {
       getList()
@@ -319,7 +395,6 @@ function handleDelete(row) {
    }).catch(() => {})
 }
 
-/** 启用/禁用切换 */
 function handleEnableChange(row) {
    enableAiModel(row.modelId, row.enabled).then(() => {
       proxy.$modal.msgSuccess(row.enabled === "1" ? "已启用" : "已禁用")
@@ -328,7 +403,6 @@ function handleEnableChange(row) {
    })
 }
 
-/** 设为默认模型 */
 function handleSetDefault(row) {
    setDefaultModel(row.modelId).then(() => {
       proxy.$modal.msgSuccess("已设为默认模型")
@@ -336,26 +410,103 @@ function handleSetDefault(row) {
    })
 }
 
-/** 测试连接 */
-function handleTestConnection() {
-   if (!form.value.provider || !form.value.apiUrl || !form.value.apiKey) {
-      proxy.$modal.msgWarning("请先填写模型厂商、API 地址和 API Key")
-      return
+function validateTestForm() {
+   if (!form.value.provider || !form.value.apiUrl || !form.value.model) {
+      proxy.$modal.msgWarning("请先填写服务厂商、API 地址和模型标识")
+      return false
    }
+   if (form.value.provider === 'custom' && !form.value.customProviderName) {
+      proxy.$modal.msgWarning("请先填写自定义厂商名称")
+      return false
+   }
+   if (!form.value.modelId && !form.value.apiKey) {
+      proxy.$modal.msgWarning("新增配置时请先填写 API Key")
+      return false
+   }
+   return true
+}
+
+function showTestResult(result, resultTitle) {
+   testResult.value = result
+   testResultTitle.value = resultTitle
+}
+
+function handleTestConnection() {
+   if (!validateTestForm()) return
    testingConnection.value = true
-   testAiModel({
-      provider: form.value.provider,
-      apiUrl: form.value.apiUrl,
-      apiKey: form.value.apiKey,
-      model: form.value.model || undefined,
-      timeout: form.value.timeout || 60000
-   }).then(response => {
-      testingConnection.value = false
-      proxy.$modal.msgSuccess("连接测试成功: " + response.data)
-   }).catch(() => {
+   testAiModelConnection({ ...form.value }).then(response => {
+      showTestResult(response.data, response.data.success ? "连接测试成功" : "连接测试失败")
+   }).finally(() => {
       testingConnection.value = false
    })
 }
 
+function handleTestModelCall() {
+   if (!validateTestForm()) return
+   testingModelCall.value = true
+   testAiModelCall({ ...form.value }).then(response => {
+      showTestResult(response.data, response.data.success ? "模型调用成功" : "模型调用失败")
+   }).finally(() => {
+      testingModelCall.value = false
+   })
+}
+
+loadProviders()
 getList()
 </script>
+
+<style scoped>
+.provider-cell,
+.provider-option {
+   display: inline-flex;
+   align-items: center;
+   gap: 6px;
+}
+.provider-icon {
+   width: 18px;
+   height: 18px;
+   object-fit: contain;
+}
+.form-section-title {
+   margin: 0 0 12px;
+   font-size: 13px;
+   font-weight: 600;
+   color: var(--el-text-color-regular);
+}
+.advanced-collapse {
+   border: none;
+   margin-bottom: 8px;
+}
+.advanced-collapse :deep(.el-collapse-item__header) {
+   height: 36px;
+   line-height: 36px;
+   font-size: 13px;
+   font-weight: 500;
+   color: var(--el-text-color-regular);
+   border-bottom: 1px solid var(--el-border-color-lighter);
+}
+.advanced-collapse :deep(.el-collapse-item__wrap) {
+   border-bottom: none;
+}
+.advanced-collapse :deep(.el-collapse-item__content) {
+   padding-top: 12px;
+   padding-bottom: 0;
+}
+.test-result-alert {
+   margin-top: 8px;
+}
+.raw-snippet {
+   word-break: break-all;
+   font-size: 12px;
+   color: var(--el-text-color-secondary);
+}
+</style>
+
+<style>
+.model-config-dialog .el-dialog__body {
+   max-height: min(68vh, 560px);
+   overflow-y: auto;
+   padding-top: 12px;
+   padding-bottom: 8px;
+}
+</style>

@@ -1,6 +1,7 @@
 package com.acr.system.mapper;
 
 import java.util.List;
+import org.apache.ibatis.annotations.Param;
 import com.acr.system.domain.SysAiModelConfig;
 
 /**
@@ -62,4 +63,15 @@ public interface SysAiModelConfigMapper
      * @return 结果
      */
     public int clearDefaultModel();
+
+    /** 仅当不会禁用默认模型时更新启用状态。 */
+    public int updateEnabledStatus(@Param("modelId") Long modelId, @Param("enabled") String enabled);
+
+    /** 仅将仍处于启用状态的配置设为默认。 */
+    public int markDefaultIfEnabled(Long modelId);
+
+    /**
+     * 更新最近检测结果
+     */
+    public int updateLastCheck(SysAiModelConfig sysAiModelConfig);
 }
