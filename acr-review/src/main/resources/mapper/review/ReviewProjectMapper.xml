@@ -29,6 +29,10 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="templateName" column="template_name" />
         <result property="reviewMode" column="review_mode" />
         <result property="engineCode" column="engine_code" />
+        <result property="scopeExcludePatterns" column="scope_exclude_patterns" />
+        <result property="scopeIncludeTests" column="scope_include_tests" />
+        <result property="scopeReportExisting" column="scope_report_existing" />
+        <result property="scopeExpandEnabled" column="scope_expand_enabled" />
         <result property="status" column="status" />
         <result property="lastCheckStatus" column="last_check_status" />
         <result property="lastCheckMessage" column="last_check_message" />
@@ -57,6 +61,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                p.model_id, m.model_name, p.primary_stack,
                p.template_id, rt.template_name,
                p.review_mode, p.engine_code,
+               p.scope_exclude_patterns, p.scope_include_tests, p.scope_report_existing, p.scope_expand_enabled,
                p.status, p.last_check_status, p.last_check_message, p.last_check_time,
                p.last_branch_sync_status, p.last_branch_sync_message, p.last_branch_sync_time,
                p.last_webhook_time, p.last_webhook_result,
@@ -112,7 +117,8 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     <select id="selectByRepository" resultMap="ReviewProjectResult">
         select project_id, project_name, provider, repository_owner, repository_name,
                status, pr_review_enabled, pr_target_branches, webhook_secret_ciphertext, credential_id,
-               model_id, primary_stack, template_id, review_mode, engine_code
+               model_id, primary_stack, template_id, review_mode, engine_code,
+               scope_exclude_patterns, scope_include_tests, scope_report_existing, scope_expand_enabled
         from review_project
         where provider = #{provider}
           and repository_owner = #{repositoryOwner}
@@ -128,6 +134,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         (project_name, provider, repository_url, repository_owner, repository_name,
          default_branch, pr_review_enabled, pr_target_branches, business_system_id, dept_id, owner_user_id,
          credential_id, model_id, primary_stack, template_id, review_mode, engine_code,
+         scope_exclude_patterns, scope_include_tests, scope_report_existing, scope_expand_enabled,
          status, last_check_status, last_check_message, last_check_time,
          last_branch_sync_status, last_branch_sync_message, last_branch_sync_time,
          webhook_secret_ciphertext,
@@ -136,6 +143,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         (#{projectName}, #{provider}, #{repositoryUrl}, #{repositoryOwner}, #{repositoryName},
          #{defaultBranch}, #{prReviewEnabled}, #{prTargetBranches}, #{businessSystemId}, #{deptId}, #{ownerUserId},
          #{credentialId}, #{modelId}, #{primaryStack}, #{templateId}, #{reviewMode}, #{engineCode},
+         #{scopeExcludePatterns}, #{scopeIncludeTests}, #{scopeReportExisting}, #{scopeExpandEnabled},
          #{status}, #{lastCheckStatus}, #{lastCheckMessage}, #{lastCheckTime},
          #{lastBranchSyncStatus}, #{lastBranchSyncMessage}, #{lastBranchSyncTime},
          #{webhookSecretCiphertext},
@@ -160,6 +168,10 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             template_id = #{templateId},
             review_mode = #{reviewMode},
             engine_code = #{engineCode},
+            scope_exclude_patterns = #{scopeExcludePatterns},
+            scope_include_tests = #{scopeIncludeTests},
+            scope_report_existing = #{scopeReportExisting},
+            scope_expand_enabled = #{scopeExpandEnabled},
             last_check_status = #{lastCheckStatus},
             last_check_message = #{lastCheckMessage},
             last_check_time = #{lastCheckTime},

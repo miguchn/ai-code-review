@@ -32,6 +32,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="snapshotHeadSha" column="snapshot_head_sha" />
         <result property="resultSummary" column="result_summary" />
         <result property="resultJson" column="result_json" />
+        <result property="scopeDecisionJson" column="scope_decision_json" />
         <result property="totalScore" column="total_score" />
         <result property="scoreCorrectness" column="score_correctness" />
         <result property="scoreSecurity" column="score_security" />
@@ -66,7 +67,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
          snapshot_model_id, snapshot_model_name, snapshot_model_provider, snapshot_model,
          snapshot_template_id, snapshot_template_name, snapshot_template_code, snapshot_template_version,
          snapshot_prompt_content, snapshot_timeout_seconds,
-         snapshot_base_sha, snapshot_head_sha, result_summary, result_json,
+         snapshot_base_sha, snapshot_head_sha, result_summary, result_json, scope_decision_json,
          total_score, score_correctness, score_security, score_practice, score_performance, score_commit_quality,
          protocol_version, score_weights_json, score_threshold, focus_issue_count, has_critical_security,
          top_issues_json, parse_status, parse_error, raw_response_excerpt, rendered_prompt,
@@ -78,7 +79,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
          #{snapshotModelId}, #{snapshotModelName}, #{snapshotModelProvider}, #{snapshotModel},
          #{snapshotTemplateId}, #{snapshotTemplateName}, #{snapshotTemplateCode}, #{snapshotTemplateVersion},
          #{snapshotPromptContent}, #{snapshotTimeoutSeconds},
-         #{snapshotBaseSha}, #{snapshotHeadSha}, #{resultSummary}, #{resultJson},
+         #{snapshotBaseSha}, #{snapshotHeadSha}, #{resultSummary}, #{resultJson}, #{scopeDecisionJson},
          #{totalScore}, #{scoreCorrectness}, #{scoreSecurity}, #{scorePractice}, #{scorePerformance}, #{scoreCommitQuality},
          #{protocolVersion}, #{scoreWeightsJson}, #{scoreThreshold}, #{focusIssueCount}, #{hasCriticalSecurity},
          #{topIssuesJson}, #{parseStatus}, #{parseError}, #{rawResponseExcerpt}, #{renderedPrompt},
@@ -110,6 +111,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             snapshot_timeout_seconds = #{snapshotTimeoutSeconds},
             result_summary = #{resultSummary},
             result_json = #{resultJson},
+            scope_decision_json = #{scopeDecisionJson},
             total_score = #{totalScore},
             score_correctness = #{scoreCorrectness},
             score_security = #{scoreSecurity},

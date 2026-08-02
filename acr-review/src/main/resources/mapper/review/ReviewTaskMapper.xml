@@ -53,6 +53,10 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="snapshotModel" column="snapshot_model" />
         <result property="snapshotEngineCode" column="snapshot_engine_code" />
         <result property="snapshotEngineName" column="snapshot_engine_name" />
+        <result property="snapshotScopeExcludePatterns" column="snapshot_scope_exclude_patterns" />
+        <result property="snapshotScopeIncludeTests" column="snapshot_scope_include_tests" />
+        <result property="snapshotScopeReportExisting" column="snapshot_scope_report_existing" />
+        <result property="snapshotScopeExpandEnabled" column="snapshot_scope_expand_enabled" />
         <result property="projectName" column="project_name" />
         <result property="businessSystemName" column="business_system_name" />
         <result property="repositoryOwner" column="repository_owner" />
@@ -78,6 +82,8 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                t.snapshot_template_version, t.snapshot_prompt_content,
                t.snapshot_model_id, t.snapshot_model_name, t.snapshot_model_provider, t.snapshot_model,
                t.snapshot_engine_code, t.snapshot_engine_name,
+               t.snapshot_scope_exclude_patterns, t.snapshot_scope_include_tests,
+               t.snapshot_scope_report_existing, t.snapshot_scope_expand_enabled,
                p.project_name, bs.system_name as business_system_name,
                p.repository_owner, p.repository_name, p.repository_url,
                t.remark, t.create_by, t.create_time, t.update_by, t.update_time
@@ -143,7 +149,10 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
          snapshot_review_mode, snapshot_template_id, snapshot_template_name, snapshot_template_code,
          snapshot_template_version, snapshot_prompt_content,
          snapshot_model_id, snapshot_model_name, snapshot_model_provider, snapshot_model,
-         snapshot_engine_code, snapshot_engine_name, remark, create_by, create_time)
+         snapshot_engine_code, snapshot_engine_name,
+         snapshot_scope_exclude_patterns, snapshot_scope_include_tests,
+         snapshot_scope_report_existing, snapshot_scope_expand_enabled,
+         remark, create_by, create_time)
         values
         (#{projectId}, #{eventId}, #{provider}, #{prNumber}, #{prTitle}, #{prAuthor}, #{sourceBranch}, #{targetBranch},
          #{baseSha}, #{headSha}, #{additions}, #{deletions}, #{changedFiles}, #{triggerType}, #{taskStatus}, #{failureMessage},
@@ -151,7 +160,10 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
          #{snapshotReviewMode}, #{snapshotTemplateId}, #{snapshotTemplateName}, #{snapshotTemplateCode},
          #{snapshotTemplateVersion}, #{snapshotPromptContent},
          #{snapshotModelId}, #{snapshotModelName}, #{snapshotModelProvider}, #{snapshotModel},
-         #{snapshotEngineCode}, #{snapshotEngineName}, #{remark}, #{createBy}, sysdate())
+         #{snapshotEngineCode}, #{snapshotEngineName},
+         #{snapshotScopeExcludePatterns}, #{snapshotScopeIncludeTests},
+         #{snapshotScopeReportExisting}, #{snapshotScopeExpandEnabled},
+         #{remark}, #{createBy}, sysdate())
     </insert>
 
     <update id="claimTask">
@@ -217,6 +229,10 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             snapshot_model = #{snapshotModel},
             snapshot_engine_code = #{snapshotEngineCode},
             snapshot_engine_name = #{snapshotEngineName},
+            snapshot_scope_exclude_patterns = #{snapshotScopeExcludePatterns},
+            snapshot_scope_include_tests = #{snapshotScopeIncludeTests},
+            snapshot_scope_report_existing = #{snapshotScopeReportExisting},
+            snapshot_scope_expand_enabled = #{snapshotScopeExpandEnabled},
             update_time = sysdate()
         where task_id = #{taskId}
     </update>

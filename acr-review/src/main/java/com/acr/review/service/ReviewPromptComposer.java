@@ -57,4 +57,20 @@ public class ReviewPromptComposer
         }
         return (strippedRendered.trim() + "\n\n" + appendix).trim();
     }
+
+    /**
+     * M3.2：在协议附录前追加审查范围指令块（正文 → 范围指令 → 输出协议）。
+     * 范围指令始终生效——即使范围决策降级为全量 Diff，"只报变更引入问题"的约束依然成立。
+     */
+    public String composeWithScope(String renderedWithPlaceholders, boolean scopeApplied, boolean hasFullContent)
+    {
+        String strippedRendered = stripConflictingOutputInstructions(renderedWithPlaceholders);
+        if (strippedRendered.contains("平台公共评分标准与输出协议"))
+        {
+            return strippedRendered.trim();
+        }
+        return (strippedRendered.trim()
+            + "\n\n" + ReviewScoringConstants.scopeInstructionBlock(scopeApplied, hasFullContent)
+            + "\n\n" + ReviewScoringConstants.protocolAppendix()).trim();
+    }
 }

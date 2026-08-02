@@ -40,6 +40,7 @@ public class ReviewTaskSnapshotServiceImpl implements IReviewTaskSnapshotService
         if (ReviewPipelineConstants.isLlmDirectMode(reviewMode))
         {
             freezeLlmSnapshot(project, task);
+            freezeScopeSnapshot(project, task);
             return;
         }
         if (ReviewPipelineConstants.isOcrEngineMode(reviewMode))
@@ -54,9 +55,46 @@ public class ReviewTaskSnapshotServiceImpl implements IReviewTaskSnapshotService
             task.setSnapshotEngineCode(engineCode);
             task.setSnapshotEngineName(engineProperties.getEngineName());
             clearLlmSnapshot(task);
+            freezeScopeSnapshot(project, task);
             return;
         }
         throw new ServiceException("项目未配置有效的审查方式，请在项目「审查执行」中完成配置");
+    }
+
+    /**
+     * 审查范围配置随执行快照同批冻结，LLM 与 OCR 两条路径一致。
+     * 项目未配置（NULL/空）时冻结为平台默认文本值，保证执行只读快照、历史结论不受后续配置修改影响。
+     */
+    private void freezeScopeSnapshot(ReviewProject project, ReviewTask task)
+    {
+        task.setSnapshotScopeExcludePatterns(normalizeScopePatterns(project.getScopeExcludePatterns()));
+        task.setSnapshotScopeIncludeTests(normalizeFlag(project.getScopeIncludeTests(), "N"));
+        task.setSnapshotScopeReportExisting(normalizeFlag(project.getScopeReportExisting(), "N"));
+        task.setSnapshotScopeExpandEnabled(normalizeFlag(project.getScopeExpandEnabled(), "Y"));
+    }
+
+    /** 排除 glob 归一：\r\n 归一为 \n，逐行 trim、去空行、保序去重。 */
+    static String normalizeScopePatterns(String raw)
+    {
+        if (StringUtils.isEmpty(raw))
+        {
+            return null;
+        }
+        java.util.LinkedHashSet<String> lines = new java.util.LinkedHashSet<>();
+        for (String line : raw.replace("\r\n", "\n").replace('\r', '\n').split("\n"))
+        {
+            String trimmed = line.trim();
+            if (!trimmed.isEmpty())
+            {
+                lines.add(trimmed);
+            }
+        }
+        return lines.isEmpty() ? null : String.join("\n", lines);
+    }
+
+    private static String normalizeFlag(String value, String defaultValue)
+    {
+        return ("Y".equals(value) || "N".equals(value)) ? value : defaultValue;
     }
 
     private void freezeLlmSnapshot(ReviewProject project, ReviewTask task)

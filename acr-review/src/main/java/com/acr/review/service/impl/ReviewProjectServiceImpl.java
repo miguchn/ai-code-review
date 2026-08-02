@@ -370,11 +370,31 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
         }
 
         validateReviewExecutionConfig(project);
+        normalizeScopeConfig(project);
 
         if (!"0".equals(project.getStatus()) && !"1".equals(project.getStatus()))
         {
             project.setStatus("1");
         }
+    }
+
+    /** 审查范围配置归一：排除 glob 逐行 trim 去空行去重，三开关非法值回落默认（N/N/Y）。 */
+    private void normalizeScopeConfig(ReviewProject project)
+    {
+        String patterns = ReviewTaskSnapshotServiceImpl.normalizeScopePatterns(project.getScopeExcludePatterns());
+        if (patterns != null && patterns.length() > 2000)
+        {
+            throw new ServiceException("审查范围排除路径过长，请控制在 2000 字符以内");
+        }
+        project.setScopeExcludePatterns(patterns);
+        project.setScopeIncludeTests(normalizeScopeFlag(project.getScopeIncludeTests(), "N"));
+        project.setScopeReportExisting(normalizeScopeFlag(project.getScopeReportExisting(), "N"));
+        project.setScopeExpandEnabled(normalizeScopeFlag(project.getScopeExpandEnabled(), "Y"));
+    }
+
+    private static String normalizeScopeFlag(String value, String defaultValue)
+    {
+        return ("Y".equals(value) || "N".equals(value)) ? value : defaultValue;
     }
 
     /** 审查方式二选一：大模型审查绑定模型+模板；审查引擎绑定引擎，不绑定项目级模型/模板。 */

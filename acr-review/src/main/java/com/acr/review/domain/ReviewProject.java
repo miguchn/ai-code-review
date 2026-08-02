@@ -41,6 +41,16 @@ public class ReviewProject extends BaseEntity
     private String templateName;
     private String reviewMode;
     private String engineCode;
+
+    /** 审查范围：项目排除路径 glob（换行分隔，平台默认排除之外追加）。 */
+    private String scopeExcludePatterns;
+    /** 审查范围：是否审查测试文件（Y/N，默认 N）。 */
+    private String scopeIncludeTests;
+    /** 审查范围：是否上报历史存量问题（Y/N，默认 N；归属打标能力生效后消费）。 */
+    private String scopeReportExisting;
+    /** 审查范围：高影响变更自动扩展整文件（Y/N，默认 Y）。 */
+    private String scopeExpandEnabled;
+
     private String status;
     private String lastCheckStatus;
     private String lastCheckMessage;
@@ -323,6 +333,47 @@ public class ReviewProject extends BaseEntity
     public void setEngineCode(String engineCode)
     {
         this.engineCode = engineCode;
+    }
+
+    @Size(max = 2000, message = "审查范围排除路径不能超过2000个字符")
+    public String getScopeExcludePatterns()
+    {
+        return scopeExcludePatterns;
+    }
+
+    public void setScopeExcludePatterns(String scopeExcludePatterns)
+    {
+        this.scopeExcludePatterns = scopeExcludePatterns;
+    }
+
+    public String getScopeIncludeTests()
+    {
+        return scopeIncludeTests;
+    }
+
+    public void setScopeIncludeTests(String scopeIncludeTests)
+    {
+        this.scopeIncludeTests = scopeIncludeTests;
+    }
+
+    public String getScopeReportExisting()
+    {
+        return scopeReportExisting;
+    }
+
+    public void setScopeReportExisting(String scopeReportExisting)
+    {
+        this.scopeReportExisting = scopeReportExisting;
+    }
+
+    public String getScopeExpandEnabled()
+    {
+        return scopeExpandEnabled;
+    }
+
+    public void setScopeExpandEnabled(String scopeExpandEnabled)
+    {
+        this.scopeExpandEnabled = scopeExpandEnabled;
     }
 
     public String getStatus()

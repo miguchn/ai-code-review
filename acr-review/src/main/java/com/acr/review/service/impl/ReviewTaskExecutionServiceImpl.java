@@ -28,6 +28,8 @@ import com.acr.review.engine.ReviewEngineRequest;
 import com.acr.review.engine.ReviewEngineResult;
 import com.acr.review.engine.ReviewEngineWorkspaceManager;
 import com.acr.review.engine.config.ReviewEngineProperties;
+import com.acr.review.git.GitFileContentFetcher;
+import com.acr.review.git.GitFileContentResult;
 import com.acr.review.git.GitPullRequestDiffFetcher;
 import com.acr.review.git.GitPullRequestDiffResult;
 import com.acr.review.git.GitPullRequestMetadata;
@@ -39,6 +41,12 @@ import com.acr.review.git.GitRepositoryCoordinates;
 import com.acr.review.mapper.ReviewProjectMapper;
 import com.acr.review.mapper.ReviewTaskMapper;
 import com.acr.review.mapper.ReviewTaskRunMapper;
+import com.acr.review.scope.DiffParseResult;
+import com.acr.review.scope.ReviewScopeConfig;
+import com.acr.review.scope.ReviewScopeDecision;
+import com.acr.review.scope.ReviewScopeDecisionService;
+import com.acr.review.scope.ReviewScopePromptAssembler;
+import com.acr.review.scope.UnifiedDiffParser;
 import com.acr.review.service.IGitCredentialService;
 import com.acr.review.service.IReviewTaskExecutionService;
 import com.acr.review.service.IReviewTaskSnapshotService;
@@ -78,6 +86,10 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
     private final ReviewPromptRenderer promptRenderer;
     private final ReviewPromptComposer promptComposer;
     private final ReviewScoreResultParser scoreResultParser;
+    private final UnifiedDiffParser diffParser;
+    private final ReviewScopeDecisionService scopeDecisionService;
+    private final ReviewScopePromptAssembler scopeAssembler;
+    private final GitFileContentFetcher fileContentFetcher;
     private final LlmCallService llmCallService;
     private final ApplicationEventPublisher eventPublisher;
     private final IReviewTaskSnapshotService snapshotService;
@@ -101,6 +113,10 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
                                           ReviewPromptRenderer promptRenderer,
                                           ReviewPromptComposer promptComposer,
                                           ReviewScoreResultParser scoreResultParser,
+                                          UnifiedDiffParser diffParser,
+                                          ReviewScopeDecisionService scopeDecisionService,
+                                          ReviewScopePromptAssembler scopeAssembler,
+                                          GitFileContentFetcher fileContentFetcher,
                                           LlmCallService llmCallService,
                                           ApplicationEventPublisher eventPublisher,
                                           IReviewTaskSnapshotService snapshotService,
@@ -122,6 +138,10 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         this.promptRenderer = promptRenderer;
         this.promptComposer = promptComposer;
         this.scoreResultParser = scoreResultParser;
+        this.diffParser = diffParser;
+        this.scopeDecisionService = scopeDecisionService;
+        this.scopeAssembler = scopeAssembler;
+        this.fileContentFetcher = fileContentFetcher;
         this.llmCallService = llmCallService;
         this.eventPublisher = eventPublisher;
         this.snapshotService = snapshotService;
@@ -364,6 +384,17 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
             return;
         }
 
+        // M3.2 范围决策：解析 → 排除/扩展 → 扩展全文竞争剩余预算 → 决策快照落库。
+        // 决策异常一律降级为全量 Diff，不阻断审查。
+        ScopeResolution scope = resolveScope(task, plan, diffResult.diffContent());
+        run.setScopeDecisionJson(toJsonQuietly(scope.snapshot()));
+        runMapper.updateReviewTaskRun(run);
+        if (scope.emptyScope())
+        {
+            persistEmptyScopeSuccess(task, run, beginMs);
+            return;
+        }
+
         applyPrMetadata(task, run, plan);
         String prDescription = StringUtils.isEmpty(run.getPrDescription())
             ? "（未获取到 PR 描述）" : run.getPrDescription();
@@ -372,8 +403,8 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
 
         String templateBody = promptComposer.stripConflictingOutputInstructions(plan.promptContent());
         String renderedBody = promptRenderer.render(
-            templateBody, task, diffResult.diffContent(), prDescription, commitMessages);
-        String finalPrompt = promptComposer.composeFromSnapshotTemplate(templateBody, renderedBody);
+            templateBody, task, scope.diffForPrompt(), prDescription, commitMessages);
+        String finalPrompt = promptComposer.composeWithScope(renderedBody, scope.scopeApplied(), scope.hasFullContent());
         run.setRenderedPrompt(truncate(finalPrompt, ReviewScoringConstants.MAX_RENDERED_PROMPT_CHARS));
         run.setProtocolVersion(ReviewScoringConstants.PROTOCOL_VERSION);
         run.setScoreWeightsJson(toJsonQuietly(ReviewScoringConstants.scoreWeights()));
@@ -399,6 +430,115 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         }
         persistLlmSuccess(task, run, beginMs, parseResult,
             Math.max(llmResult.getLatencyMs(), System.currentTimeMillis() - beginMs));
+    }
+
+    /**
+     * 范围决策（M3.2）：统一 Diff 解析 → 文件级排除/扩展决策 → 高影响扩展全文按 head SHA 拉取并竞争剩余预算。
+     * 任何内部异常都降级为全量 Diff（scopeApplied=false），保证审查不中断；
+     * 决策结果（含降级原因）始终通过 ScopeResolution.snapshot 落库，可回查。
+     */
+    private ScopeResolution resolveScope(ReviewTask task, ExecutionPlan plan, String rawDiff)
+    {
+        try
+        {
+            DiffParseResult parsed = diffParser.parse(rawDiff);
+            ReviewScopeConfig config = ReviewScopeConfig.fromTaskSnapshot(task);
+            ReviewScopeDecision decision = scopeDecisionService.decide(parsed, config);
+
+            Map<String, String> fetchedContents = new HashMap<>();
+            Map<String, String> fetchFailures = new java.util.LinkedHashMap<>();
+            for (ReviewScopeDecision.ExpandedFile file : scopeAssembler.planFetches(decision))
+            {
+                GitFileContentResult content = fileContentFetcher.fetchFileContent(
+                    plan.repository(), plan.token(), file.path(), task.getHeadSha());
+                if (content.success())
+                {
+                    fetchedContents.put(file.path(), content.content());
+                }
+                else
+                {
+                    fetchFailures.put(file.path(), content.failureReason());
+                    log.info("扩展文件全文拉取失败，降级保留 L0, taskId={}, path={}, reason={}",
+                        task.getTaskId(), file.path(), content.failureReason());
+                }
+            }
+            ReviewScopePromptAssembler.ReviewScopeAssembly assembly =
+                scopeAssembler.assemble(decision, fetchedContents, fetchFailures);
+            boolean emptyScope = decision.effectiveFileCount() == 0;
+            return new ScopeResolution(true, assembly.diffForPrompt(), emptyScope,
+                assembly.hasFullContent(), buildScopeSnapshot(decision, assembly, config));
+        }
+        catch (RuntimeException ex)
+        {
+            log.warn("审查范围决策失败，降级为全量 Diff, taskId={}", task.getTaskId(), ex);
+            Map<String, Object> snapshot = new java.util.LinkedHashMap<>();
+            snapshot.put("degraded", "DECISION_FAILED");
+            snapshot.put("reason", StringUtils.defaultIfEmpty(ex.getMessage(), ex.getClass().getSimpleName()));
+            return new ScopeResolution(false, rawDiff, false, false, snapshot);
+        }
+    }
+
+    /** 决策快照：决策服务快照 + 扩展文件最终处置 + 生效配置（自包含，步 7 详情直接可读）。 */
+    private Map<String, Object> buildScopeSnapshot(ReviewScopeDecision decision,
+                                                   ReviewScopePromptAssembler.ReviewScopeAssembly assembly,
+                                                   ReviewScopeConfig config)
+    {
+        Map<String, Object> snapshot = new java.util.LinkedHashMap<>(decision.toSnapshotMap());
+        snapshot.put("expandedFiles", assembly.dispositions().stream()
+            .map(disposition ->
+            {
+                Map<String, Object> item = new java.util.LinkedHashMap<String, Object>();
+                item.put("path", disposition.path());
+                item.put("rule", disposition.rule());
+                item.put("status", disposition.status());
+                if (disposition.reason() != null)
+                {
+                    item.put("reason", disposition.reason());
+                }
+                if (disposition.chars() > 0)
+                {
+                    item.put("chars", disposition.chars());
+                }
+                return item;
+            })
+            .toList());
+        snapshot.put("finalDiffChars", assembly.diffForPrompt().length());
+        snapshot.put("config", Map.of(
+            "excludePatterns", config.excludePatterns(),
+            "includeTests", config.includeTests(),
+            "reportExisting", config.reportExisting(),
+            "expandEnabled", config.expandEnabled()));
+        return snapshot;
+    }
+
+    /** 无有效审查范围：不调用模型，按通过落库并在摘要说明原因；决策快照已在调用前落库。 */
+    private void persistEmptyScopeSuccess(ReviewTask task, ReviewTaskRun run, long beginMs)
+    {
+        updateStep(task, run, ReviewPipelineConstants.STEP_PERSIST_RESULT);
+        long duration = System.currentTimeMillis() - beginMs;
+        Date finished = new Date();
+        String summary = "本次变更无有效审查范围（全部文件被排除规则命中或为删除、改名等记录类变更），未调用模型，按通过处理";
+
+        run.setRunStatus(ReviewPipelineConstants.RUN_SUCCESS);
+        run.setCurrentStep(ReviewPipelineConstants.STEP_PERSIST_RESULT);
+        run.setReviewConclusion(ReviewPipelineConstants.CONCLUSION_PASS);
+        run.setResultSummary(summary);
+        run.setDurationMs(duration);
+        run.setFinishedTime(finished);
+        run.setFailureStep(null);
+        run.setFailureType(null);
+        run.setFailureMessage(null);
+        runMapper.updateReviewTaskRun(run);
+
+        task.setTaskStatus(ReviewPipelineConstants.TASK_SUCCESS);
+        task.setReviewConclusion(ReviewPipelineConstants.CONCLUSION_PASS);
+        task.setCurrentStep(ReviewPipelineConstants.STEP_PERSIST_RESULT);
+        task.setFailureStep(null);
+        task.setFailureType(null);
+        task.setFailureMessage(null);
+        task.setFinishedTime(finished);
+        task.setDurationMs(duration);
+        taskMapper.updateTaskExecution(task);
     }
 
     private ExecutionPlan resolveConfig(ReviewTask task, ReviewTaskRun run)
@@ -813,6 +953,20 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         String engineCode,
         String promptContent,
         Map<String, String> modelEnvironment
+    )
+    {
+    }
+
+    /**
+     * 范围决策输出。
+     * scopeApplied=false 表示决策失败降级为全量 Diff；emptyScope=true 表示全部文件被排除/仅记录类，跳过模型调用。
+     */
+    private record ScopeResolution(
+        boolean scopeApplied,
+        String diffForPrompt,
+        boolean emptyScope,
+        boolean hasFullContent,
+        Map<String, Object> snapshot
     )
     {
     }

@@ -92,6 +92,34 @@ public final class ReviewScoringConstants
         return List.copyOf(codes);
     }
 
+    /**
+     * 审查范围指令块（M3.2）：约束模型只报告本次变更引入的问题。
+     * 归属（origin）输出要求随协议 v1.1（步 5）另行追加，本块保持协议版本中立。
+     *
+     * @param scopeApplied    范围决策是否生效（降级全量 Diff 时为 false，不出现"已筛选"表述）
+     * @param hasFullContent  是否附有高影响扩展文件全文段
+     */
+    public static String scopeInstructionBlock(boolean scopeApplied, boolean hasFullContent)
+    {
+        StringBuilder sb = new StringBuilder();
+        sb.append("【审查范围说明 — 必须遵守】\n");
+        int index = 1;
+        if (scopeApplied)
+        {
+            sb.append(index++).append(". 上方 Diff 已经过平台范围筛选，仅包含需要审查的变更文件；")
+                .append("锁文件、生成代码与项目配置的排除路径已被移除，无需评论其内容。\n");
+        }
+        sb.append(index++).append(". 只报告本次变更引入的问题：问题必须定位在 Diff 的新增/修改行（+ 行）上；")
+            .append("未变更的上下文行仅用于理解代码结构，禁止就其中的历史存量问题输出意见。\n");
+        if (hasFullContent)
+        {
+            sb.append(index++).append(". Diff 后附「高影响扩展文件完整内容」段：这些文件命中高影响规则")
+                .append("（新增文件/公共签名/安全逻辑/配置/依赖/数据库脚本），整个文件都在审查范围内，可报告其中的问题。\n");
+        }
+        sb.append(index).append(". 禁止编造未在提供内容中出现的文件路径或行号；无法确定位置时对应字段必须为 null。\n");
+        return sb.toString();
+    }
+
     /** 追加到最终 Prompt 的公共协议附录（中文，含模型输出技术要求）。 */
     public static String protocolAppendix()
     {
