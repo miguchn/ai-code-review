@@ -53,6 +53,11 @@ class ReviewTaskExecutionServiceImplTest
     private final com.acr.review.git.GitFileContentFetcher fileContentFetcher =
         mock(com.acr.review.git.GitFileContentFetcher.class);
     private final LlmCallService llmCallService = mock(LlmCallService.class);
+    private final OcrModelConfigMapper modelConfigMapper = mock(OcrModelConfigMapper.class);
+    private final GitPullRequestWorkspacePreparer workspacePreparer = mock(GitPullRequestWorkspacePreparer.class);
+    private final GitPullRequestMetadataFetcher metadataFetcher = mock(GitPullRequestMetadataFetcher.class);
+    private final OpenCodeReviewCliAdapter reviewEngine = mock(OpenCodeReviewCliAdapter.class);
+    private final ReviewEngineWorkspaceManager workspaceManager = mock(ReviewEngineWorkspaceManager.class);
     private ReviewTaskExecutionServiceImpl service;
 
     @BeforeEach
@@ -64,12 +69,12 @@ class ReviewTaskExecutionServiceImplTest
             taskMapper, runMapper, projectMapper,
             credentialService,
             modelConfigService,
-            mock(OcrModelConfigMapper.class),
-            mock(GitPullRequestWorkspacePreparer.class),
+            modelConfigMapper,
+            workspacePreparer,
             diffFetcher,
-            mock(GitPullRequestMetadataFetcher.class),
-            mock(OpenCodeReviewCliAdapter.class),
-            mock(ReviewEngineWorkspaceManager.class),
+            metadataFetcher,
+            reviewEngine,
+            workspaceManager,
             properties,
             new ReviewConclusionResolver(),
             new ReviewPromptRenderer(),
@@ -405,6 +410,249 @@ class ReviewTaskExecutionServiceImplTest
                 throw new IllegalStateException("模拟决策异常");
             }
         };
+    }
+
+    @Test
+    void llmPathTagsOriginAndPersistsScopeStats()
+    {
+        // 步 5 端到端：存量 CRITICAL 剔除（不占 Top 3、不阻断）、未知文件按 NEW 计、扩展 FULL 文件任意行号 NEW
+        ReviewTask task = llmTask(24L);
+        stubLlmPathPrerequisites(task);
+        when(diffFetcher.fetchDiff(any(), any(), eq("abc1234"), eq("def5678")))
+            .thenReturn(GitPullRequestDiffResult.ok(scopeTestDiff()));
+        when(fileContentFetcher.fetchFileContent(any(), any(), eq("pom.xml"), eq("def5678")))
+            .thenReturn(com.acr.review.git.GitFileContentResult.fail("IO"));
+        when(fileContentFetcher.fetchFileContent(any(), any(), eq("src/main/resources/application.yml"), eq("def5678")))
+            .thenReturn(com.acr.review.git.GitFileContentResult.ok("server:\n  port: 8080\ntimeout: 30\n"));
+        when(llmCallService.chat(eq(3L), any()))
+            .thenReturn(com.acr.common.ai.LlmCallResult.success(8L, originModelResponse(), null));
+
+        service.executeTask(24L);
+
+        org.mockito.ArgumentCaptor<ReviewTaskRun> runCaptor = org.mockito.ArgumentCaptor.forClass(ReviewTaskRun.class);
+        verify(runMapper, org.mockito.Mockito.atLeastOnce()).updateReviewTaskRun(runCaptor.capture());
+        ReviewTaskRun run = runCaptor.getAllValues().get(runCaptor.getAllValues().size() - 1);
+
+        org.junit.jupiter.api.Assertions.assertEquals(ReviewPipelineConstants.RUN_SUCCESS, run.getRunStatus());
+        org.junit.jupiter.api.Assertions.assertEquals(ReviewPipelineConstants.CONCLUSION_WARN, run.getReviewConclusion(),
+            "存量 CRITICAL 剔除后按新增 HIGH 评估应为警告");
+        org.junit.jupiter.api.Assertions.assertEquals(3, run.getFocusIssueCount(), "focusIssueCount 只计新增问题");
+
+        String topIssues = run.getTopIssuesJson();
+        org.junit.jupiter.api.Assertions.assertFalse(topIssues.contains("存量问题"), "存量问题应被剔除: " + topIssues);
+        assertTrue(topIssues.contains("扩展全文文件问题"), "FULL 扩展文件问题按 NEW 保留: " + topIssues);
+        org.junit.jupiter.api.Assertions.assertEquals(3, countOccurrences(topIssues, "\"origin\":\"NEW\""));
+
+        String resultJson = run.getResultJson();
+        assertTrue(resultJson.contains("\"scopeStats\""), "resultJson 应含 scopeStats: " + resultJson);
+        assertTrue(resultJson.contains("\"newCount\":3"), resultJson);
+        assertTrue(resultJson.contains("\"existingCount\":1"), resultJson);
+        assertTrue(resultJson.contains("\"originUnverifiable\":1"), resultJson);
+        assertTrue(resultJson.contains("\"includedFiles\":3"), resultJson);
+        assertTrue(resultJson.contains("\"excludedFiles\":1"), resultJson);
+        assertTrue(resultJson.contains("\"expandedFiles\":2"), resultJson);
+        org.junit.jupiter.api.Assertions.assertEquals("1.1", run.getProtocolVersion());
+    }
+
+    @Test
+    void llmPathKeepsExistingIssuesWhenReportExistingEnabled()
+    {
+        // 快照 scope_report_existing=Y：存量问题标注保留（仅信息展示），仍不影响结论
+        ReviewTask task = llmTask(25L);
+        task.setSnapshotScopeReportExisting("Y");
+        stubLlmPathPrerequisites(task);
+        when(diffFetcher.fetchDiff(any(), any(), eq("abc1234"), eq("def5678")))
+            .thenReturn(GitPullRequestDiffResult.ok(scopeTestDiff()));
+        when(fileContentFetcher.fetchFileContent(any(), any(), eq("pom.xml"), eq("def5678")))
+            .thenReturn(com.acr.review.git.GitFileContentResult.fail("IO"));
+        when(fileContentFetcher.fetchFileContent(any(), any(), eq("src/main/resources/application.yml"), eq("def5678")))
+            .thenReturn(com.acr.review.git.GitFileContentResult.ok("server:\n  port: 8080\ntimeout: 30\n"));
+        when(llmCallService.chat(eq(3L), any()))
+            .thenReturn(com.acr.common.ai.LlmCallResult.success(8L, originModelResponse(), null));
+
+        service.executeTask(25L);
+
+        org.mockito.ArgumentCaptor<ReviewTaskRun> runCaptor = org.mockito.ArgumentCaptor.forClass(ReviewTaskRun.class);
+        verify(runMapper, org.mockito.Mockito.atLeastOnce()).updateReviewTaskRun(runCaptor.capture());
+        ReviewTaskRun run = runCaptor.getAllValues().get(runCaptor.getAllValues().size() - 1);
+
+        String topIssues = run.getTopIssuesJson();
+        assertTrue(topIssues.contains("存量问题"), "reportExisting=Y 时存量问题应保留: " + topIssues);
+        assertTrue(topIssues.contains("\"origin\":\"EXISTING\""), topIssues);
+        org.junit.jupiter.api.Assertions.assertEquals(3, run.getFocusIssueCount(), "存量保留也不计 focusIssueCount");
+        org.junit.jupiter.api.Assertions.assertEquals(ReviewPipelineConstants.CONCLUSION_WARN, run.getReviewConclusion(),
+            "存量 CRITICAL 保留也不影响结论");
+    }
+
+    /**
+     * 模型响应：新增 HIGH（Main.java:12，新增行）、存量 CRITICAL（Main.java:50，hunk 外）、
+     * 不可判定 MEDIUM（未知文件）、扩展 FULL 文件 LOW（application.yml:99，任意行号 NEW）。
+     */
+    private String originModelResponse()
+    {
+        return """
+            {
+              "protocolVersion":"1.1",
+              "scores":[
+                {"dimension":"CORRECTNESS","score":30,"maxScore":40,"reason":"ok"},
+                {"dimension":"SECURITY","score":20,"maxScore":30,"reason":"ok"},
+                {"dimension":"PRACTICE","score":15,"maxScore":20,"reason":"ok"},
+                {"dimension":"PERFORMANCE","score":4,"maxScore":5,"reason":"ok"},
+                {"dimension":"COMMIT_QUALITY","score":3,"maxScore":5,"reason":"ok"}
+              ],
+              "summary":"发现新增与存量问题",
+              "topIssues":[
+                {"rank":1,"severity":"CRITICAL","category":"security","title":"存量问题","description":"d","filePath":"src/main/java/Main.java","startLine":50,"endLine":50,"evidence":"e","suggestion":"s"},
+                {"rank":2,"severity":"HIGH","category":"bug","title":"新增行问题","description":"d","filePath":"src/main/java/Main.java","startLine":12,"endLine":12,"evidence":"e","suggestion":"s"},
+                {"rank":3,"severity":"MEDIUM","category":"practice","title":"不可判定问题","description":"d","filePath":"src/Ghost.java","startLine":3,"endLine":3,"evidence":"e","suggestion":"s"},
+                {"rank":4,"severity":"LOW","category":"config","title":"扩展全文文件问题","description":"d","filePath":"src/main/resources/application.yml","startLine":99,"endLine":99,"evidence":"e","suggestion":"s"}
+              ],
+              "focusIssueCount":4,
+              "hasCriticalSecurityIssue":true
+            }
+            """;
+    }
+
+    private int countOccurrences(String text, String needle)
+    {
+        int count = 0;
+        for (int index = text.indexOf(needle); index >= 0; index = text.indexOf(needle, index + needle.length()))
+        {
+            count++;
+        }
+        return count;
+    }
+
+    // ---------- 步 6：OCR 路径范围排除与决策快照 ----------
+
+    @Test
+    void ocrPathPassesExcludePatternsAndPersistsScopeSnapshot()
+    {
+        // 平台默认 + 测试文件 + 项目排除合并经 --exclude 传入引擎；决策快照落 scope_decision_json
+        ReviewTask task = ocrTask(26L);
+        stubOcrPathPrerequisites(task);
+        when(diffFetcher.fetchDiff(any(), any(), eq("abc1234"), eq("def5678")))
+            .thenReturn(GitPullRequestDiffResult.ok(scopeTestDiff()));
+        when(reviewEngine.execute(any())).thenReturn(com.acr.review.engine.ReviewEngineResult.success(
+            "open-code-review", "1.8.3", 5L, "{}", "", java.util.Map.of("conclusion", "PASS"), 0));
+
+        service.executeTask(26L);
+
+        org.mockito.ArgumentCaptor<com.acr.review.engine.ReviewEngineRequest> requestCaptor =
+            org.mockito.ArgumentCaptor.forClass(com.acr.review.engine.ReviewEngineRequest.class);
+        verify(reviewEngine).execute(requestCaptor.capture());
+        java.util.List<String> excludes = requestCaptor.getValue().getExcludePatterns();
+        org.junit.jupiter.api.Assertions.assertNotNull(excludes);
+        assertTrue(excludes.contains("**/package-lock.json"), "平台默认排除");
+        assertTrue(excludes.contains("**/src/test/**"), "默认不审测试文件");
+        assertTrue(excludes.contains("docs/**"), "项目排除规则");
+        assertTrue(excludes.contains("*.generated.java"), "项目排除规则");
+
+        org.mockito.ArgumentCaptor<ReviewTaskRun> runCaptor = org.mockito.ArgumentCaptor.forClass(ReviewTaskRun.class);
+        verify(runMapper, org.mockito.Mockito.atLeastOnce()).updateReviewTaskRun(runCaptor.capture());
+        String snapshot = null;
+        for (ReviewTaskRun candidate : runCaptor.getAllValues())
+        {
+            if (candidate.getScopeDecisionJson() != null)
+            {
+                snapshot = candidate.getScopeDecisionJson();
+            }
+        }
+        org.junit.jupiter.api.Assertions.assertNotNull(snapshot, "决策快照应落库");
+        assertTrue(snapshot.contains("OCR_ENGINE"), snapshot);
+        assertTrue(snapshot.contains("appliedExcludeGlobs"), snapshot);
+        assertTrue(snapshot.contains("package-lock.json"), snapshot);
+        assertTrue(snapshot.contains("DEFAULT_EXCLUDE"), snapshot);
+        assertTrue(snapshot.contains("截断不适用") || snapshot.contains("L0 预算截断不适用"), snapshot);
+    }
+
+    @Test
+    void ocrPathContinuesWithoutExcludesWhenDiffUnavailable()
+    {
+        // Diff 不可用：不加排除规则（引擎全量审查），快照记降级，审查不阻断
+        ReviewTask task = ocrTask(27L);
+        stubOcrPathPrerequisites(task);
+        when(diffFetcher.fetchDiff(any(), any(), eq("abc1234"), eq("def5678")))
+            .thenReturn(GitPullRequestDiffResult.fail("RATE_LIMIT", "limited"));
+        when(reviewEngine.execute(any())).thenReturn(com.acr.review.engine.ReviewEngineResult.success(
+            "open-code-review", "1.8.3", 5L, "{}", "", java.util.Map.of("conclusion", "PASS"), 0));
+
+        service.executeTask(27L);
+
+        org.mockito.ArgumentCaptor<com.acr.review.engine.ReviewEngineRequest> requestCaptor =
+            org.mockito.ArgumentCaptor.forClass(com.acr.review.engine.ReviewEngineRequest.class);
+        verify(reviewEngine).execute(requestCaptor.capture());
+        assertTrue(requestCaptor.getValue().getExcludePatterns().isEmpty(), "降级时不得传排除规则");
+
+        org.mockito.ArgumentCaptor<ReviewTaskRun> runCaptor = org.mockito.ArgumentCaptor.forClass(ReviewTaskRun.class);
+        verify(runMapper, org.mockito.Mockito.atLeastOnce()).updateReviewTaskRun(runCaptor.capture());
+        String snapshot = null;
+        for (ReviewTaskRun candidate : runCaptor.getAllValues())
+        {
+            if (candidate.getScopeDecisionJson() != null)
+            {
+                snapshot = candidate.getScopeDecisionJson();
+            }
+        }
+        org.junit.jupiter.api.Assertions.assertNotNull(snapshot);
+        assertTrue(snapshot.contains("DIFF_UNAVAILABLE"), snapshot);
+
+        org.mockito.ArgumentCaptor<ReviewTask> taskCaptor = org.mockito.ArgumentCaptor.forClass(ReviewTask.class);
+        verify(taskMapper, org.mockito.Mockito.atLeastOnce()).updateTaskExecution(taskCaptor.capture());
+        ReviewTask finished = taskCaptor.getAllValues().get(taskCaptor.getAllValues().size() - 1);
+        org.junit.jupiter.api.Assertions.assertEquals(ReviewPipelineConstants.TASK_SUCCESS, finished.getTaskStatus());
+    }
+
+    /** OCR 快照任务（项目排除两条：docs/** 与 *.generated.java；其余快照列留空走平台默认）。 */
+    private ReviewTask ocrTask(long taskId)
+    {
+        ReviewTask task = new ReviewTask();
+        task.setTaskId(taskId);
+        task.setProjectId(2L);
+        task.setPrNumber(101);
+        task.setBaseSha("abc1234");
+        task.setHeadSha("def5678");
+        task.setSnapshotReviewMode("OCR_ENGINE");
+        task.setSnapshotEngineCode("OPEN_CODE_REVIEW");
+        task.setSnapshotEngineName("open-code-review");
+        task.setSnapshotScopeExcludePatterns("docs/**\n*.generated.java");
+        return task;
+    }
+
+    private void stubOcrPathPrerequisites(ReviewTask task)
+    {
+        when(taskMapper.claimTask(eq(task.getTaskId()), any(), any(Date.class), anyInt())).thenReturn(1);
+        when(taskMapper.selectReviewTaskById(task.getTaskId())).thenReturn(task);
+        when(runMapper.selectMaxAttemptNo(task.getTaskId())).thenReturn(null);
+        ReviewProject project = new ReviewProject();
+        project.setProjectId(2L);
+        project.setStatus("0");
+        project.setProvider("GITHUB");
+        project.setCredentialId(5L);
+        when(projectMapper.selectReviewProjectById(2L)).thenReturn(project);
+        when(credentialService.getPlainToken(5L, true)).thenReturn("token");
+
+        SysAiModelConfig runtimeModel = new SysAiModelConfig();
+        runtimeModel.setModelId(7L);
+        runtimeModel.setModelName("Runtime");
+        runtimeModel.setProvider("deepseek");
+        runtimeModel.setModel("deepseek-chat");
+        runtimeModel.setApiKey("test-api-key");
+        runtimeModel.setEnabled("1");
+        when(modelConfigService.selectDefaultRuntimeConfig()).thenReturn(runtimeModel);
+        when(modelConfigMapper.toEnvironment(runtimeModel)).thenReturn(java.util.Map.of("OCR_MODEL", "deepseek-chat"));
+
+        String workspacePath = "/tmp/ocr-ws-" + task.getTaskId();
+        try
+        {
+            when(workspaceManager.createIsolatedWorkspace()).thenReturn(java.nio.file.Path.of(workspacePath));
+        }
+        catch (java.io.IOException ex)
+        {
+            throw new IllegalStateException(ex);
+        }
+        when(workspacePreparer.prepare(any())).thenReturn(
+            com.acr.review.git.GitPullRequestWorkspaceResult.ok(workspacePath + "/repo", "abc1234", "def5678"));
     }
 
     private ReviewEngineProperties engineProperties()

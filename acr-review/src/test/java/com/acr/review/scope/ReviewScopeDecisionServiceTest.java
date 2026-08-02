@@ -270,6 +270,56 @@ class ReviewScopeDecisionServiceTest
     }
 
     @Test
+    void expandedOverflowYieldsAllNormalFilesNotAbsorbRemainingBudget()
+    {
+        // 两个高影响文件各自可纳入，但累计超出 MAX_DIFF_CHARS：
+        // 高优先级(SECURITY)保留，低优先级(DB_SCRIPT)超限丢弃，普通文件全部让位不顶占剩余预算
+        String padding = "x".repeat(ReviewPipelineConstants.MAX_DIFF_CHARS / 2);
+        String diff = """
+            diff --git a/src/main/java/com/demo/AuthTokenService.java b/src/main/java/com/demo/AuthTokenService.java
+            index 1234567..89abcde 100644
+            --- a/src/main/java/com/demo/AuthTokenService.java
+            +++ b/src/main/java/com/demo/AuthTokenService.java
+            @@ -1,1 +1,1 @@
+            -old
+            +PADDING
+            diff --git a/sql/22_huge_migration.sql b/sql/22_huge_migration.sql
+            index 1234567..89abcde 100644
+            --- a/sql/22_huge_migration.sql
+            +++ b/sql/22_huge_migration.sql
+            @@ -1,1 +1,1 @@
+            -old
+            +PADDING
+            diff --git a/src/main/java/com/demo/PlainService.java b/src/main/java/com/demo/PlainService.java
+            index 1234567..89abcde 100644
+            --- a/src/main/java/com/demo/PlainService.java
+            +++ b/src/main/java/com/demo/PlainService.java
+            @@ -1,1 +1,1 @@
+            -old
+            +new
+            diff --git a/src/main/java/com/demo/PlainController.java b/src/main/java/com/demo/PlainController.java
+            index 1234567..89abcde 100644
+            --- a/src/main/java/com/demo/PlainController.java
+            +++ b/src/main/java/com/demo/PlainController.java
+            @@ -1,1 +1,1 @@
+            -old
+            +new
+            """.replace("PADDING", padding);
+
+        ReviewScopeDecision decision = service.decide(parser.parse(diff), ReviewScopeConfig.defaults());
+
+        // 优先级：SECURITY(安全文件) 纳入；DB_SCRIPT(SQL 迁移) 累计超限被丢；普通文件全部让位
+        assertEquals(1, decision.includedFiles().size(), "仅保留高优先级 expanded: " + decision.includedFiles());
+        assertEquals("src/main/java/com/demo/AuthTokenService.java", decision.includedFiles().get(0));
+        assertTrue(decision.droppedFiles().contains("sql/22_huge_migration.sql"), "低优先级 expanded 累计超限丢弃");
+        assertTrue(decision.droppedFiles().contains("src/main/java/com/demo/PlainService.java"), "普通文件让位");
+        assertTrue(decision.droppedFiles().contains("src/main/java/com/demo/PlainController.java"), "普通文件让位");
+        assertFalse(decision.scopedDiff().contains("PlainService"), "普通文件不得顶占扩展预算");
+        assertFalse(decision.scopedDiff().contains("migration.sql"), "被丢 expanded 不得进入 scoped diff");
+        assertTrue(decision.truncated());
+    }
+
+    @Test
     void allExcludedYieldsEmptyEffectiveScope()
     {
         String diff = """
