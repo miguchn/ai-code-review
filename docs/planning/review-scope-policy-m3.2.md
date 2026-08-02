@@ -1,6 +1,6 @@
 # M3.2 审查范围策略：Diff 增量核心、高影响扩展与问题归属
 
-> **状态（2026-08-02）：步 1–4 已落地，步 5–7 待实施。** 前置：`docs/planning/review-pipeline-m3.md`、`docs/planning/review-scoring-result-protocol.md`。本设计明确审查范围、扩展条件、问题归属与可配置规则；实现按第 8 节分步计划推进。
+> **状态（2026-08-02）：步 1–7 全部落地。** 前置：`docs/planning/review-pipeline-m3.md`、`docs/planning/review-scoring-result-protocol.md`。本设计明确审查范围、扩展条件、问题归属与可配置规则；实现按第 8 节分步计划推进。
 
 ## 1. 目标与成功指标
 
@@ -60,6 +60,8 @@
 - **新增文件的整文件扩展是免费的**：unified diff 的新增文件 hunk 已含全部行，无需拉取全文；全文拉取（L3）仅针对**已存在文件**（签名/安全/配置/依赖/DB 脚本），由执行层按 head SHA 拉取。单文件拉取失败退回 L0（保留其 hunk），快照记 `expansionDegraded`，不阻断审查；
 - **两段式预算**：① 全部纳入文件的 L0 hunk 优先保留，极端超限时从普通文件起按**文件边界**整文件丢弃并记 `droppedFiles`（不切断 hunk）；② L3 扩展全文在剩余预算内按规则优先级（SECURITY > DEPENDENCY > DB_SCRIPT > CONFIG > SIGNATURE）整文件纳入或整文件跳过并记录，不半切文件内容误导模型。
 
+> **L0 预算丢弃优先级（2026-08-02 实施复核修正）**：殤 A 先按规则优先级纳入 expanded 的 L0，单/累计超限的整文件丢弃并置 `expandedOverflow`；殤 B 仅当 expanded 未溢出时，普通文件在剩余预算内纳入（溢出整文件丢）。**expanded 一旦溢出，普通文件全部让位记 `droppedFiles`**，不顶占漏审的扩展预算——保证审查聚焦高影响文件，避免「审了普通文件却漏审高影响」的假完整。该规则只影响超大 PR（L0 累计 > `MAX_DIFF_CHARS`），日常 PR 不触发。
+
 ### 4.2 解析健壮性
 
 GitHub 服务端可能截断超大 Diff（尾部半行/残缺 hunk）。解析器遇不可解析尾部必须 graceful 停止并记 `parseWarnings`，不抛异常；整体解析失败才由执行层降级为全量 Diff 行为（第 9 节）。
@@ -102,6 +104,16 @@ GitHub 服务端可能截断超大 Diff（尾部半行/残缺 hunk）。解析�
 - **空范围**：`effectiveFileCount=0` 时不调用模型，任务/执行记录按 `SUCCESS + PASS` 落库，summary 说明"无有效审查范围"；
 - **决策快照**：`review_task_run.scope_decision_json`（mediumtext，OCR 路径步 6 复用同列），内容 = 决策服务快照 + 扩展文件最终处置（IN_DIFF/FULL/BUDGET_SKIPPED/DEGRADED/FETCH_LIMIT_SKIPPED）+ 生效配置 + `finalDiffChars`；决策异常记 `degraded=DECISION_FAILED`。
 
+### 7.2 步 5-7 实施定稿（2026-08-02 实施前复核补充）
+
+- **归属判定先于 Top 3 截断**：若模型把存量问题排进前三，先截后剔会导致存量占位、其后新增问题丢失。解析管线为：校验 → 按严重度排序 → 逐条归属判定 → 剔除/保留存量 → 新增问题截断 Top 3 → 重排 rank；`focusIssueCount` 只计新增；
+- **`hasCriticalSecurityIssue` 旗标与存量 CRITICAL**：布尔旗标无法关联到具体 issue，打标生效时 `BLOCK` 需「旗标为真 且 存在 origin=NEW 的 CRITICAL」；存量 CRITICAL 不再阻断。未打标（决策降级/无分类器）保持旗标即阻断；
+- **协议双版本兼容**：解析接受 `"1.0"`/`"1.1"`（1.0 为真子集），落库统一 `"1.1"`，避免模型偶发回写旧版本号被误判格式异常；
+- **scopeStats 后端注入**：`result_json.scopeStats`（included/excluded/expanded/truncated/newCount/existingCount/originUnverifiable），计数为截断/剔除前发现总数；决策降级时 scopeStats 与 origin 打标整体缺省；
+- **OCR `--exclude` 语义**（CLI 实跑校准）：逗号分隔 gitignore 风格；平台 glob 语法兼容；含逗号的项目 glob 无法表达，剔除并记 `skippedExcludePatterns`；测试文件 glob 在 `includeTests=N` 时合并传入；
+- **OCR 决策快照独立结构**：`pathMode=OCR_ENGINE` + 分类结果（excluded/expanded/recordOnly）+ `appliedExcludeGlobs` + 生效配置 +「L0 预算截断不适用」说明；不照搬 LLM 的 includedFiles/truncated 字段（CLI 在真实工作区审查 --exclude 之外的全部变更文件）；Diff 不可用或决策异常 → 不加排除规则（引擎全量审查）+ 快照记 `DIFF_UNAVAILABLE`/`DECISION_FAILED`，审查不阻断；
+- **前端展示**：任务详情与记录详情的执行记录表加「范围决策快照」展开行（共享 `ScopeDecisionView` 组件，含生效配置与降级标记）；记录详情重点问题卡片加归属标签，存量问题（`reportExisting=Y` 保留时）独立分区展示、不计入重点问题分级统计；v1.0 历史结果无 origin 不显示标签。
+
 
 ## 8. 分步实现计划
 
@@ -111,9 +123,9 @@ GitHub 服务端可能截断超大 Diff（尾部半行/残缺 hunk）。解析�
 | 2 | 范围决策服务：默认排除 + 项目配置 + 高影响规则 + 优先级截断，输出 scoped diff 与决策快照（`ReviewScopeDecisionService` / `ReviewScopeRules` / `ReviewScopeConfig` / `ReviewScopeDecision` / `GlobPattern`） | 单测覆盖各扩展条件、排除优先级、截断顺序，13 例 | ✅ 已完成（纯确定性代码，未接入执行链，不改变现有行为） |
 | 3 | 项目配置四列 + SQL 脚本（`sql/22_review_scope_config.sql`）+ 快照冻结 + 项目表单「审查范围」tab | SQL 幂等实跑；快照服务/配置转换单测 7 例；表单保存回显联调（归一化生效） | ✅ 已完成 |
 | 4 | LLM 路径接入 scoped diff + 范围指令块 + 决策快照落库（`GitHubFileContentFetcher` / `ReviewScopePromptAssembler` / `executeLlmPath` 接入） | 单测：排除/扩展/降级/空范围/预算跳过/指令块变体 15 例；全量 158 例绿 | ✅ 已完成 |
-| 5 | 归属打标 + 协议 v1.1 + EXISTING 剔除/保留策略 | 解析单测：行号映射、邻近宽限、不可判定计数、v1.0 兼容 | 待实施 |
-| 6 | OCR 路径接入 `--exclude` + 决策快照落库 | 适配器单测断言命令行参数与快照内容 | 待实施 |
-| 7 | 范围决策快照在任务/记录详情可见（纳入/排除/扩展/截断） | 前端构建 + 详情页核对 | 待实施 |
+| 5 | 归属打标（`IssueOriginClassifier`，邻近宽限 ≤3 行）+ 协议 v1.1（topIssues.origin + scopeStats）+ EXISTING 剔除/保留 + v1.0 兼容 | 单测：分类器 9 例、解析管线 5 例、执行链 2 例 | ✅ 已完成 |
+| 6 | OCR 路径接入 `--exclude`（`ReviewScopeRules.mergedExcludeGlobs` + 适配器参数）+ 决策快照落库 | 单测：适配器 2 例、规则合并 4 例、执行链 2 例 | ✅ 已完成 |
+| 7 | 范围决策快照在任务/记录详情可见（`ScopeDecisionView` 展开行 + 归属标签 + 存量分区） | 前端生产构建通过；记录/任务详情 API 透出 `scopeDecisionJson` 联调核对 | ✅ 已完成 |
 
 每步独立可验收；步 1–2 先行合入不改变现有行为，步 4/6 接入后生效。
 

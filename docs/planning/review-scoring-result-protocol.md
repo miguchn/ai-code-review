@@ -1,7 +1,7 @@
 # 统一审查评分与结构化结果协议 — 设计方案
 
-> **状态：已实施并通过后端测试与前端生产构建（2026-08-01）**  
-> 前置：`docs/planning/review-template-config.md`、`docs/planning/review-pipeline-m3.md`  
+> **状态：v1.0 已实施（2026-08-01）；v1.1 已实施（2026-08-02，M3.2 步 5：origin 归属 + scopeStats）**  
+> 前置：`docs/planning/review-template-config.md`、`docs/planning/review-pipeline-m3.md`、`docs/planning/review-scope-policy-m3.2.md`  
 > 目标：在现有项目审查模板 / 任务执行 / 结果展示结构内，建立统一评分标准与可版本化 JSON 结果协议，为后续质量看板、报表、低分预警与通知提供稳定数据基础。
 
 ## 0. 目标与成功指标
@@ -120,6 +120,28 @@
 
 ---
 
+## 5A. JSON 结果协议 v1.1（M3.2 步 5，已实施）
+
+v1.1 是 v1.0 的超集：新增问题归属 `origin` 与范围统计 `scopeStats`，其余字段不变。
+
+### 5A.1 topIssues[].origin
+
+- 取值：`NEW`（本次变更引入）/ `EXISTING`（存量问题）；
+- **归属以后端 Diff 行号映射为唯一判定依据**（`IssueOriginClassifier`，规则见 `review-scope-policy-m3.2.md` §5：新增行命中 → NEW；同一含新增行的 hunk 内且距最近新增行 ≤3 行 → NEW；其余 → EXISTING；文件不在 Diff 或行号缺失 → 按 NEW 计并单列 `originUnverifiable` 计数）；模型可在输出中自报 origin，仅作参考，后端一律覆写；
+- EXISTING 问题：**不进入 Top 3、不计 `focusIssueCount`、不影响评分与结论**；`scope_report_existing=N`（默认）时从结构化结果剔除并计数，`=Y` 时标注保留在 topIssues 尾部（排在新增问题之后、最多 3 条、仅信息展示）；
+- 归属判定在排序后、Top 3 截断前执行：存量问题不占用 Top 3 名额，其后的新增问题依序递补。
+
+### 5A.2 scopeStats（后端注入，模型无需输出）
+
+`result_json.scopeStats`：`includedFiles` / `excludedFiles` / `expandedFiles` / `truncated` / `newCount` / `existingCount` / `originUnverifiable`。计数均为截断/剔除前的发现总数（`focusIssueCount` 仍为 Top 3 截断后的新增问题数）。范围决策降级（全量 Diff）时 `scopeStats` 与 origin 打标整体缺省，结果退化为 v1.0 语义。
+
+### 5A.3 版本兼容与结论调整
+
+- 解析接受 `"1.0"` 与 `"1.1"`（1.0 为 1.1 真子集，origin 缺省视为 NEW），落库与输出统一记 `"1.1"`；历史 v1.0 结果的展示不受影响；
+- 结论规则（§6.3）在归属打标生效时调整为：跳过 origin=EXISTING 的问题；`hasCriticalSecurityIssue=true` 需同时存在 origin=NEW 的 CRITICAL 问题才判 `BLOCK`（存量 CRITICAL 不阻断）。未打标（降级/v1.0）保持旗标即阻断的既有行为。
+
+---
+
 ## 6. 解析、结论与失败语义
 
 ### 6.1 解析流程
@@ -142,8 +164,8 @@
 
 ### 6.3 审查结论（LLM 路径，本期）
 
-- `hasCriticalSecurityIssue == true` → `BLOCK`
-- 否则 Top3 中存在 `CRITICAL`/`HIGH` → `WARN`
+- `hasCriticalSecurityIssue == true` → `BLOCK`（v1.1 打标生效时：需同时存在 origin=NEW 的 CRITICAL 问题，见 §5A.3）
+- 否则 Top3 中存在 `CRITICAL`/`HIGH` → `WARN`（v1.1 起跳过 origin=EXISTING）
 - 否则 → `PASS`
 
 不使用分数线。OCR 路径继续使用现有 `ReviewConclusionResolver`。
