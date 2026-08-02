@@ -44,6 +44,14 @@ public class ReviewTask extends BaseEntity
     private String snapshotModel;
     private String snapshotEngineCode;
     private String snapshotEngineName;
+    /** 快照：审查范围排除 glob（换行分隔）。NULL 表示 M3.2 前冻结，执行层按平台默认处理。 */
+    private String snapshotScopeExcludePatterns;
+    /** 快照：是否审查测试文件（Y/N）。 */
+    private String snapshotScopeIncludeTests;
+    /** 快照：是否上报存量问题（Y/N）。 */
+    private String snapshotScopeReportExisting;
+    /** 快照：高影响扩展（Y/N）。 */
+    private String snapshotScopeExpandEnabled;
 
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private Date startedTime;
@@ -420,6 +428,46 @@ public class ReviewTask extends BaseEntity
     public void setSnapshotEngineCode(String snapshotEngineCode)
     {
         this.snapshotEngineCode = snapshotEngineCode;
+    }
+
+    public String getSnapshotScopeExcludePatterns()
+    {
+        return snapshotScopeExcludePatterns;
+    }
+
+    public void setSnapshotScopeExcludePatterns(String snapshotScopeExcludePatterns)
+    {
+        this.snapshotScopeExcludePatterns = snapshotScopeExcludePatterns;
+    }
+
+    public String getSnapshotScopeIncludeTests()
+    {
+        return snapshotScopeIncludeTests;
+    }
+
+    public void setSnapshotScopeIncludeTests(String snapshotScopeIncludeTests)
+    {
+        this.snapshotScopeIncludeTests = snapshotScopeIncludeTests;
+    }
+
+    public String getSnapshotScopeReportExisting()
+    {
+        return snapshotScopeReportExisting;
+    }
+
+    public void setSnapshotScopeReportExisting(String snapshotScopeReportExisting)
+    {
+        this.snapshotScopeReportExisting = snapshotScopeReportExisting;
+    }
+
+    public String getSnapshotScopeExpandEnabled()
+    {
+        return snapshotScopeExpandEnabled;
+    }
+
+    public void setSnapshotScopeExpandEnabled(String snapshotScopeExpandEnabled)
+    {
+        this.snapshotScopeExpandEnabled = snapshotScopeExpandEnabled;
     }
 
     public String getSnapshotEngineName()

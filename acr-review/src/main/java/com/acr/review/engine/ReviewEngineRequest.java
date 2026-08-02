@@ -1,5 +1,6 @@
 package com.acr.review.engine;
 
+import java.util.List;
 import java.util.Map;
 
 /** 标准审查引擎请求。 */
@@ -12,6 +13,8 @@ public class ReviewEngineRequest
     private String diffContent;
     private String workingDirectory;
     private Map<String, String> modelEnvironment;
+    /** 平台范围决策输出的排除 glob（M3.2 步 6），经 CLI --exclude 传入；空表示不排除。 */
+    private List<String> excludePatterns;
     private int timeoutSeconds;
     private ReviewEngineInvocationType invocationType = ReviewEngineInvocationType.REVIEW;
 
@@ -83,6 +86,16 @@ public class ReviewEngineRequest
     public void setModelEnvironment(Map<String, String> modelEnvironment)
     {
         this.modelEnvironment = modelEnvironment;
+    }
+
+    public List<String> getExcludePatterns()
+    {
+        return excludePatterns;
+    }
+
+    public void setExcludePatterns(List<String> excludePatterns)
+    {
+        this.excludePatterns = excludePatterns;
     }
 
     public int getTimeoutSeconds()

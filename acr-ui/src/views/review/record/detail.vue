@@ -71,14 +71,44 @@
 
                 <div id="focus-issues" class="result-block">
                   <div class="result-block-title">重点问题（Top 3，非全量）</div>
-                  <el-empty v-if="!topIssues.length" description="暂无重点问题" :image-size="48" />
+                  <el-empty v-if="!newIssues.length" description="暂无重点问题" :image-size="48" />
                   <div v-else class="issue-list">
-                    <div v-for="issue in topIssues" :key="issue.rank || issue.title" class="issue-card">
+                    <div v-for="issue in newIssues" :key="issue.rank || issue.title" class="issue-card">
                       <div class="issue-head">
                         <span class="issue-rank">#{{ issue.rank || '--' }}</span>
                         <el-tag v-if="issue.severity" :type="severityTagType(issue.severity)" size="small">
                           {{ severityLabel(issue.severity) }}
                         </el-tag>
+                        <el-tag v-if="issueOriginLabel(issue.origin)" :type="issueOriginTagType(issue.origin)" size="small" effect="plain">
+                          {{ issueOriginLabel(issue.origin) }}
+                        </el-tag>
+                        <span v-if="issue.category" class="issue-category">{{ issue.category }}</span>
+                        <strong class="issue-title">{{ emptyDash(issue.title) }}</strong>
+                      </div>
+                      <p v-if="issue.description" class="issue-text">{{ issue.description }}</p>
+                      <div v-if="issue.filePath || formatIssueLines(issue)" class="issue-locate">
+                        <code v-if="issue.filePath">{{ issue.filePath }}</code>
+                        <span v-if="formatIssueLines(issue)" class="issue-lines">{{ formatIssueLines(issue) }}</span>
+                      </div>
+                      <div v-if="issue.suggestion" class="issue-suggestion">
+                        <span class="issue-field-label">建议</span>
+                        <p class="issue-text">{{ issue.suggestion }}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div v-if="existingIssues.length" class="result-block">
+                  <div class="result-block-title">
+                    存量问题（{{ existingIssues.length }}，不影响评分与结论，仅参考）
+                  </div>
+                  <div class="issue-list">
+                    <div v-for="issue in existingIssues" :key="'existing-' + (issue.rank || issue.title)" class="issue-card issue-card-existing">
+                      <div class="issue-head">
+                        <el-tag v-if="issue.severity" :type="severityTagType(issue.severity)" size="small">
+                          {{ severityLabel(issue.severity) }}
+                        </el-tag>
+                        <el-tag type="info" size="small" effect="plain">存量</el-tag>
                         <span v-if="issue.category" class="issue-category">{{ issue.category }}</span>
                         <strong class="issue-title">{{ emptyDash(issue.title) }}</strong>
                       </div>
@@ -109,9 +139,17 @@
           </el-tab-pane>
 
           <el-tab-pane label="执行记录" name="runs">
-            <p class="section-hint">技术排障信息：状态、模型/引擎、模板、SHA、耗时与失败原因。</p>
+            <p class="section-hint">技术排障信息：状态、模型/引擎、模板、SHA、耗时、范围决策与失败原因。</p>
             <el-empty v-if="!detailRuns.length" description="暂无执行记录" :image-size="64" />
             <el-table v-else :data="detailRuns" border>
+              <el-table-column type="expand">
+                <template #default="scope">
+                  <div class="run-expand">
+                    <div class="run-expand-title">范围决策快照</div>
+                    <ScopeDecisionView :run="scope.row" />
+                  </div>
+                </template>
+              </el-table-column>
               <el-table-column label="次数" prop="attemptNo" width="70" align="center" />
               <el-table-column label="状态" width="100">
                 <template #default="scope">
@@ -147,12 +185,14 @@
 <script setup name="ReviewRecordDetail">
 import { getReviewRecord } from '@/api/review/record'
 import { retryReviewTask } from '@/api/review/task'
+import ScopeDecisionView from '@/views/review/components/ScopeDecisionView.vue'
 import {
   emptyDash, formatCodeChange, formatScore, formatDuration, shortSha,
   showStructuredResult, getScoreDimensions, getReviewSummary, getTopIssues,
   severityLabel, severityTagType, formatIssueLines, pickLatestSuccessRun,
   engineOrModelLabel, templateLabel, buildGithubPrUrl,
-  recordConclusionLabel, recordConclusionTagType
+  recordConclusionLabel, recordConclusionTagType,
+  issueOriginLabel, issueOriginTagType
 } from '@/utils/reviewDisplay'
 
 const { proxy } = getCurrentInstance()
@@ -168,6 +208,8 @@ const activeTab = ref('result')
 const taskId = computed(() => route.params.taskId)
 const resultRun = computed(() => pickLatestSuccessRun(detailRuns.value))
 const topIssues = computed(() => getTopIssues(resultRun.value))
+const newIssues = computed(() => topIssues.value.filter(issue => (issue?.origin || '').toUpperCase() !== 'EXISTING'))
+const existingIssues = computed(() => topIssues.value.filter(issue => (issue?.origin || '').toUpperCase() === 'EXISTING'))
 const prUrl = computed(() => buildGithubPrUrl(detailTask.value || {}))
 
 function loadDetail() {
@@ -282,6 +324,9 @@ watch(() => route.query.focus, () => focusIssuesIfNeeded())
   border-left: 3px solid var(--el-color-primary-light-5);
   border-radius: 6px;
 }
+.issue-card-existing { border-left-color: var(--el-border-color); background: var(--el-fill-color-light); }
+.run-expand { padding: 8px 12px; }
+.run-expand-title { margin-bottom: 8px; font-size: 13px; font-weight: 600; }
 .issue-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 6px; }
 .issue-rank { font-size: 12px; font-weight: 600; color: var(--el-text-color-secondary); }
 .issue-category { font-size: 12px; color: var(--el-text-color-secondary); }

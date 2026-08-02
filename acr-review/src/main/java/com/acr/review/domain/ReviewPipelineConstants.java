@@ -48,6 +48,12 @@ public final class ReviewPipelineConstants
     public static final int MAX_RESULT_JSON_CHARS = 512_000;
     public static final int MAX_DIFF_CHARS = 400_000;
 
+    /** 高影响扩展单文件全文拉取上限（字节）：超出按拉取失败降级，保留 L0 hunk。 */
+    public static final int MAX_EXPANDED_FILE_BYTES = 256 * 1024;
+
+    /** 单次执行允许拉取全文的扩展文件数量上限：超出部分不再拉取，记 FETCH_LIMIT_SKIPPED。 */
+    public static final int MAX_EXPANDED_FETCH_COUNT = 30;
+
     private ReviewPipelineConstants()
     {
     }

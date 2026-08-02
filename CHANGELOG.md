@@ -2,6 +2,16 @@
 
 ## [Unreleased] - 2026-08-02
 
+### M3.2 审查范围策略（设计 + 全部 7 步实现）
+
+- 新增设计文档 `docs/planning/review-scope-policy-m3.2.md`：审查范围默认以本次 Diff 变更行为核心（禁止单文件少量修改即扫描上报整个文件历史问题），高影响变更（新增文件/公共签名/权限安全/配置/依赖/数据库脚本）自动扩展；问题按后端 Diff 行号映射区分新增与存量（协议 v1.1 `origin`），存量默认不进 Top 3 与评分；项目级范围配置随任务快照冻结；LLM 注入 scoped diff、OCR 经 `--exclude` 统一口径，范围决策快照落库
+- 步 1-2 已落地（`com.acr.review.scope`，未接入执行链、不改变现有行为）：统一 Diff 解析器（文件/hunk/右侧变更行区间/新增·删除·改名·二进制·gitlink·mode-only 识别，残缺尾部容错记 warnings）；范围决策服务（记录类→默认排除→项目排除→测试文件→高影响→普通的分类顺序，scoped diff 按文件边界截断，扩展按 SECURITY > DEPENDENCY > DB_SCRIPT > CONFIG > SIGNATURE > NEW_FILE 优先级，决策快照 `toSnapshotMap`）；新增 24 例单测
+- 步 3 项目范围配置：`review_project` 增四列（`scope_exclude_patterns` 换行分隔 glob ≤2000、`scope_include_tests`/`scope_report_existing` 默认 N、`scope_expand_enabled` 默认 Y）并随任务快照同批冻结（`review_task` 增四快照列，可空，NULL 按平台默认执行，历史任务行为不变）；项目表单新增「审查范围」tab，复用 `review:project:add/edit` 权限；webhook 建单链路 `selectByRepository` 同步补列；幂等脚本 `sql/22_review_scope_config.sql`
+- 步 4 LLM 路径接入：执行时 Diff 解析 → 范围决策 → 高影响扩展全文按 head SHA 经 GitHub contents API（raw，单文件 256KB 上限、单次 30 个上限）拉取并竞争剩余预算（整文件纳入或跳过），scoped diff 替换 `{{diff}}` 注入；平台协议前追加范围指令块（只报变更引入问题、上下文行仅供理解、扩展段说明，决策降级时不出现"已筛选"表述）；全部文件被排除时不调用模型按 PASS 落库并说明；决策异常降级全量 Diff 不阻断审查；决策快照（含扩展处置 IN_DIFF/FULL/BUDGET_SKIPPED/DEGRADED/FETCH_LIMIT_SKIPPED 与生效配置）落 `review_task_run.scope_decision_json`；新增 20 例单测
+- 步 5 归属打标与协议 v1.1：`IssueOriginClassifier` 按 Diff 行号映射判定问题归属（命中新增行、或同一含新增行 hunk 内距最近新增行 ≤3 行 → NEW；扩展全文文件整体 NEW；文件不在 Diff 或行号缺失按 NEW 计并单列 originUnverifiable；其余 EXISTING）；归属判定在排序后、Top 3 截断前执行，存量问题不占 Top 3 名额；EXISTING 不进 Top 3、不计 focusIssueCount、不影响评分与结论（`scope_report_existing=Y` 时标注保留仅信息展示）；`topIssues[].origin` + 后端注入 `scopeStats`；`hasCriticalSecurityIssue` 旗标在打标生效时需存在新增 CRITICAL 才阻断；解析兼容 1.0/1.1 双版本，落库统一 1.1；新增 16 例单测
+- 步 6 OCR 路径范围接入：平台默认排除 + 测试文件（按开关）+ 项目排除合并后经 CLI 原生 `--exclude` 传入（逗号分隔 gitignore 风格，含逗号 glob 剔除并记快照）；OCR 决策快照独立结构落 `scope_decision_json`（分类结果 + 生效排除规则数 + 生效配置 + 截断不适用说明）；Diff 不可用或决策异常时不加排除规则、引擎全量审查不阻断；新增 8 例单测
+- 步 7 范围决策前端可见：任务详情与记录详情的执行记录表新增「范围决策快照」展开行（共享 `ScopeDecisionView` 组件：纳入/排除/扩展/记录类/截断/降级/生效配置）；记录详情重点问题卡片新增归属标签（新增/存量），存量问题独立分区展示且不计入重点问题分级统计；v1.0 历史结果不显示归属标签
+
 ### M3.1 审查任务与审查记录体验优化
 
 - 审查任务收敛为执行队列：默认仅展示待执行/执行中/失败，列表字段精简为项目、PR、分支、状态、步骤、执行次数、失败原因、创建时间与操作

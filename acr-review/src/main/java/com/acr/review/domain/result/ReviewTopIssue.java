@@ -13,6 +13,8 @@ public class ReviewTopIssue
     private Integer endLine;
     private String evidence;
     private String suggestion;
+    /** 归属（协议 v1.1）：NEW=本次变更引入，EXISTING=存量。由后端行号映射覆写，v1.0 结果缺省视为 NEW。 */
+    private String origin;
 
     public Integer getRank()
     {
@@ -112,5 +114,15 @@ public class ReviewTopIssue
     public void setSuggestion(String suggestion)
     {
         this.suggestion = suggestion;
+    }
+
+    public String getOrigin()
+    {
+        return origin;
+    }
+
+    public void setOrigin(String origin)
+    {
+        this.origin = origin;
     }
 }

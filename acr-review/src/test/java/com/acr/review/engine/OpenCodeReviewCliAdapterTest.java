@@ -113,6 +113,37 @@ class OpenCodeReviewCliAdapterTest
         assertFalse(String.join(" ", command).contains("|"));
     }
 
+    @Test
+    void appendsExcludePatternsAsSingleCommaJoinedArgument()
+    {
+        // M3.2 步 6：平台排除规则经 CLI 原生 --exclude 传入，逗号分隔、单参数（不拼 shell）
+        Path workspace = createWorkspace();
+        ReviewEngineRequest request = new ReviewEngineRequest();
+        request.setWorkingDirectory(workspace.toString());
+        request.setInvocationType(ReviewEngineInvocationType.REVIEW);
+        request.setBaseSha("abc1234");
+        request.setHeadSha("def5678");
+        request.setExcludePatterns(List.of("**/package-lock.json", "**/src/test/**", "docs/**"));
+
+        List<String> command = adapter.buildCommand(request, workspace);
+        int excludeIndex = command.indexOf("--exclude");
+        assertTrue(excludeIndex > 0, "应包含 --exclude 参数: " + command);
+        assertEquals("**/package-lock.json,**/src/test/**,docs/**", command.get(excludeIndex + 1));
+    }
+
+    @Test
+    void omitsExcludeFlagWhenPatternsEmpty()
+    {
+        Path workspace = createWorkspace();
+        ReviewEngineRequest request = new ReviewEngineRequest();
+        request.setWorkingDirectory(workspace.toString());
+        request.setInvocationType(ReviewEngineInvocationType.REVIEW);
+        request.setExcludePatterns(List.of());
+
+        List<String> command = adapter.buildCommand(request, workspace);
+        assertFalse(command.contains("--exclude"));
+    }
+
     private Path createWorkspace()
     {
         try

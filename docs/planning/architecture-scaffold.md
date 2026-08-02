@@ -132,6 +132,7 @@ ai-code-review/
 │   ├── github-pr-webhook-m2.md
 │   ├── review-pipeline-m3.md
 │   ├── review-record-experience-m3.1.md
+│   ├── review-scope-policy-m3.2.md
 │   ├── review-template-config.md
 │   └── review-scoring-result-protocol.md
 ├── skills/

@@ -83,6 +83,58 @@ class ReviewTaskSnapshotServiceImplTest
         assertNull(task.getSnapshotPromptContent());
     }
 
+    @Test
+    void freezeScopeSnapshotDefaultsWhenProjectUnset()
+    {
+        ReviewProject project = llmProject();
+        when(modelConfigService.selectRuntimeConfigById(3L)).thenReturn(enabledModel());
+        when(templateService.selectEnabledTemplateById(4L)).thenReturn(enabledTemplate());
+        ReviewTask task = new ReviewTask();
+
+        service.freezeExecutionSnapshot(project, task);
+
+        assertNull(task.getSnapshotScopeExcludePatterns());
+        assertEquals("N", task.getSnapshotScopeIncludeTests());
+        assertEquals("N", task.getSnapshotScopeReportExisting());
+        assertEquals("Y", task.getSnapshotScopeExpandEnabled());
+    }
+
+    @Test
+    void freezeScopeSnapshotCopiesAndNormalizes()
+    {
+        ReviewProject project = llmProject();
+        project.setScopeExcludePatterns(" docs/** \r\n\r\n*.generated.java\ndocs/**\n");
+        project.setScopeIncludeTests("Y");
+        project.setScopeReportExisting("Y");
+        project.setScopeExpandEnabled("N");
+        when(modelConfigService.selectRuntimeConfigById(3L)).thenReturn(enabledModel());
+        when(templateService.selectEnabledTemplateById(4L)).thenReturn(enabledTemplate());
+        ReviewTask task = new ReviewTask();
+
+        service.freezeExecutionSnapshot(project, task);
+
+        assertEquals("docs/**\n*.generated.java", task.getSnapshotScopeExcludePatterns());
+        assertEquals("Y", task.getSnapshotScopeIncludeTests());
+        assertEquals("Y", task.getSnapshotScopeReportExisting());
+        assertEquals("N", task.getSnapshotScopeExpandEnabled());
+    }
+
+    @Test
+    void freezeScopeSnapshotAppliesToOcrPath()
+    {
+        ReviewProject project = new ReviewProject();
+        project.setReviewMode("OCR_ENGINE");
+        project.setScopeExcludePatterns("vendor/**");
+        ReviewTask task = new ReviewTask();
+
+        service.freezeExecutionSnapshot(project, task);
+
+        assertEquals("vendor/**", task.getSnapshotScopeExcludePatterns());
+        assertEquals("N", task.getSnapshotScopeIncludeTests());
+        assertEquals("N", task.getSnapshotScopeReportExisting());
+        assertEquals("Y", task.getSnapshotScopeExpandEnabled());
+    }
+
     private ReviewProject llmProject()
     {
         ReviewProject project = new ReviewProject();

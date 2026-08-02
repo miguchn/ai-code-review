@@ -266,6 +266,44 @@
             </el-form-item>
           </el-tab-pane>
 
+          <el-tab-pane label="审查范围" name="scope">
+            <el-form-item label="说明">
+              <div class="inline-tip">
+                默认仅审查本次 PR 变更内容，不扫描整个文件的历史问题；锁文件、依赖目录与构建产物由平台统一排除。以下配置随任务快照冻结，修改仅影响新建任务。
+              </div>
+            </el-form-item>
+            <el-form-item label="排除路径" prop="scopeExcludePatterns">
+              <div class="form-control-block">
+                <el-input v-model="form.scopeExcludePatterns" type="textarea" :rows="4" maxlength="2000" show-word-limit
+                  :placeholder="'每行一个 glob 规则，例如：\ndocs/**\n*.generated.java\nsrc/main/resources/static/**'" />
+                <div class="inline-tip">在平台默认排除之上追加，命中的文件不进入审查。留空表示不追加。</div>
+              </div>
+            </el-form-item>
+            <el-form-item label="高影响扩展">
+              <div class="form-control-block">
+                <el-switch v-model="form.scopeExpandEnabled" active-value="Y" inactive-value="N"
+                  active-text="启用" inactive-text="关闭" />
+                <div class="inline-tip">
+                  新增文件、公共方法/接口签名、权限安全逻辑、配置文件、依赖声明、数据库脚本变更时，自动扩展为整文件审查。建议保持启用。
+                </div>
+              </div>
+            </el-form-item>
+            <el-form-item label="审查测试文件">
+              <div class="form-control-block">
+                <el-switch v-model="form.scopeIncludeTests" active-value="Y" inactive-value="N"
+                  active-text="审查" inactive-text="不审查" />
+                <div class="inline-tip">关闭时自动排除 *Test.java、*_test.go、*.test.* 等测试文件的变更。</div>
+              </div>
+            </el-form-item>
+            <el-form-item label="上报存量问题">
+              <div class="form-control-block">
+                <el-switch v-model="form.scopeReportExisting" active-value="Y" inactive-value="N"
+                  active-text="上报" inactive-text="不上报" />
+                <div class="inline-tip">开启后保留变更行之外的历史存量问题并标注来源；默认剔除，审查结果只聚焦本次变更。</div>
+              </div>
+            </el-form-item>
+          </el-tab-pane>
+
           <el-tab-pane label="审查执行" name="execution">
             <el-form-item label="说明">
               <div class="inline-tip">
@@ -394,7 +432,7 @@ const branchDialogOpen = ref(false)
 const branchSearch = ref('')
 const advancedSections = ref([])
 const activeTab = ref('basic')
-const tabOrder = ['basic', 'repository', 'webhook', 'execution']
+const tabOrder = ['basic', 'repository', 'webhook', 'scope', 'execution']
 const options = reactive({
   businessSystems: [], departments: [], owners: [], credentials: [], models: [], templates: [],
   longLivedBranches: [], robotBranchPrefixes: [], prEvents: [], webhookCallbackUrl: ''
@@ -511,7 +549,8 @@ function reset() {
     status: '1', lastBranchSyncStatus: 'UNSYNCED',
     lastBranchSyncMessage: undefined, lastBranchSyncTime: undefined, remark: undefined,
     webhookSecret: undefined, webhookSecretConfigured: false, webhookCallbackUrl: undefined,
-    lastWebhookTime: undefined, lastWebhookResult: undefined
+    lastWebhookTime: undefined, lastWebhookResult: undefined,
+    scopeExcludePatterns: undefined, scopeIncludeTests: 'N', scopeReportExisting: 'N', scopeExpandEnabled: 'Y'
   }
   activeTab.value = 'basic'
   repositoryInfoLoaded.value = false
@@ -549,6 +588,9 @@ function handleUpdate(row) {
     project.prTargetBranches = splitBranches(project.prTargetBranches)
     project.reviewMode = normalizeReviewMode(project.reviewMode)
     project.primaryStack = project.primaryStack || 'FULLSTACK'
+    project.scopeIncludeTests = project.scopeIncludeTests || 'N'
+    project.scopeReportExisting = project.scopeReportExisting || 'N'
+    project.scopeExpandEnabled = project.scopeExpandEnabled || 'Y'
     if (project.reviewMode === 'OCR_ENGINE') {
       project.modelId = undefined
       project.templateId = undefined

@@ -39,4 +39,28 @@ class ReviewPromptComposerTest
         assertTrue(finalPrompt.contains("主要评估注入、越权、敏感信息泄露及其他安全风险"));
         assertTrue(finalPrompt.contains("protocolVersion"));
     }
+
+    @Test
+    void composeWithScopeInsertsInstructionBeforeProtocol()
+    {
+        String finalPrompt = composer.composeWithScope("审查正文", true, true);
+
+        int scopeIndex = finalPrompt.indexOf("【审查范围说明");
+        int protocolIndex = finalPrompt.indexOf("平台公共评分标准与输出协议");
+        assertTrue(scopeIndex > 0, "应含范围指令块");
+        assertTrue(protocolIndex > scopeIndex, "范围指令块应位于输出协议之前");
+        assertTrue(finalPrompt.contains("已经过平台范围筛选"));
+        assertTrue(finalPrompt.contains("高影响扩展文件完整内容"));
+    }
+
+    @Test
+    void composeWithScopeOmitsFilteredNoteWhenDegraded()
+    {
+        // 决策失败降级全量 Diff 时：不得出现"已筛选"表述，但"只报变更引入问题"约束保留
+        String finalPrompt = composer.composeWithScope("审查正文", false, false);
+
+        assertFalse(finalPrompt.contains("已经过平台范围筛选"));
+        assertTrue(finalPrompt.contains("只报告本次变更引入的问题"));
+        assertFalse(finalPrompt.contains("高影响扩展文件完整内容"));
+    }
 }

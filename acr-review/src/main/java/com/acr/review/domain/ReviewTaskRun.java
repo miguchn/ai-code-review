@@ -36,6 +36,8 @@ public class ReviewTaskRun extends BaseEntity
     private String snapshotHeadSha;
     private String resultSummary;
     private String resultJson;
+    /** 范围决策快照 JSON：纳入/排除/扩展/截断及原因（M3.2，LLM 与 OCR 路径共用）。 */
+    private String scopeDecisionJson;
     private Integer totalScore;
     private Integer scoreCorrectness;
     private Integer scoreSecurity;
@@ -330,6 +332,16 @@ public class ReviewTaskRun extends BaseEntity
     public void setResultJson(String resultJson)
     {
         this.resultJson = resultJson;
+    }
+
+    public String getScopeDecisionJson()
+    {
+        return scopeDecisionJson;
+    }
+
+    public void setScopeDecisionJson(String scopeDecisionJson)
+    {
+        this.scopeDecisionJson = scopeDecisionJson;
     }
 
     public Integer getTotalScore()
