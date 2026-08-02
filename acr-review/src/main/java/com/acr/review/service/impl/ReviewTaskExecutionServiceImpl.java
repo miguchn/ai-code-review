@@ -3,6 +3,7 @@ package com.acr.review.service.impl;
 import java.nio.file.Path;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Semaphore;
 import org.slf4j.Logger;
@@ -20,6 +21,7 @@ import com.acr.review.domain.ReviewTask;
 import com.acr.review.domain.ReviewTaskRun;
 import com.acr.review.domain.result.ReviewScoreDimension;
 import com.acr.review.domain.result.ReviewScoreResult;
+import com.acr.review.domain.result.ReviewScopeStats;
 import com.acr.review.engine.OpenCodeReviewCliAdapter;
 import com.acr.review.engine.OcrModelConfigMapper;
 import com.acr.review.engine.ReviewEngineFailureType;
@@ -42,10 +44,12 @@ import com.acr.review.mapper.ReviewProjectMapper;
 import com.acr.review.mapper.ReviewTaskMapper;
 import com.acr.review.mapper.ReviewTaskRunMapper;
 import com.acr.review.scope.DiffParseResult;
+import com.acr.review.scope.IssueOriginClassifier;
 import com.acr.review.scope.ReviewScopeConfig;
 import com.acr.review.scope.ReviewScopeDecision;
 import com.acr.review.scope.ReviewScopeDecisionService;
 import com.acr.review.scope.ReviewScopePromptAssembler;
+import com.acr.review.scope.ReviewScopeRules;
 import com.acr.review.scope.UnifiedDiffParser;
 import com.acr.review.service.IGitCredentialService;
 import com.acr.review.service.IReviewTaskExecutionService;
@@ -307,6 +311,9 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         updateStep(task, run, ReviewPipelineConstants.STEP_PREPARE_WORKSPACE);
         // 与大模型路径共用同一 PR 详情请求结果：补充提交者/增删行/Commit Message，不额外扩请求。
         applyPrMetadata(task, run, plan);
+        // M3.2 步 6：平台范围决策 → --exclude 规则 + 决策快照落库。
+        // 决策依赖 Compare API 的 Diff，仅用于分类；失败时不加排除规则（保持引擎全量审查），不阻断。
+        List<String> ocrExcludePatterns = resolveOcrScope(task, run, plan);
         Path workspace = workspaceManager.createIsolatedWorkspace();
         boolean acquired = false;
         try
@@ -337,6 +344,7 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
             request.setProjectKey(String.valueOf(task.getProjectId()));
             request.setRepositoryKey(plan.repository().owner() + "/" + plan.repository().repository());
             request.setModelEnvironment(plan.modelEnvironment());
+            request.setExcludePatterns(ocrExcludePatterns);
             request.setTimeoutSeconds(engineProperties.getDefaultTimeoutSeconds());
             request.setInvocationType(ReviewEngineInvocationType.REVIEW);
 
@@ -421,14 +429,15 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
             return;
         }
 
-        ReviewScoreParseResult parseResult = scoreResultParser.parse(llmResult.getContent());
+        ReviewScoreParseResult parseResult = scoreResultParser.parse(llmResult.getContent(),
+            scope.originClassifier(), scope.reportExisting());
         if (!parseResult.isSuccess())
         {
             persistLlmFormatFailure(task, run, beginMs, parseResult,
                 Math.max(llmResult.getLatencyMs(), System.currentTimeMillis() - beginMs));
             return;
         }
-        persistLlmSuccess(task, run, beginMs, parseResult,
+        persistLlmSuccess(task, run, beginMs, parseResult, scope,
             Math.max(llmResult.getLatencyMs(), System.currentTimeMillis() - beginMs));
     }
 
@@ -436,6 +445,7 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
      * 范围决策（M3.2）：统一 Diff 解析 → 文件级排除/扩展决策 → 高影响扩展全文按 head SHA 拉取并竞争剩余预算。
      * 任何内部异常都降级为全量 Diff（scopeApplied=false），保证审查不中断；
      * 决策结果（含降级原因）始终通过 ScopeResolution.snapshot 落库，可回查。
+     * 成功时同时产出归属打标分类器与范围统计基数（步 5）：扩展全文纳入（FULL）的文件整体视为 NEW。
      */
     private ScopeResolution resolveScope(ReviewTask task, ExecutionPlan plan, String rawDiff)
     {
@@ -465,8 +475,21 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
             ReviewScopePromptAssembler.ReviewScopeAssembly assembly =
                 scopeAssembler.assemble(decision, fetchedContents, fetchFailures);
             boolean emptyScope = decision.effectiveFileCount() == 0;
+
+            java.util.Set<String> fullContentPaths = assembly.dispositions().stream()
+                .filter(disposition -> ReviewScopePromptAssembler.STATUS_FULL.equals(disposition.status()))
+                .map(ReviewScopePromptAssembler.ExpandedFileDisposition::path)
+                .collect(java.util.stream.Collectors.toSet());
+            IssueOriginClassifier originClassifier = new IssueOriginClassifier(parsed, fullContentPaths);
+            ReviewScopeStats scopeStatsBase = new ReviewScopeStats();
+            scopeStatsBase.setIncludedFiles(decision.includedFiles().size());
+            scopeStatsBase.setExcludedFiles(decision.excludedFiles().size());
+            scopeStatsBase.setExpandedFiles(decision.expandedFiles().size());
+            scopeStatsBase.setTruncated(decision.truncated());
+
             return new ScopeResolution(true, assembly.diffForPrompt(), emptyScope,
-                assembly.hasFullContent(), buildScopeSnapshot(decision, assembly, config));
+                assembly.hasFullContent(), originClassifier, config.reportExisting(), scopeStatsBase,
+                buildScopeSnapshot(decision, assembly, config));
         }
         catch (RuntimeException ex)
         {
@@ -474,7 +497,7 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
             Map<String, Object> snapshot = new java.util.LinkedHashMap<>();
             snapshot.put("degraded", "DECISION_FAILED");
             snapshot.put("reason", StringUtils.defaultIfEmpty(ex.getMessage(), ex.getClass().getSimpleName()));
-            return new ScopeResolution(false, rawDiff, false, false, snapshot);
+            return new ScopeResolution(false, rawDiff, false, false, null, false, null, snapshot);
         }
     }
 
@@ -511,8 +534,92 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         return snapshot;
     }
 
-    /** 无有效审查范围：不调用模型，按通过落库并在摘要说明原因；决策快照已在调用前落库。 */
-    private void persistEmptyScopeSuccess(ReviewTask task, ReviewTaskRun run, long beginMs)
+    /**
+     * OCR 路径范围决策（M3.2 步 6）：拉取 Compare Diff 仅用于平台分类决策，
+     * 输出 CLI --exclude 规则集并落决策快照（与 LLM 路径同列、键结构对齐）。
+     * Diff 不可用或决策异常时不加排除规则（引擎在真实工作区全量审查），审查不阻断。
+     */
+    private List<String> resolveOcrScope(ReviewTask task, ReviewTaskRun run, ExecutionPlan plan)
+    {
+        try
+        {
+            GitPullRequestDiffResult diffResult = diffFetcher.fetchDiff(
+                plan.repository(), plan.token(), task.getBaseSha(), task.getHeadSha());
+            if (!diffResult.success() || StringUtils.isEmpty(diffResult.diffContent()))
+            {
+                Map<String, Object> snapshot = new java.util.LinkedHashMap<>();
+                snapshot.put("pathMode", ReviewPipelineConstants.REVIEW_MODE_OCR_ENGINE);
+                snapshot.put("degraded", "DIFF_UNAVAILABLE");
+                snapshot.put("reason", StringUtils.defaultIfEmpty(diffResult.message(), "PR Diff 为空或不可用"));
+                run.setScopeDecisionJson(toJsonQuietly(snapshot));
+                runMapper.updateReviewTaskRun(run);
+                log.info("OCR 范围决策跳过（Diff 不可用），引擎按全量审查, taskId={}", task.getTaskId());
+                return List.of();
+            }
+
+            DiffParseResult parsed = diffParser.parse(diffResult.diffContent());
+            ReviewScopeConfig config = ReviewScopeConfig.fromTaskSnapshot(task);
+            ReviewScopeDecision decision = scopeDecisionService.decide(parsed, config);
+
+            // --exclude 为逗号分隔参数，含逗号的 glob 无法表达，剔除并记快照。
+            List<String> usable = new java.util.ArrayList<>();
+            List<String> skipped = new java.util.ArrayList<>();
+            for (String pattern : ReviewScopeRules.mergedExcludeGlobs(config))
+            {
+                if (pattern.contains(","))
+                {
+                    skipped.add(pattern);
+                }
+                else
+                {
+                    usable.add(pattern);
+                }
+            }
+            run.setScopeDecisionJson(toJsonQuietly(buildOcrScopeSnapshot(decision, config, usable, skipped)));
+            runMapper.updateReviewTaskRun(run);
+            return List.copyOf(usable);
+        }
+        catch (RuntimeException ex)
+        {
+            log.warn("OCR 范围决策失败，引擎按全量审查, taskId={}", task.getTaskId(), ex);
+            Map<String, Object> snapshot = new java.util.LinkedHashMap<>();
+            snapshot.put("pathMode", ReviewPipelineConstants.REVIEW_MODE_OCR_ENGINE);
+            snapshot.put("degraded", "DECISION_FAILED");
+            snapshot.put("reason", StringUtils.defaultIfEmpty(ex.getMessage(), ex.getClass().getSimpleName()));
+            run.setScopeDecisionJson(toJsonQuietly(snapshot));
+            runMapper.updateReviewTaskRun(run);
+            return List.of();
+        }
+    }
+
+    /**
+     * OCR 决策快照：分类结果 + 实际生效的排除规则数 + 生效配置。
+     * 不照搬 LLM 的 L0 截断字段——OCR 由引擎在真实工作区审查 --exclude 之外的变更文件，
+     * 平台字符预算截断不适用；高影响扩展在工作区全文自然可见，无需平台拉取。
+     */
+    private Map<String, Object> buildOcrScopeSnapshot(ReviewScopeDecision decision, ReviewScopeConfig config,
+                                                      List<String> usablePatterns, List<String> skippedPatterns)
+    {
+        Map<String, Object> snapshot = new java.util.LinkedHashMap<>();
+        snapshot.put("pathMode", ReviewPipelineConstants.REVIEW_MODE_OCR_ENGINE);
+        snapshot.put("excludedFiles", decision.excludedFiles().stream()
+            .map(file -> Map.of("path", file.path(), "reason", file.reason())).toList());
+        snapshot.put("expandedFiles", decision.expandedFiles().stream()
+            .map(file -> Map.of("path", file.path(), "rule", file.rule())).toList());
+        snapshot.put("recordOnlyFiles", decision.recordOnlyFiles().stream()
+            .map(file -> Map.of("path", file.path(), "reason", file.reason())).toList());
+        snapshot.put("appliedExcludeGlobs", usablePatterns.size());
+        snapshot.put("skippedExcludePatterns", skippedPatterns);
+        snapshot.put("note", "OCR 由引擎在真实工作区审查 --exclude 之外的变更文件，平台 L0 预算截断不适用；高影响扩展文件全文在工作区自然可见");
+        snapshot.put("config", Map.of(
+            "excludePatterns", config.excludePatterns(),
+            "includeTests", config.includeTests(),
+            "reportExisting", config.reportExisting(),
+            "expandEnabled", config.expandEnabled()));
+        return snapshot;
+    }
+
+    /** 无有效审查范围：不调用模型，按通过落库并在摘要说明原因；决策快照已在调用前落库。 */private void persistEmptyScopeSuccess(ReviewTask task, ReviewTaskRun run, long beginMs)
     {
         updateStep(task, run, ReviewPipelineConstants.STEP_PERSIST_RESULT);
         long duration = System.currentTimeMillis() - beginMs;
@@ -681,10 +788,19 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
     }
 
     private void persistLlmSuccess(ReviewTask task, ReviewTaskRun run, long beginMs,
-                                   ReviewScoreParseResult parseResult, long durationHint)
+                                   ReviewScoreParseResult parseResult, ScopeResolution scope, long durationHint)
     {
         updateStep(task, run, ReviewPipelineConstants.STEP_PERSIST_RESULT);
         ReviewScoreResult result = parseResult.getResult();
+        // 范围统计（协议 v1.1）：决策侧计数来自范围决策，归属计数来自解析打标；降级时整体缺省。
+        if (scope.scopeStatsBase() != null)
+        {
+            ReviewScopeStats stats = scope.scopeStatsBase();
+            stats.setNewCount(parseResult.getNewCount());
+            stats.setExistingCount(parseResult.getExistingCount());
+            stats.setOriginUnverifiable(parseResult.getOriginUnverifiableCount());
+            result.setScopeStats(stats);
+        }
         String conclusion = scoreResultParser.resolveConclusion(result);
         String summary = scoreResultParser.summarize(result, conclusion);
         long duration = Math.max(durationHint, System.currentTimeMillis() - beginMs);
@@ -960,12 +1076,17 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
     /**
      * 范围决策输出。
      * scopeApplied=false 表示决策失败降级为全量 Diff；emptyScope=true 表示全部文件被排除/仅记录类，跳过模型调用。
+     * originClassifier 为归属打标分类器（降级时为 null，解析退化为 v1.0 行为）；
+     * scopeStatsBase 为范围统计的决策侧计数（归属计数在模型结果解析后回填）。
      */
     private record ScopeResolution(
         boolean scopeApplied,
         String diffForPrompt,
         boolean emptyScope,
         boolean hasFullContent,
+        IssueOriginClassifier originClassifier,
+        boolean reportExisting,
+        ReviewScopeStats scopeStatsBase,
         Map<String, Object> snapshot
     )
     {

@@ -3,7 +3,7 @@ package com.acr.review.domain.result;
 import java.util.ArrayList;
 import java.util.List;
 
-/** 统一审查评分结果协议 DTO（protocolVersion 1.0）。 */
+/** 统一审查评分结果协议 DTO（protocolVersion 1.1，兼容解析 1.0）。 */
 public class ReviewScoreResult
 {
     private String protocolVersion;
@@ -13,6 +13,8 @@ public class ReviewScoreResult
     private List<ReviewTopIssue> topIssues = new ArrayList<>();
     private Integer focusIssueCount;
     private Boolean hasCriticalSecurityIssue;
+    /** 范围统计（v1.1，后端注入；无范围决策时缺省）。 */
+    private ReviewScopeStats scopeStats;
 
     public String getProtocolVersion()
     {
@@ -82,5 +84,15 @@ public class ReviewScoreResult
     public void setHasCriticalSecurityIssue(Boolean hasCriticalSecurityIssue)
     {
         this.hasCriticalSecurityIssue = hasCriticalSecurityIssue;
+    }
+
+    public ReviewScopeStats getScopeStats()
+    {
+        return scopeStats;
+    }
+
+    public void setScopeStats(ReviewScopeStats scopeStats)
+    {
+        this.scopeStats = scopeStats;
     }
 }

@@ -1,5 +1,6 @@
 package com.acr.review.scope;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -171,5 +172,28 @@ public final class ReviewScopeRules
             }
         }
         return false;
+    }
+
+    /**
+     * OCR 路径 --exclude 用的完整排除规则集（M3.2 步 6）：
+     * 平台默认排除 + 测试文件（scope_include_tests=N 时）+ 项目追加，去重保序。
+     * 与决策服务的排除判定保持同一数据源，保证两条路径口径一致。
+     */
+    public static List<String> mergedExcludeGlobs(ReviewScopeConfig config)
+    {
+        ReviewScopeConfig effective = config == null ? ReviewScopeConfig.defaults() : config;
+        List<String> merged = new ArrayList<>(DEFAULT_EXCLUDE_GLOBS);
+        if (!effective.includeTests())
+        {
+            merged.addAll(TEST_FILE_GLOBS);
+        }
+        for (String pattern : effective.excludePatterns())
+        {
+            if (!merged.contains(pattern))
+            {
+                merged.add(pattern);
+            }
+        }
+        return List.copyOf(merged);
     }
 }

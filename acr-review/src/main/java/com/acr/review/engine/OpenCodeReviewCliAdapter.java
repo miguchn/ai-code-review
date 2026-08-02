@@ -149,6 +149,13 @@ public class OpenCodeReviewCliAdapter implements ReviewEngine
             args.add("--to");
             args.add(request.getHeadSha());
         }
+        // M3.2 步 6：平台范围决策的排除规则经 CLI 原生 --exclude 传入（逗号分隔 gitignore 风格）。
+        // 含逗号的 glob 无法在该参数中表达，由执行层提前剔除，此处不再转义。
+        if (request.getExcludePatterns() != null && !request.getExcludePatterns().isEmpty())
+        {
+            args.add("--exclude");
+            args.add(String.join(",", request.getExcludePatterns()));
+        }
         if (!preview && request.getDiffContent() != null && !request.getDiffContent().isBlank())
         {
             writeDiffPatch(workingDirectory, request.getDiffContent());

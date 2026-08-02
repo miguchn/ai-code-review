@@ -56,6 +56,14 @@
           <p class="section-hint">仅展示每次 attempt 的技术信息。完整评分与重点问题请到审查记录查看。</p>
           <el-empty v-if="!detailRuns.length" description="暂无执行记录（待执行任务开始后会出现）" :image-size="64" />
           <el-table v-else :data="detailRuns" border>
+            <el-table-column type="expand">
+              <template #default="scope">
+                <div class="run-expand">
+                  <div class="run-expand-title">范围决策快照</div>
+                  <ScopeDecisionView :run="scope.row" />
+                </div>
+              </template>
+            </el-table-column>
             <el-table-column label="次数" prop="attemptNo" width="70" align="center" />
             <el-table-column label="状态" width="100">
               <template #default="scope">
@@ -90,6 +98,7 @@
 <script setup name="ReviewTaskDetail">
 import { getReviewTask, retryReviewTask } from '@/api/review/task'
 import auth from '@/plugins/auth'
+import ScopeDecisionView from '@/views/review/components/ScopeDecisionView.vue'
 import {
   emptyDash, formatDuration, formatCodeChange, normalizeMode,
   shortSha, engineOrModelLabel, templateLabel
@@ -215,4 +224,6 @@ watch(taskId, () => loadDetail(), { immediate: true })
 .failure-message { color: var(--el-color-danger); }
 .empty-tip { color: var(--el-text-color-placeholder); }
 .action-wrap { display: inline-block; }
+.run-expand { padding: 8px 12px; }
+.run-expand-title { margin-bottom: 8px; font-size: 13px; font-weight: 600; }
 </style>

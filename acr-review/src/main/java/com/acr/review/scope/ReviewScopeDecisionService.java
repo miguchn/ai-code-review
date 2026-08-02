@@ -75,18 +75,22 @@ public class ReviewScopeDecisionService
 
         expanded.sort(Comparator.comparingInt(candidate -> RULE_PRIORITY.indexOf(candidate.rule())));
 
+        // L0 预算两段式（设计 4.1①「从普通文件起丢」）：
+        // 段 A：expanded 按规则优先级占预算，单/累计超限的整文件丢弃并置 expandedOverflow；
+        // 段 B：仅当 expanded 未溢出时，普通文件在剩余预算内纳入（溢出整文件丢）；
+        // expanded 一旦溢出，普通文件全部让位记 dropped——保证审查聚焦高影响，不顶占漏审的扩展预算。
         StringBuilder scopedDiff = new StringBuilder();
         List<String> includedFiles = new ArrayList<>();
         List<String> droppedFiles = new ArrayList<>();
-        List<Candidate> ordered = new ArrayList<>(expanded);
-        ordered.addAll(normal);
-        for (Candidate candidate : ordered)
+        boolean expandedOverflow = false;
+        for (Candidate candidate : expanded)
         {
             String section = candidate.file().rawSection();
             int nextLength = scopedDiff.length() + section.length() + (scopedDiff.length() == 0 ? 0 : 1);
             if (nextLength > ReviewPipelineConstants.MAX_DIFF_CHARS)
             {
                 droppedFiles.add(candidate.path());
+                expandedOverflow = true;
                 continue;
             }
             if (scopedDiff.length() > 0)
@@ -95,6 +99,33 @@ public class ReviewScopeDecisionService
             }
             scopedDiff.append(section);
             includedFiles.add(candidate.path());
+        }
+        if (!expandedOverflow)
+        {
+            for (Candidate candidate : normal)
+            {
+                String section = candidate.file().rawSection();
+                int nextLength = scopedDiff.length() + section.length() + (scopedDiff.length() == 0 ? 0 : 1);
+                if (nextLength > ReviewPipelineConstants.MAX_DIFF_CHARS)
+                {
+                    droppedFiles.add(candidate.path());
+                    continue;
+                }
+                if (scopedDiff.length() > 0)
+                {
+                    scopedDiff.append('\n');
+                }
+                scopedDiff.append(section);
+                includedFiles.add(candidate.path());
+            }
+        }
+        else
+        {
+            // expanded 溢出：普通文件让位，整文件丢弃不挤占扩展预算
+            for (Candidate candidate : normal)
+            {
+                droppedFiles.add(candidate.path());
+            }
         }
 
         List<ReviewScopeDecision.ExpandedFile> expandedFiles = expanded.stream()

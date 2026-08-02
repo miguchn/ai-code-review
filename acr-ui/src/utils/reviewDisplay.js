@@ -16,6 +16,45 @@ const SEVERITY_LABELS = {
   INFO: '信息'
 }
 
+/** 问题归属（协议 v1.1）：新增=本次变更引入，存量=历史遗留。v1.0 结果无 origin，按新增展示。 */
+export const ISSUE_ORIGIN_LABELS = {
+  NEW: '新增',
+  EXISTING: '存量'
+}
+
+/** 范围决策快照的枚举中文映射（与后端 ReviewScopeRules / ReviewScopePromptAssembler 常量对齐）。 */
+export const SCOPE_EXCLUDE_REASON_LABELS = {
+  DEFAULT_EXCLUDE: '平台默认排除',
+  PROJECT_EXCLUDE: '项目排除规则',
+  TEST_FILE: '测试文件'
+}
+
+export const SCOPE_RECORD_REASON_LABELS = {
+  DELETED: '删除文件',
+  BINARY: '二进制文件',
+  RENAME_ONLY: '纯改名',
+  GITLINK: '子模块指针',
+  MODE_ONLY: '仅权限变更',
+  EMPTY: '空文件'
+}
+
+export const SCOPE_EXPAND_RULE_LABELS = {
+  SECURITY: '权限/安全逻辑',
+  DEPENDENCY: '依赖声明',
+  DB_SCRIPT: '数据库脚本',
+  CONFIG: '配置文件',
+  SIGNATURE: '公共签名变更',
+  NEW_FILE: '新增文件'
+}
+
+export const SCOPE_EXPAND_STATUS_LABELS = {
+  IN_DIFF: '内容已在 Diff 中',
+  FULL: '已纳入完整内容',
+  BUDGET_SKIPPED: '预算不足跳过',
+  DEGRADED: '拉取失败降级',
+  FETCH_LIMIT_SKIPPED: '超拉取上限跳过'
+}
+
 export function emptyDash(value) {
   if (value == null || value === '') return '—'
   return value
@@ -66,7 +105,7 @@ export function recordConclusionTagType(task) {
   return 'info'
 }
 
-/** 基于 Top3 重点问题按严重度分级统计（非全量问题）。 */
+/** 基于 Top3 重点问题按严重度分级统计（非全量问题；v1.1 起存量问题不计入）。 */
 export function countFocusIssuesBySeverity(topIssuesJsonOrArray) {
   const empty = { critical: 0, high: 0, medium: 0, low: 0, total: 0 }
   let issues = topIssuesJsonOrArray
@@ -76,6 +115,7 @@ export function countFocusIssuesBySeverity(topIssuesJsonOrArray) {
   if (!Array.isArray(issues) || !issues.length) return empty
   const counts = { ...empty }
   issues.forEach(issue => {
+    if ((issue?.origin || '').toUpperCase() === 'EXISTING') return
     const key = (issue?.severity || '').toUpperCase()
     if (key === 'CRITICAL') counts.critical += 1
     else if (key === 'HIGH') counts.high += 1
@@ -242,4 +282,58 @@ export function templateLabel(run) {
   let text = run.snapshotTemplateName || run.snapshotTemplateCode
   if (run.snapshotTemplateVersion != null) text += ` · v${run.snapshotTemplateVersion}`
   return text
+}
+
+/** 问题归属展示：v1.0 结果无 origin 时不显示标签（返回空串由调用方判断）。 */
+export function issueOriginLabel(origin) {
+  const key = (origin || '').toUpperCase()
+  return ISSUE_ORIGIN_LABELS[key] || ''
+}
+
+export function issueOriginTagType(origin) {
+  return (origin || '').toUpperCase() === 'EXISTING' ? 'info' : 'success'
+}
+
+/** 范围决策快照（M3.2）：解析 run.scopeDecisionJson，无快照或解析失败返回 null。 */
+export function parseScopeDecision(run) {
+  return safeParseJson(run?.scopeDecisionJson)
+}
+
+/** 范围决策概要行：纳入/排除/扩展/记录类计数 + 截断与降级标记。 */
+export function scopeDecisionSummary(decision) {
+  if (!decision) return ''
+  if (decision.degraded) return ''
+  const parts = []
+  const included = Array.isArray(decision.includedFiles) ? decision.includedFiles.length : null
+  if (included != null) parts.push(`纳入 ${included}`)
+  const excluded = Array.isArray(decision.excludedFiles) ? decision.excludedFiles.length : 0
+  if (excluded > 0) parts.push(`排除 ${excluded}`)
+  const expanded = Array.isArray(decision.expandedFiles) ? decision.expandedFiles.length : 0
+  if (expanded > 0) parts.push(`扩展 ${expanded}`)
+  const recordOnly = Array.isArray(decision.recordOnlyFiles) ? decision.recordOnlyFiles.length : 0
+  if (recordOnly > 0) parts.push(`记录类 ${recordOnly}`)
+  if (decision.truncated) parts.push('已截断')
+  return parts.join(' · ')
+}
+
+export function scopeExcludeReasonLabel(reason) {
+  return SCOPE_EXCLUDE_REASON_LABELS[reason] || reason || '—'
+}
+
+export function scopeRecordReasonLabel(reason) {
+  return SCOPE_RECORD_REASON_LABELS[reason] || reason || '—'
+}
+
+export function scopeExpandRuleLabel(rule) {
+  return SCOPE_EXPAND_RULE_LABELS[rule] || rule || '—'
+}
+
+export function scopeExpandStatusLabel(status) {
+  return SCOPE_EXPAND_STATUS_LABELS[status] || status || '—'
+}
+
+export function scopeExpandStatusTagType(status) {
+  if (status === 'FULL' || status === 'IN_DIFF') return 'success'
+  if (status === 'DEGRADED') return 'warning'
+  return 'info'
 }

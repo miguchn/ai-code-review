@@ -13,11 +13,14 @@ import com.acr.review.domain.ReviewPipelineConstants;
 import com.acr.review.domain.result.ReviewScoreDimension;
 import com.acr.review.domain.result.ReviewScoreResult;
 import com.acr.review.domain.result.ReviewTopIssue;
+import com.acr.review.scope.IssueOriginClassifier;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * 解析并校验大模型统一评分 JSON；总分由后端重算，Top3 由后端截断校正。
+ * v1.1：传入归属分类器时按 Diff 行号映射打标 origin，EXISTING 问题不进 Top 3、
+ * 不计 focusIssueCount、不影响结论；分类在排序后、截断前执行，避免存量问题占用 Top 3 名额。
  */
 @Component
 public class ReviewScoreResultParser
@@ -29,7 +32,20 @@ public class ReviewScoreResultParser
     private final ObjectMapper objectMapper = new ObjectMapper()
         .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
+    /** v1.0 兼容入口：不做归属打标，行为与协议 v1.0 一致。 */
     public ReviewScoreParseResult parse(String rawContent)
+    {
+        return parse(rawContent, null, false);
+    }
+
+    /**
+     * v1.1 入口。
+     *
+     * @param originClassifier 归属分类器；null 时退化为 v1.0 行为（不打标、直接截断 Top 3）
+     * @param reportExisting   项目快照 scope_report_existing：true 时 EXISTING 问题标注后保留（仅信息展示），
+     *                         false 时剔除并计数
+     */
+    public ReviewScoreParseResult parse(String rawContent, IssueOriginClassifier originClassifier, boolean reportExisting)
     {
         String excerpt = excerpt(rawContent);
         if (rawContent == null || rawContent.isBlank())
@@ -55,8 +71,9 @@ public class ReviewScoreResultParser
 
         try
         {
-            ReviewScoreResult normalized = normalizeAndValidate(parsed);
-            return ReviewScoreParseResult.ok(normalized, excerpt);
+            NormalizeOutcome outcome = normalizeAndValidate(parsed, originClassifier, reportExisting);
+            return ReviewScoreParseResult.ok(outcome.result(), excerpt,
+                outcome.newCount(), outcome.existingCount(), outcome.unverifiableCount());
         }
         catch (IllegalArgumentException ex)
         {
@@ -70,12 +87,22 @@ public class ReviewScoreResultParser
         {
             return ReviewPipelineConstants.CONCLUSION_WARN;
         }
+        boolean taggingActive = result.getTopIssues().stream().anyMatch(issue -> issue.getOrigin() != null);
         if (Boolean.TRUE.equals(result.getHasCriticalSecurityIssue()))
         {
-            return ReviewPipelineConstants.CONCLUSION_BLOCK;
+            // 打标生效时，旗标对应的 CRITICAL 若已判为存量则不得阻断（EXISTING 不影响结论）；
+            // 未打标（降级/v1.0）保持旗标即阻断的既有行为。
+            if (!taggingActive || hasNewIssueWithSeverity(result, ReviewScoringConstants.SEVERITY_CRITICAL))
+            {
+                return ReviewPipelineConstants.CONCLUSION_BLOCK;
+            }
         }
         for (ReviewTopIssue issue : result.getTopIssues())
         {
+            if (ReviewScoringConstants.ORIGIN_EXISTING.equals(issue.getOrigin()))
+            {
+                continue;
+            }
             String severity = issue.getSeverity() == null ? "" : issue.getSeverity().toUpperCase(Locale.ROOT);
             if (ReviewScoringConstants.SEVERITY_CRITICAL.equals(severity)
                 || ReviewScoringConstants.SEVERITY_HIGH.equals(severity))
@@ -84,6 +111,22 @@ public class ReviewScoreResultParser
             }
         }
         return ReviewPipelineConstants.CONCLUSION_PASS;
+    }
+
+    private boolean hasNewIssueWithSeverity(ReviewScoreResult result, String expectedSeverity)
+    {
+        for (ReviewTopIssue issue : result.getTopIssues())
+        {
+            if (ReviewScoringConstants.ORIGIN_EXISTING.equals(issue.getOrigin()))
+            {
+                continue;
+            }
+            if (expectedSeverity.equalsIgnoreCase(issue.getSeverity()))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     public String summarize(ReviewScoreResult result, String conclusion)
@@ -105,16 +148,18 @@ public class ReviewScoreResultParser
         return prefix + "。摘要：" + truncate(summary, 800);
     }
 
-    private ReviewScoreResult normalizeAndValidate(ReviewScoreResult parsed)
+    private NormalizeOutcome normalizeAndValidate(ReviewScoreResult parsed,
+                                                  IssueOriginClassifier originClassifier, boolean reportExisting)
     {
         if (parsed == null)
         {
             throw new IllegalArgumentException("审查结果为空");
         }
-        if (!ReviewScoringConstants.PROTOCOL_VERSION.equals(parsed.getProtocolVersion()))
+        if (!ReviewScoringConstants.COMPATIBLE_PROTOCOL_VERSIONS.contains(parsed.getProtocolVersion()))
         {
             throw new IllegalArgumentException("不支持的协议版本：" + parsed.getProtocolVersion()
-                + "，期望 " + ReviewScoringConstants.PROTOCOL_VERSION);
+                + "，期望 " + ReviewScoringConstants.PROTOCOL_VERSION
+                + "（兼容 " + String.join("/", ReviewScoringConstants.COMPATIBLE_PROTOCOL_VERSIONS) + "）");
         }
         if (parsed.getSummary() == null || parsed.getSummary().isBlank())
         {
@@ -198,14 +243,63 @@ public class ReviewScoreResultParser
         issues.sort(Comparator
             .comparingInt((ReviewTopIssue i) -> severityRank(i.getSeverity()))
             .thenComparing(i -> i.getRank() == null ? Integer.MAX_VALUE : i.getRank()));
-        if (issues.size() > ReviewScoringConstants.MAX_TOP_ISSUES)
+
+        // 归属打标（v1.1）：分类在排序后、Top 3 截断前执行，存量问题不占用 Top 3 名额。
+        // 未传分类器（降级/v1.0 调用方）时保持既有行为：不打标、直接截断。
+        List<ReviewTopIssue> newIssues = new ArrayList<>();
+        List<ReviewTopIssue> existingIssues = new ArrayList<>();
+        int unverifiableCount = 0;
+        for (ReviewTopIssue issue : issues)
         {
-            issues = new ArrayList<>(issues.subList(0, ReviewScoringConstants.MAX_TOP_ISSUES));
+            if (originClassifier == null)
+            {
+                newIssues.add(issue);
+                continue;
+            }
+            IssueOriginClassifier.Verdict verdict = originClassifier.classify(
+                issue.getFilePath(), issue.getStartLine(), issue.getEndLine());
+            if (verdict == IssueOriginClassifier.Verdict.EXISTING)
+            {
+                issue.setOrigin(ReviewScoringConstants.ORIGIN_EXISTING);
+                existingIssues.add(issue);
+            }
+            else
+            {
+                issue.setOrigin(ReviewScoringConstants.ORIGIN_NEW);
+                newIssues.add(issue);
+                if (verdict == IssueOriginClassifier.Verdict.UNVERIFIABLE)
+                {
+                    unverifiableCount++;
+                }
+            }
         }
-        for (int i = 0; i < issues.size(); i++)
+
+        int totalNewCount = newIssues.size();
+        if (newIssues.size() > ReviewScoringConstants.MAX_TOP_ISSUES)
         {
-            issues.get(i).setRank(i + 1);
-            issues.get(i).setSeverity(normalizeSeverity(issues.get(i).getSeverity()));
+            newIssues = new ArrayList<>(newIssues.subList(0, ReviewScoringConstants.MAX_TOP_ISSUES));
+        }
+        List<ReviewTopIssue> finalIssues = new ArrayList<>(newIssues);
+        for (int i = 0; i < newIssues.size(); i++)
+        {
+            newIssues.get(i).setRank(i + 1);
+            newIssues.get(i).setSeverity(normalizeSeverity(newIssues.get(i).getSeverity()));
+        }
+        // reportExisting=Y：存量问题标注保留（排在新增问题之后，同样封顶，仅信息展示，不计 focusIssueCount）。
+        int existingKept = 0;
+        if (originClassifier != null && reportExisting)
+        {
+            for (ReviewTopIssue issue : existingIssues)
+            {
+                if (existingKept >= ReviewScoringConstants.MAX_TOP_ISSUES)
+                {
+                    break;
+                }
+                issue.setRank(finalIssues.size() + 1);
+                issue.setSeverity(normalizeSeverity(issue.getSeverity()));
+                finalIssues.add(issue);
+                existingKept++;
+            }
         }
 
         ReviewScoreResult normalized = new ReviewScoreResult();
@@ -213,10 +307,15 @@ public class ReviewScoreResultParser
         normalized.setScores(ordered);
         normalized.setTotalScore(total);
         normalized.setSummary(parsed.getSummary().trim());
-        normalized.setTopIssues(issues);
-        normalized.setFocusIssueCount(issues.size());
+        normalized.setTopIssues(finalIssues);
+        normalized.setFocusIssueCount(newIssues.size());
         normalized.setHasCriticalSecurityIssue(parsed.getHasCriticalSecurityIssue());
-        return normalized;
+        return new NormalizeOutcome(normalized, totalNewCount, existingIssues.size(), unverifiableCount);
+    }
+
+    /** 归一化输出：结果 + 归属统计（均为截断前发现总数；未打标时全为 0）。 */
+    private record NormalizeOutcome(ReviewScoreResult result, int newCount, int existingCount, int unverifiableCount)
+    {
     }
 
     private void validateIssue(ReviewTopIssue issue)
