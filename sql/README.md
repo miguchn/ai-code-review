@@ -22,6 +22,9 @@
 16. `16_review_scoring_result_protocol.sql`：统一评分与结构化结果协议字段、失败类型字典、内置模板正文升级。
 17. `17_review_project_engine_code_nullable.sql`：放宽 `review_project.engine_code` 可空，修复大模型审查保存失败。
 18. `18_review_execution_hardening.sql`：放宽 `review_task_run.snapshot_review_mode` 可空、失败类型字典补 `RATE_LIMIT`、下线未使用的模板复制按钮（1148）。
+19. `19_review_record_experience_m3_1.sql`：M3.1 审查记录体验（任务元数据字段、审查记录菜单；须 utf8mb4）。
+20. `20_review_record_charset_fix.sql`：修复 19 在非 utf8mb4 连接下执行导致的菜单/列注释乱码。
+21. `21_review_record_list_fields.sql`：补充 `changed_files`，校正 PR 发起人列注释（须 utf8mb4）。
 
 含中文的增量脚本执行时请显式指定连接字符集，例如：
 
@@ -35,6 +38,9 @@ mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/15_review_
 mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/16_review_scoring_result_protocol.sql
 mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/17_review_project_engine_code_nullable.sql
 mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/18_review_execution_hardening.sql
+mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/19_review_record_experience_m3_1.sql
+mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/20_review_record_charset_fix.sql
+mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/21_review_record_list_fields.sql
 ```
 
 ## 命名规则
