@@ -619,7 +619,8 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         return snapshot;
     }
 
-    /** 无有效审查范围：不调用模型，按通过落库并在摘要说明原因；决策快照已在调用前落库。 */private void persistEmptyScopeSuccess(ReviewTask task, ReviewTaskRun run, long beginMs)
+    /** 无有效审查范围：不调用模型，按通过落库并在摘要说明原因；决策快照已在调用前落库。 */
+    private void persistEmptyScopeSuccess(ReviewTask task, ReviewTaskRun run, long beginMs)
     {
         updateStep(task, run, ReviewPipelineConstants.STEP_PERSIST_RESULT);
         long duration = System.currentTimeMillis() - beginMs;
