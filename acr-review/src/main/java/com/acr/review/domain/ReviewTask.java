@@ -15,10 +15,14 @@ public class ReviewTask extends BaseEntity
     private String provider;
     private Integer prNumber;
     private String prTitle;
+    private String prAuthor;
     private String sourceBranch;
     private String targetBranch;
     private String baseSha;
     private String headSha;
+    private Integer additions;
+    private Integer deletions;
+    private Integer changedFiles;
     private String triggerType;
     private String taskStatus;
     private String reviewConclusion;
@@ -61,6 +65,22 @@ public class ReviewTask extends BaseEntity
 
     /** 列表展示用项目名称（join review_project，不持久化）。 */
     private String projectName;
+
+    /** 列表展示用业务系统名称（join sys_business_system，不持久化）。 */
+    private String businessSystemName;
+
+    /** 列表生成 PR 链接用（join review_project，不持久化）。 */
+    private String repositoryOwner;
+    private String repositoryName;
+    private String repositoryUrl;
+
+    /** 列表重点问题分级统计用：最新 run 的 Top3 JSON（不持久化到 task）。 */
+    private String topIssuesJson;
+
+    /**
+     * 查询专用：为 true 时仅返回执行队列状态（PENDING/RUNNING/FAILED），不持久化。
+     */
+    private Boolean queueOnly;
 
     public Long getTaskId()
     {
@@ -122,6 +142,16 @@ public class ReviewTask extends BaseEntity
         this.prTitle = prTitle;
     }
 
+    public String getPrAuthor()
+    {
+        return prAuthor;
+    }
+
+    public void setPrAuthor(String prAuthor)
+    {
+        this.prAuthor = prAuthor;
+    }
+
     public String getSourceBranch()
     {
         return sourceBranch;
@@ -160,6 +190,36 @@ public class ReviewTask extends BaseEntity
     public void setHeadSha(String headSha)
     {
         this.headSha = headSha;
+    }
+
+    public Integer getAdditions()
+    {
+        return additions;
+    }
+
+    public void setAdditions(Integer additions)
+    {
+        this.additions = additions;
+    }
+
+    public Integer getDeletions()
+    {
+        return deletions;
+    }
+
+    public void setDeletions(Integer deletions)
+    {
+        this.deletions = deletions;
+    }
+
+    public Integer getChangedFiles()
+    {
+        return changedFiles;
+    }
+
+    public void setChangedFiles(Integer changedFiles)
+    {
+        this.changedFiles = changedFiles;
     }
 
     public String getTriggerType()
@@ -510,5 +570,65 @@ public class ReviewTask extends BaseEntity
     public void setProjectName(String projectName)
     {
         this.projectName = projectName;
+    }
+
+    public String getBusinessSystemName()
+    {
+        return businessSystemName;
+    }
+
+    public void setBusinessSystemName(String businessSystemName)
+    {
+        this.businessSystemName = businessSystemName;
+    }
+
+    public String getRepositoryOwner()
+    {
+        return repositoryOwner;
+    }
+
+    public void setRepositoryOwner(String repositoryOwner)
+    {
+        this.repositoryOwner = repositoryOwner;
+    }
+
+    public String getRepositoryName()
+    {
+        return repositoryName;
+    }
+
+    public void setRepositoryName(String repositoryName)
+    {
+        this.repositoryName = repositoryName;
+    }
+
+    public String getRepositoryUrl()
+    {
+        return repositoryUrl;
+    }
+
+    public void setRepositoryUrl(String repositoryUrl)
+    {
+        this.repositoryUrl = repositoryUrl;
+    }
+
+    public String getTopIssuesJson()
+    {
+        return topIssuesJson;
+    }
+
+    public void setTopIssuesJson(String topIssuesJson)
+    {
+        this.topIssuesJson = topIssuesJson;
+    }
+
+    public Boolean getQueueOnly()
+    {
+        return queueOnly;
+    }
+
+    public void setQueueOnly(Boolean queueOnly)
+    {
+        this.queueOnly = queueOnly;
     }
 }

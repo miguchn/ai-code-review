@@ -11,10 +11,14 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="provider" column="provider" />
         <result property="prNumber" column="pr_number" />
         <result property="prTitle" column="pr_title" />
+        <result property="prAuthor" column="pr_author" />
         <result property="sourceBranch" column="source_branch" />
         <result property="targetBranch" column="target_branch" />
         <result property="baseSha" column="base_sha" />
         <result property="headSha" column="head_sha" />
+        <result property="additions" column="additions" />
+        <result property="deletions" column="deletions" />
+        <result property="changedFiles" column="changed_files" />
         <result property="triggerType" column="trigger_type" />
         <result property="taskStatus" column="task_status" />
         <result property="reviewConclusion" column="review_conclusion" />
@@ -50,6 +54,11 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="snapshotEngineCode" column="snapshot_engine_code" />
         <result property="snapshotEngineName" column="snapshot_engine_name" />
         <result property="projectName" column="project_name" />
+        <result property="businessSystemName" column="business_system_name" />
+        <result property="repositoryOwner" column="repository_owner" />
+        <result property="repositoryName" column="repository_name" />
+        <result property="repositoryUrl" column="repository_url" />
+        <result property="topIssuesJson" column="top_issues_json" />
         <result property="remark" column="remark" />
         <result property="createBy" column="create_by" />
         <result property="createTime" column="create_time" />
@@ -59,7 +68,8 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 
     <sql id="taskSelect">
         select t.task_id, t.project_id, t.event_id, t.provider,
-               t.pr_number, t.pr_title, t.source_branch, t.target_branch, t.base_sha, t.head_sha,
+               t.pr_number, t.pr_title, t.pr_author, t.source_branch, t.target_branch, t.base_sha, t.head_sha,
+               t.additions, t.deletions, t.changed_files,
                t.trigger_type, t.task_status, t.review_conclusion, t.current_step, t.failure_step, t.failure_type,
                t.failure_message, t.attempt_count, t.latest_run_id, t.started_time, t.finished_time, t.duration_ms,
                t.total_score, t.score_correctness, t.score_security, t.score_practice, t.score_performance,
@@ -68,10 +78,12 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                t.snapshot_template_version, t.snapshot_prompt_content,
                t.snapshot_model_id, t.snapshot_model_name, t.snapshot_model_provider, t.snapshot_model,
                t.snapshot_engine_code, t.snapshot_engine_name,
-               p.project_name,
+               p.project_name, bs.system_name as business_system_name,
+               p.repository_owner, p.repository_name, p.repository_url,
                t.remark, t.create_by, t.create_time, t.update_by, t.update_time
         from review_task t
         inner join review_project p on p.project_id = t.project_id
+        left join sys_business_system bs on bs.system_id = p.business_system_id
         inner join sys_dept d on d.dept_id = p.dept_id
         inner join sys_user owner on owner.user_id = p.owner_user_id
     </sql>
@@ -79,7 +91,8 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     <!-- 列表查询不拉取 mediumtext 快照正文，仅详情查询使用完整字段 -->
     <sql id="taskListSelect">
         select t.task_id, t.project_id, t.event_id, t.provider,
-               t.pr_number, t.pr_title, t.source_branch, t.target_branch, t.base_sha, t.head_sha,
+               t.pr_number, t.pr_title, t.pr_author, t.source_branch, t.target_branch, t.base_sha, t.head_sha,
+               t.additions, t.deletions, t.changed_files,
                t.trigger_type, t.task_status, t.review_conclusion, t.current_step, t.failure_step, t.failure_type,
                t.failure_message, t.attempt_count, t.latest_run_id, t.started_time, t.finished_time, t.duration_ms,
                t.total_score, t.score_correctness, t.score_security, t.score_practice, t.score_performance,
@@ -88,25 +101,52 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                t.snapshot_template_version,
                t.snapshot_model_id, t.snapshot_model_name, t.snapshot_model_provider, t.snapshot_model,
                t.snapshot_engine_code, t.snapshot_engine_name,
-               p.project_name,
+               p.project_name, bs.system_name as business_system_name,
+               p.repository_owner, p.repository_name, p.repository_url,
                t.remark, t.create_by, t.create_time, t.update_by, t.update_time
         from review_task t
         inner join review_project p on p.project_id = t.project_id
+        left join sys_business_system bs on bs.system_id = p.business_system_id
         inner join sys_dept d on d.dept_id = p.dept_id
         inner join sys_user owner on owner.user_id = p.owner_user_id
     </sql>
 
+    <!-- 审查记录列表：附带最新 run 的 Top3 JSON，供重点问题分级统计 -->
+    <sql id="recordListSelect">
+        select t.task_id, t.project_id, t.event_id, t.provider,
+               t.pr_number, t.pr_title, t.pr_author, t.source_branch, t.target_branch, t.base_sha, t.head_sha,
+               t.additions, t.deletions, t.changed_files,
+               t.trigger_type, t.task_status, t.review_conclusion, t.current_step, t.failure_step, t.failure_type,
+               t.failure_message, t.attempt_count, t.latest_run_id, t.started_time, t.finished_time, t.duration_ms,
+               t.total_score, t.score_correctness, t.score_security, t.score_practice, t.score_performance,
+               t.score_commit_quality, t.protocol_version, t.focus_issue_count, t.has_critical_security, t.parse_status,
+               t.snapshot_review_mode, t.snapshot_template_id, t.snapshot_template_name, t.snapshot_template_code,
+               t.snapshot_template_version,
+               t.snapshot_model_id, t.snapshot_model_name, t.snapshot_model_provider, t.snapshot_model,
+               t.snapshot_engine_code, t.snapshot_engine_name,
+               p.project_name, bs.system_name as business_system_name,
+               p.repository_owner, p.repository_name, p.repository_url,
+               r.top_issues_json,
+               t.remark, t.create_by, t.create_time, t.update_by, t.update_time
+        from review_task t
+        inner join review_project p on p.project_id = t.project_id
+        left join sys_business_system bs on bs.system_id = p.business_system_id
+        inner join sys_dept d on d.dept_id = p.dept_id
+        inner join sys_user owner on owner.user_id = p.owner_user_id
+        left join review_task_run r on r.run_id = t.latest_run_id
+    </sql>
+
     <insert id="insertReviewTask" parameterType="com.acr.review.domain.ReviewTask" useGeneratedKeys="true" keyProperty="taskId">
         insert into review_task
-        (project_id, event_id, provider, pr_number, pr_title, source_branch, target_branch,
-         base_sha, head_sha, trigger_type, task_status, failure_message, attempt_count,
+        (project_id, event_id, provider, pr_number, pr_title, pr_author, source_branch, target_branch,
+         base_sha, head_sha, additions, deletions, changed_files, trigger_type, task_status, failure_message, attempt_count,
          snapshot_review_mode, snapshot_template_id, snapshot_template_name, snapshot_template_code,
          snapshot_template_version, snapshot_prompt_content,
          snapshot_model_id, snapshot_model_name, snapshot_model_provider, snapshot_model,
          snapshot_engine_code, snapshot_engine_name, remark, create_by, create_time)
         values
-        (#{projectId}, #{eventId}, #{provider}, #{prNumber}, #{prTitle}, #{sourceBranch}, #{targetBranch},
-         #{baseSha}, #{headSha}, #{triggerType}, #{taskStatus}, #{failureMessage},
+        (#{projectId}, #{eventId}, #{provider}, #{prNumber}, #{prTitle}, #{prAuthor}, #{sourceBranch}, #{targetBranch},
+         #{baseSha}, #{headSha}, #{additions}, #{deletions}, #{changedFiles}, #{triggerType}, #{taskStatus}, #{failureMessage},
          #{attemptCount,jdbcType=INTEGER},
          #{snapshotReviewMode}, #{snapshotTemplateId}, #{snapshotTemplateName}, #{snapshotTemplateCode},
          #{snapshotTemplateVersion}, #{snapshotPromptContent},
@@ -144,6 +184,10 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             started_time = #{startedTime},
             finished_time = #{finishedTime},
             duration_ms = #{durationMs},
+            pr_author = #{prAuthor},
+            additions = #{additions},
+            deletions = #{deletions},
+            changed_files = #{changedFiles},
             total_score = #{totalScore},
             score_correctness = #{scoreCorrectness},
             score_security = #{scoreSecurity},
@@ -200,6 +244,9 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <if test="taskStatus != null and taskStatus != ''">
             and t.task_status = #{taskStatus}
         </if>
+        <if test="queueOnly != null and queueOnly">
+            and t.task_status in ('PENDING', 'RUNNING', 'FAILED')
+        </if>
         <if test="triggerType != null and triggerType != ''">
             and t.trigger_type = #{triggerType}
         </if>
@@ -211,6 +258,35 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         </if>
         ${params.dataScope}
         order by t.task_id desc
+    </select>
+
+    <!-- 审查记录：已结束任务（SUCCESS + FAILED），按完成时间倒序 -->
+    <select id="selectReviewRecordList" parameterType="com.acr.review.domain.ReviewTask" resultMap="ReviewTaskResult">
+        <include refid="recordListSelect" />
+        where t.task_status in ('SUCCESS', 'FAILED')
+        <if test="projectId != null">
+            and t.project_id = #{projectId}
+        </if>
+        <if test="prNumber != null">
+            and t.pr_number = #{prNumber}
+        </if>
+        <if test="prAuthor != null and prAuthor != ''">
+            and t.pr_author like concat('%', #{prAuthor}, '%')
+        </if>
+        <if test="reviewConclusion != null and reviewConclusion == 'FAILED'">
+            and t.task_status = 'FAILED'
+        </if>
+        <if test="reviewConclusion != null and reviewConclusion != '' and reviewConclusion != 'FAILED'">
+            and t.task_status = 'SUCCESS' and t.review_conclusion = #{reviewConclusion}
+        </if>
+        <if test="params.beginTime != null and params.beginTime != ''">
+            and date_format(ifnull(t.finished_time, t.create_time),'%y%m%d') &gt;= date_format(#{params.beginTime},'%y%m%d')
+        </if>
+        <if test="params.endTime != null and params.endTime != ''">
+            and date_format(ifnull(t.finished_time, t.create_time),'%y%m%d') &lt;= date_format(#{params.endTime},'%y%m%d')
+        </if>
+        ${params.dataScope}
+        order by ifnull(t.finished_time, t.create_time) desc, t.task_id desc
     </select>
 
 </mapper>

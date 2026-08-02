@@ -45,10 +45,14 @@ public class ReviewTaskCreateServiceImpl implements IReviewTaskCreateService
         task.setProvider(event.getProvider());
         task.setPrNumber(prEvent.prNumber());
         task.setPrTitle(prEvent.prTitle());
+        task.setPrAuthor(prEvent.prAuthor());
         task.setSourceBranch(prEvent.sourceBranch());
         task.setTargetBranch(prEvent.targetBranch());
         task.setBaseSha(prEvent.baseSha());
         task.setHeadSha(prEvent.headSha());
+        task.setAdditions(prEvent.additions());
+        task.setDeletions(prEvent.deletions());
+        task.setChangedFiles(prEvent.changedFiles());
         task.setTriggerType("WEBHOOK");
         task.setTaskStatus("PENDING");
         task.setAttemptCount(0);

@@ -14,6 +14,9 @@ public interface ReviewTaskMapper
 
     List<ReviewTask> selectReviewTaskList(ReviewTask task);
 
+    /** 审查记录列表：已结束任务（SUCCESS + FAILED）。 */
+    List<ReviewTask> selectReviewRecordList(ReviewTask task);
+
     /** 按事件 ID 查询（幂等校验）。 */
     ReviewTask selectByEventId(@Param("eventId") Long eventId);
 
