@@ -46,7 +46,8 @@ class ReviewTaskCreateServiceImplTest
         event.setProvider("GITHUB");
         GitPullRequestEvent prEvent = new GitPullRequestEvent(
             "d-1", "opened", "miguchn", "demo", 12, "feat: login",
-            "feature/login", "dev", "aaaabbbbccccddddeeeeffff0000111122223333", "ffffeeeeddddccccbbbbaaaa3333222211110000");
+            "feature/login", "dev", "aaaabbbbccccddddeeeeffff0000111122223333", "ffffeeeeddddccccbbbbaaaa3333222211110000",
+            "alice", 15, 2);
         when(taskMapper.insertReviewTask(any())).thenAnswer(invocation -> {
             ReviewTask task = invocation.getArgument(0);
             task.setTaskId(100L);
@@ -62,6 +63,9 @@ class ReviewTaskCreateServiceImplTest
             task.getProjectId().equals(1L) && task.getEventId().equals(10L)
                 && "PENDING".equals(task.getTaskStatus()) && "WEBHOOK".equals(task.getTriggerType())
                 && Integer.valueOf(12).equals(task.getPrNumber())
+                && "alice".equals(task.getPrAuthor())
+                && Integer.valueOf(15).equals(task.getAdditions())
+                && Integer.valueOf(2).equals(task.getDeletions())
                 && "feature/login".equals(task.getSourceBranch()) && "dev".equals(task.getTargetBranch())
                 && task.getBaseSha().startsWith("aaaa") && task.getHeadSha().startsWith("ffff")
                 && "LLM_DIRECT".equals(task.getSnapshotReviewMode())

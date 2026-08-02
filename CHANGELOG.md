@@ -2,6 +2,23 @@
 
 ## [Unreleased] - 2026-08-02
 
+### M3.1 审查任务与审查记录体验优化
+
+- 审查任务收敛为执行队列：默认仅展示待执行/执行中/失败，列表字段精简为项目、PR、分支、状态、步骤、执行次数、失败原因、创建时间与操作
+- 新增「审查记录」菜单与列表/详情接口（复用 `review_task` / `review_task_run`，不新建业务表）；支持按项目、PR、提交者、结论与时间筛选
+- 任务详情与记录详情改为独立页面，去掉高密度大抽屉；记录详情按「审查结果 / 执行记录」分页签展示
+- 补充 PR 提交者与增删行数：Webhook 建单写入，执行时复用 PR 详情 API 回填；Commit Message 继续落在 run 表并在记录详情展示
+- 新增幂等脚本 `sql/19_review_record_experience_m3_1.sql`；历史空字段前端统一显示「—」
+- 审查记录：已结束任务（`SUCCESS` + `FAILED`）按完成时间倒序；列表展示项目/业务系统、可点击 PR、发起人 login、分支、代码变更（文件数/+/-）、结论映射（通过/建议修改/高风险/执行失败）、评分、重点问题分级（Top3）、完成时间；操作含查看详情、查看问题、打开 PR、失败重新执行
+- 补充 `changed_files`（与 additions/deletions 同源，复用既有 PR 详情请求，不另调 GitHub）；不展示交付状态（待 M4）
+- 设计文档：`docs/planning/review-record-experience-m3.1.md`
+
+Review 修复（2026-08-02）：
+
+- 任务/记录查询三处 `sys_business_system` 改 LEFT JOIN：业务系统被物理删除时（删除无引用校验），任务列表、任务详情、审查记录与执行/重试不再整体失效，业务系统名展示为「—」
+- 任务详情「查看审查记录」入口覆盖 FAILED 任务（此前仅 SUCCESS 可见，与记录口径 SUCCESS+FAILED 不一致）
+- 移除前端未使用的 `formatDiffLines` / `runTimelineType` 导出；修正 `router/index.js` 新增路由行尾与全文件一致
+
 ### M3 审查流水线独立 Review 加固
 
 - 修复执行链断点：run 记录建立在配置解析之前并回填快照审查方式，执行期任意异常统一落 FAILED，消除任务卡死 RUNNING 的僵尸态；新增 `18_review_execution_hardening.sql` 放宽 `snapshot_review_mode` 可空

@@ -151,6 +151,34 @@ export const dynamicRoutes = [
         meta: { title: '调度日志', activeMenu: '/monitor/job' }
       }
     ]
+  },
+  {
+    path: '/review/task-detail',
+    component: Layout,
+    hidden: true,
+    permissions: ['review:task:query'],
+    children: [
+      {
+        path: 'index/:taskId(\\d+)',
+        component: () => import('@/views/review/task/detail'),
+        name: 'ReviewTaskDetail',
+        meta: { title: '审查任务详情', activeMenu: '/review/task' }
+      }
+    ]
+  },
+  {
+    path: '/review/record-detail',
+    component: Layout,
+    hidden: true,
+    permissions: ['review:record:query'],
+    children: [
+      {
+        path: 'index/:taskId(\\d+)',
+        component: () => import('@/views/review/record/detail'),
+        name: 'ReviewRecordDetail',
+        meta: { title: '审查记录详情', activeMenu: '/review/record' }
+      }
+    ]
   }
 ]
 

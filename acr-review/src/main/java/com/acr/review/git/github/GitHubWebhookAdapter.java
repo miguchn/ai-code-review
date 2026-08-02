@@ -91,6 +91,7 @@ public class GitHubWebhookAdapter implements GitWebhookAdapter
         JSONObject base = pr.getJSONObject("base");
         JSONObject head = pr.getJSONObject("head");
         JSONObject owner = repository.getJSONObject("owner");
+        JSONObject user = pr.getJSONObject("user");
         Integer prNumber = pr.getInteger("number") != null ? pr.getInteger("number") : root.getInteger("number");
         String baseRef = base == null ? null : base.getString("ref");
         String baseSha = base == null ? null : base.getString("sha");
@@ -98,13 +99,18 @@ public class GitHubWebhookAdapter implements GitWebhookAdapter
         String headSha = head == null ? null : head.getString("sha");
         String repoName = repository.getString("name");
         String ownerLogin = owner == null ? null : owner.getString("login");
+        String prAuthor = user == null ? null : user.getString("login");
+        Integer additions = pr.getInteger("additions");
+        Integer deletions = pr.getInteger("deletions");
+        Integer changedFiles = pr.getInteger("changed_files");
         if (prNumber == null || baseRef == null || baseSha == null || headRef == null || headSha == null
             || repoName == null || repoName.isBlank() || ownerLogin == null || ownerLogin.isBlank())
         {
             return null;
         }
         return new GitPullRequestEvent(deliveryId, root.getString("action"), ownerLogin, repoName,
-            prNumber, pr.getString("title"), headRef, baseRef, baseSha, headSha);
+            prNumber, pr.getString("title"), headRef, baseRef, baseSha, headSha,
+            prAuthor, additions, deletions, changedFiles);
     }
 
     private JSONObject parseObject(byte[] payload)

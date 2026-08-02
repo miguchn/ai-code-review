@@ -131,6 +131,7 @@ ai-code-review/
 │   ├── github-project-access-m1.md
 │   ├── github-pr-webhook-m2.md
 │   ├── review-pipeline-m3.md
+│   ├── review-record-experience-m3.1.md
 │   ├── review-template-config.md
 │   └── review-scoring-result-protocol.md
 ├── skills/
@@ -139,8 +140,8 @@ ai-code-review/
 │   ├── architecture.md
 │   └── delivery.md
 └── sql/
-    ├── 01_core_schema.sql … 17_review_project_engine_code_nullable.sql
-    └── 18_review_execution_hardening.sql
+    ├── 01_core_schema.sql … 18_review_execution_hardening.sql
+    └── 19_review_record_experience_m3_1.sql … 21_review_record_list_fields.sql
 ```
 
 `acr-admin` 承担 REST/Webhook 接入；页面和 API 位于 `acr-ui/src/views/review`、`acr-ui/src/views/system/aimodelconfig` 与 `acr-ui/src/api/review`。审查方式在项目级二选一（大模型审查 / 审查引擎）；审查模板为代码审查下的公共配置；大模型路径的评分与 JSON 协议由平台统一追加，模板页通过 `GET /review/template/platform-rules` 只读展示同一数据源。当前仅实现 GitHub，没有为 GitLab/Gitee/Gitea、通知或回写预建空实现。

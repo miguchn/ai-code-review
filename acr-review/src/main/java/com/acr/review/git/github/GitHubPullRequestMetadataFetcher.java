@@ -16,7 +16,7 @@ import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
 
-/** 通过 GitHub REST API 拉取 PR 描述与提交说明。 */
+/** 通过 GitHub REST API 拉取 PR 描述、提交者、增删行与提交说明（PR 详情一次请求内取齐行数/作者）。 */
 @Component
 public class GitHubPullRequestMetadataFetcher implements GitPullRequestMetadataFetcher
 {
@@ -63,22 +63,26 @@ public class GitHubPullRequestMetadataFetcher implements GitPullRequestMetadataF
             return GitPullRequestMetadata.unavailable("PR 编号无效");
         }
 
-        FetchOutcome descriptionOutcome = fetchPullDescription(repository, token, prNumber);
-        if (!descriptionOutcome.success())
+        PullSummary pullSummary = fetchPullSummary(repository, token, prNumber);
+        if (!pullSummary.success())
         {
-            return GitPullRequestMetadata.unavailable(descriptionOutcome.message());
+            return GitPullRequestMetadata.unavailable(pullSummary.message());
         }
 
+        // 提交说明失败不阻断作者/行数/描述：审查可继续，Commit Message 展示为空。
         FetchOutcome commitsOutcome = fetchCommitMessages(repository, token, prNumber);
-        if (!commitsOutcome.success())
-        {
-            return GitPullRequestMetadata.unavailable(commitsOutcome.message());
-        }
+        String commitMessages = commitsOutcome.success() ? commitsOutcome.content() : "";
 
-        return GitPullRequestMetadata.ok(descriptionOutcome.content(), commitsOutcome.content());
+        return GitPullRequestMetadata.ok(
+            pullSummary.description(),
+            commitMessages,
+            pullSummary.prAuthor(),
+            pullSummary.additions(),
+            pullSummary.deletions(),
+            pullSummary.changedFiles());
     }
 
-    private FetchOutcome fetchPullDescription(GitRepositoryCoordinates repository, String token, int prNumber)
+    private PullSummary fetchPullSummary(GitRepositoryCoordinates repository, String token, int prNumber)
     {
         HttpUrl url = pullRequestUrl(repository, prNumber);
         Request request = authorizedGet(token, url)
@@ -98,21 +102,32 @@ public class GitHubPullRequestMetadataFetcher implements GitPullRequestMetadataF
                 }
                 catch (RuntimeException ex)
                 {
-                    return FetchOutcome.fail("PR 描述响应不是合法 JSON");
+                    return PullSummary.fail("PR 描述响应不是合法 JSON");
                 }
-                String description = json == null ? "" : json.getString("body");
-                return FetchOutcome.ok(description == null ? "" : description);
+                if (json == null)
+                {
+                    return PullSummary.ok("", null, null, null, null);
+                }
+                String description = json.getString("body");
+                JSONObject user = json.getJSONObject("user");
+                String prAuthor = user == null ? null : user.getString("login");
+                return PullSummary.ok(
+                    description == null ? "" : description,
+                    prAuthor,
+                    json.getInteger("additions"),
+                    json.getInteger("deletions"),
+                    json.getInteger("changed_files"));
             }
-            return FetchOutcome.fail(failureMessage("PR 描述", status, response.header("X-RateLimit-Remaining")));
+            return PullSummary.fail(failureMessage("PR 元数据", status, response.header("X-RateLimit-Remaining")));
         }
         catch (InterruptedIOException ex)
         {
             Thread.currentThread().interrupt();
-            return FetchOutcome.fail("获取 PR 描述超时");
+            return PullSummary.fail("获取 PR 元数据超时");
         }
         catch (IOException ex)
         {
-            return FetchOutcome.fail("无法连接 GitHub 获取 PR 描述，请检查网络");
+            return PullSummary.fail("无法连接 GitHub 获取 PR 元数据，请检查网络");
         }
     }
 
@@ -194,6 +209,21 @@ public class GitHubPullRequestMetadataFetcher implements GitPullRequestMetadataF
             return "未找到对应 PR，无法获取" + resource;
         }
         return "获取" + resource + "失败，GitHub 返回状态：" + status;
+    }
+
+    private record PullSummary(boolean success, String description, String prAuthor,
+                               Integer additions, Integer deletions, Integer changedFiles, String message)
+    {
+        static PullSummary ok(String description, String prAuthor, Integer additions, Integer deletions,
+                              Integer changedFiles)
+        {
+            return new PullSummary(true, description, prAuthor, additions, deletions, changedFiles, null);
+        }
+
+        static PullSummary fail(String message)
+        {
+            return new PullSummary(false, "", null, null, null, null, message);
+        }
     }
 
     private record FetchOutcome(boolean success, String content, String message)

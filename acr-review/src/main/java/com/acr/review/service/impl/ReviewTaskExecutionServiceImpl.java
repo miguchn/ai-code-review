@@ -285,6 +285,8 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         throws java.io.IOException
     {
         updateStep(task, run, ReviewPipelineConstants.STEP_PREPARE_WORKSPACE);
+        // 与大模型路径共用同一 PR 详情请求结果：补充提交者/增删行/Commit Message，不额外扩请求。
+        applyPrMetadata(task, run, plan);
         Path workspace = workspaceManager.createIsolatedWorkspace();
         boolean acquired = false;
         try
@@ -362,27 +364,11 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
             return;
         }
 
-        GitPullRequestMetadata metadata = metadataFetcher.fetch(
-            plan.repository(), plan.token(), task.getPrNumber());
-        String prDescription = metadata.prDescription();
-        String commitMessages = metadata.commitMessages();
-        if (!metadata.fetched())
-        {
-            prDescription = "";
-            commitMessages = "";
-            log.info("PR 元数据未获取成功，继续审查 Diff。taskId={}, reason={}",
-                task.getTaskId(), metadata.message());
-        }
-        if (StringUtils.isEmpty(prDescription))
-        {
-            prDescription = "（未获取到 PR 描述）";
-        }
-        if (StringUtils.isEmpty(commitMessages))
-        {
-            commitMessages = "（未获取到 Commit Message）";
-        }
-        run.setPrDescription(truncate(prDescription, ReviewScoringConstants.MAX_PR_DESCRIPTION_CHARS));
-        run.setCommitMessages(truncate(commitMessages, ReviewScoringConstants.MAX_COMMIT_MESSAGES_CHARS));
+        applyPrMetadata(task, run, plan);
+        String prDescription = StringUtils.isEmpty(run.getPrDescription())
+            ? "（未获取到 PR 描述）" : run.getPrDescription();
+        String commitMessages = StringUtils.isEmpty(run.getCommitMessages())
+            ? "（未获取到 Commit Message）" : run.getCommitMessages();
 
         String templateBody = promptComposer.stripConflictingOutputInstructions(plan.promptContent());
         String renderedBody = promptRenderer.render(
@@ -684,6 +670,43 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         run.setCurrentStep(step);
         runMapper.updateReviewTaskRun(run);
         task.setCurrentStep(step);
+        taskMapper.updateTaskExecution(task);
+    }
+
+    /**
+     * 拉取并落库 PR 元数据。PR 详情接口一次拿齐描述/作者/增删行；提交说明失败不阻断。
+     */
+    private void applyPrMetadata(ReviewTask task, ReviewTaskRun run, ExecutionPlan plan)
+    {
+        GitPullRequestMetadata metadata = metadataFetcher.fetch(
+            plan.repository(), plan.token(), task.getPrNumber());
+        if (metadata == null || !metadata.fetched())
+        {
+            log.info("PR 元数据未获取成功，继续审查。taskId={}, reason={}",
+                task.getTaskId(), metadata == null ? "空结果" : metadata.message());
+            return;
+        }
+        String description = metadata.prDescription() == null ? "" : metadata.prDescription();
+        String commits = metadata.commitMessages() == null ? "" : metadata.commitMessages();
+        run.setPrDescription(truncate(description, ReviewScoringConstants.MAX_PR_DESCRIPTION_CHARS));
+        run.setCommitMessages(truncate(commits, ReviewScoringConstants.MAX_COMMIT_MESSAGES_CHARS));
+        if (StringUtils.isNotEmpty(metadata.prAuthor()))
+        {
+            task.setPrAuthor(metadata.prAuthor());
+        }
+        if (metadata.additions() != null)
+        {
+            task.setAdditions(metadata.additions());
+        }
+        if (metadata.deletions() != null)
+        {
+            task.setDeletions(metadata.deletions());
+        }
+        if (metadata.changedFiles() != null)
+        {
+            task.setChangedFiles(metadata.changedFiles());
+        }
+        runMapper.updateReviewTaskRun(run);
         taskMapper.updateTaskExecution(task);
     }
 
