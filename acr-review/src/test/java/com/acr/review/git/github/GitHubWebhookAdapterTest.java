@@ -23,6 +23,10 @@ class GitHubWebhookAdapterTest
           "pull_request": {
             "number": 12,
             "title": "feat: add login page",
+            "user": { "login": "alice" },
+            "additions": 20,
+            "deletions": 4,
+            "changed_files": 3,
             "base": { "ref": "dev", "sha": "aaaabbbbccccddddeeeeffff0000111122223333" },
             "head": { "ref": "feature/login", "sha": "ffffeeeeddddccccbbbbaaaa3333222211110000" }
           },
@@ -100,6 +104,10 @@ class GitHubWebhookAdapterTest
         assertEquals("dev", event.targetBranch());
         assertEquals("aaaabbbbccccddddeeeeffff0000111122223333", event.baseSha());
         assertEquals(40, event.headSha().length());
+        assertEquals("alice", event.prAuthor());
+        assertEquals(20, event.additions());
+        assertEquals(4, event.deletions());
+        assertEquals(3, event.changedFiles());
     }
 
     @Test

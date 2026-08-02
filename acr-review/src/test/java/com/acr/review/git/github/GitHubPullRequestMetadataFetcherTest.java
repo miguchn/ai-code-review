@@ -2,6 +2,7 @@ package com.acr.review.git.github;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.IOException;
 import org.junit.jupiter.api.AfterEach;
@@ -34,9 +35,17 @@ class GitHubPullRequestMetadataFetcherTest
     }
 
     @Test
-    void fetchesDescriptionAndCommitMessages() throws InterruptedException
+    void fetchesDescriptionAuthorLinesAndCommitMessages() throws InterruptedException
     {
-        server.enqueue(json(200, "{\"body\":\"Fix review pipeline\"}"));
+        server.enqueue(json(200, """
+            {
+              "body":"Fix review pipeline",
+              "user":{"login":"miguchn"},
+              "additions":12,
+              "deletions":3,
+              "changed_files":4
+            }
+            """));
         server.enqueue(json(200, """
             [
               {"commit":{"message":"Fix review pipeline\\n\\nDetails"}},
@@ -49,6 +58,10 @@ class GitHubPullRequestMetadataFetcherTest
         assertTrue(metadata.fetched());
         assertEquals("Fix review pipeline", metadata.prDescription());
         assertEquals("Fix review pipeline\nAdd metadata fetcher", metadata.commitMessages());
+        assertEquals("miguchn", metadata.prAuthor());
+        assertEquals(12, metadata.additions());
+        assertEquals(3, metadata.deletions());
+        assertEquals(4, metadata.changedFiles());
         assertEquals("PR 元数据获取成功", metadata.message());
 
         var pullRequest = server.takeRequest();
@@ -67,21 +80,33 @@ class GitHubPullRequestMetadataFetcherTest
         assertFalse(metadata.fetched());
         assertEquals("", metadata.prDescription());
         assertEquals("", metadata.commitMessages());
+        assertNull(metadata.prAuthor());
         assertTrue(metadata.message().contains("未找到对应 PR"));
     }
 
     @Test
-    void returnsUnavailableWhenCommitsFail()
+    void keepsAuthorAndLinesWhenCommitsFail()
     {
-        server.enqueue(json(200, "{\"body\":\"Only description\"}"));
+        server.enqueue(json(200, """
+            {
+              "body":"Only description",
+              "user":{"login":"alice"},
+              "additions":5,
+              "deletions":1,
+              "changed_files":2
+            }
+            """));
         server.enqueue(json(403, "{}"));
 
         GitPullRequestMetadata metadata = fetcher.fetch(repository, "test-token", 42);
 
-        assertFalse(metadata.fetched());
-        assertEquals("", metadata.prDescription());
+        assertTrue(metadata.fetched());
+        assertEquals("Only description", metadata.prDescription());
         assertEquals("", metadata.commitMessages());
-        assertTrue(metadata.message().contains("权限不足"));
+        assertEquals("alice", metadata.prAuthor());
+        assertEquals(5, metadata.additions());
+        assertEquals(1, metadata.deletions());
+        assertEquals(2, metadata.changedFiles());
     }
 
     @Test
