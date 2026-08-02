@@ -50,6 +50,9 @@ class ReviewTaskExecutionServiceImplTest
     private final ISysAiModelConfigService modelConfigService = mock(ISysAiModelConfigService.class);
     private final IReviewTemplateService templateService = mock(IReviewTemplateService.class);
     private final GitPullRequestDiffFetcher diffFetcher = mock(GitPullRequestDiffFetcher.class);
+    private final com.acr.review.git.GitFileContentFetcher fileContentFetcher =
+        mock(com.acr.review.git.GitFileContentFetcher.class);
+    private final LlmCallService llmCallService = mock(LlmCallService.class);
     private ReviewTaskExecutionServiceImpl service;
 
     @BeforeEach
@@ -72,7 +75,11 @@ class ReviewTaskExecutionServiceImplTest
             new ReviewPromptRenderer(),
             new ReviewPromptComposer(),
             new ReviewScoreResultParser(),
-            mock(LlmCallService.class),
+            new com.acr.review.scope.UnifiedDiffParser(),
+            new com.acr.review.scope.ReviewScopeDecisionService(),
+            new com.acr.review.scope.ReviewScopePromptAssembler(),
+            fileContentFetcher,
+            llmCallService,
             eventPublisher,
             new ReviewTaskSnapshotServiceImpl(templateService, modelConfigService, properties),
             120);
@@ -269,6 +276,214 @@ class ReviewTaskExecutionServiceImplTest
         when(taskMapper.selectReviewTaskById(4L)).thenReturn(task);
         service.retryTask(4L);
         verify(eventPublisher).publishEvent(any());
+    }
+
+    @Test
+    void llmPathAppliesScopeDecisionAndExpansion()
+    {
+        // 锁文件排除、依赖清单扩展拉取失败降级保留 L0、配置文件扩展成功追加全文
+        ReviewTask task = llmTask(21L);
+        stubLlmPathPrerequisites(task);
+        when(diffFetcher.fetchDiff(any(), any(), eq("abc1234"), eq("def5678")))
+            .thenReturn(GitPullRequestDiffResult.ok(scopeTestDiff()));
+        when(fileContentFetcher.fetchFileContent(any(), any(), eq("pom.xml"), eq("def5678")))
+            .thenReturn(com.acr.review.git.GitFileContentResult.fail("IO"));
+        when(fileContentFetcher.fetchFileContent(any(), any(), eq("src/main/resources/application.yml"), eq("def5678")))
+            .thenReturn(com.acr.review.git.GitFileContentResult.ok("server:\n  port: 8080\ntimeout: 30\n"));
+        when(llmCallService.chat(eq(3L), any()))
+            .thenReturn(com.acr.common.ai.LlmCallResult.failure(
+                com.acr.common.enums.LlmCallErrorType.UNKNOWN, "stop-here", 5L, null));
+
+        service.executeTask(21L);
+
+        org.mockito.ArgumentCaptor<ReviewTaskRun> runCaptor = org.mockito.ArgumentCaptor.forClass(ReviewTaskRun.class);
+        verify(runMapper, org.mockito.Mockito.atLeastOnce()).updateReviewTaskRun(runCaptor.capture());
+        ReviewTaskRun run = runCaptor.getAllValues().get(runCaptor.getAllValues().size() - 1);
+        String prompt = run.getRenderedPrompt();
+        org.junit.jupiter.api.Assertions.assertFalse(prompt.contains("package-lock"), "锁文件不得进入 Prompt");
+        assertTrue(prompt.contains("Main.java"), "普通变更文件应保留");
+        assertTrue(prompt.contains("===== 高影响扩展文件完整内容（规则：CONFIG"), "配置扩展应追加全文段");
+        assertTrue(prompt.contains("port: 8080"), "扩展全文内容应进入 Prompt");
+        assertTrue(prompt.contains("<version>1.2.3</version>"), "拉取失败的 pom.xml 应保留 L0 hunk");
+        assertTrue(prompt.contains("【审查范围说明"), "最终 Prompt 应含范围指令块");
+
+        String snapshot = run.getScopeDecisionJson();
+        org.junit.jupiter.api.Assertions.assertNotNull(snapshot);
+        assertTrue(snapshot.contains("package-lock.json") && snapshot.contains("DEFAULT_EXCLUDE"));
+        assertTrue(snapshot.contains("FULL"), "yml 应记 FULL: " + snapshot);
+        assertTrue(snapshot.contains("DEGRADED"), "pom 应记 DEGRADED: " + snapshot);
+        verify(llmCallService).chat(eq(3L), any());
+    }
+
+    @Test
+    void llmPathSkipsModelWhenScopeEmpty()
+    {
+        // 全部文件命中排除：不调用模型，任务按通过完成并说明原因
+        ReviewTask task = llmTask(22L);
+        stubLlmPathPrerequisites(task);
+        when(diffFetcher.fetchDiff(any(), any(), eq("abc1234"), eq("def5678")))
+            .thenReturn(GitPullRequestDiffResult.ok(
+                "diff --git a/package-lock.json b/package-lock.json\n"
+                    + "index 1111111..2222222 100644\n"
+                    + "--- a/package-lock.json\n"
+                    + "+++ b/package-lock.json\n"
+                    + "@@ -1 +1 @@\n"
+                    + "-\"version\": \"1.0.0\"\n"
+                    + "+\"version\": \"1.0.1\"\n"));
+
+        service.executeTask(22L);
+
+        verify(llmCallService, never()).chat(any(), any());
+        org.mockito.ArgumentCaptor<ReviewTask> taskCaptor = org.mockito.ArgumentCaptor.forClass(ReviewTask.class);
+        verify(taskMapper, org.mockito.Mockito.atLeastOnce()).updateTaskExecution(taskCaptor.capture());
+        ReviewTask finished = taskCaptor.getAllValues().get(taskCaptor.getAllValues().size() - 1);
+        org.junit.jupiter.api.Assertions.assertEquals(ReviewPipelineConstants.TASK_SUCCESS, finished.getTaskStatus());
+        org.junit.jupiter.api.Assertions.assertEquals(ReviewPipelineConstants.CONCLUSION_PASS, finished.getReviewConclusion());
+
+        org.mockito.ArgumentCaptor<ReviewTaskRun> runCaptor = org.mockito.ArgumentCaptor.forClass(ReviewTaskRun.class);
+        verify(runMapper, org.mockito.Mockito.atLeastOnce()).updateReviewTaskRun(runCaptor.capture());
+        ReviewTaskRun run = runCaptor.getAllValues().get(runCaptor.getAllValues().size() - 1);
+        org.junit.jupiter.api.Assertions.assertEquals(ReviewPipelineConstants.RUN_SUCCESS, run.getRunStatus());
+        assertTrue(run.getResultSummary().contains("无有效审查范围"));
+        org.junit.jupiter.api.Assertions.assertNotNull(run.getScopeDecisionJson());
+        assertTrue(run.getScopeDecisionJson().contains("package-lock.json"));
+    }
+
+    @Test
+    void llmPathDegradesToFullDiffWhenDecisionFails()
+    {
+        // 决策服务异常：降级为全量 Diff 并记录降级原因，审查不中断
+        ReviewTaskExecutionServiceImpl degradedService = new ReviewTaskExecutionServiceImpl(
+            taskMapper, runMapper, projectMapper,
+            credentialService,
+            modelConfigService,
+            mock(OcrModelConfigMapper.class),
+            mock(GitPullRequestWorkspacePreparer.class),
+            diffFetcher,
+            mock(GitPullRequestMetadataFetcher.class),
+            mock(OpenCodeReviewCliAdapter.class),
+            mock(ReviewEngineWorkspaceManager.class),
+            engineProperties(),
+            new ReviewConclusionResolver(),
+            new ReviewPromptRenderer(),
+            new ReviewPromptComposer(),
+            new ReviewScoreResultParser(),
+            new com.acr.review.scope.UnifiedDiffParser(),
+            throwingDecisionService(),
+            new com.acr.review.scope.ReviewScopePromptAssembler(),
+            fileContentFetcher,
+            llmCallService,
+            eventPublisher,
+            new ReviewTaskSnapshotServiceImpl(templateService, modelConfigService, engineProperties()),
+            120);
+        ReviewTask task = llmTask(23L);
+        stubLlmPathPrerequisites(task);
+        when(diffFetcher.fetchDiff(any(), any(), eq("abc1234"), eq("def5678")))
+            .thenReturn(GitPullRequestDiffResult.ok(scopeTestDiff()));
+        when(llmCallService.chat(eq(3L), any()))
+            .thenReturn(com.acr.common.ai.LlmCallResult.failure(
+                com.acr.common.enums.LlmCallErrorType.UNKNOWN, "stop-here", 5L, null));
+
+        degradedService.executeTask(23L);
+
+        org.mockito.ArgumentCaptor<ReviewTaskRun> runCaptor = org.mockito.ArgumentCaptor.forClass(ReviewTaskRun.class);
+        verify(runMapper, org.mockito.Mockito.atLeastOnce()).updateReviewTaskRun(runCaptor.capture());
+        ReviewTaskRun run = runCaptor.getAllValues().get(runCaptor.getAllValues().size() - 1);
+        assertTrue(run.getRenderedPrompt().contains("package-lock"), "降级后应保留全量 Diff");
+        assertTrue(run.getScopeDecisionJson().contains("DECISION_FAILED"));
+        verify(llmCallService).chat(eq(3L), any());
+    }
+
+    private com.acr.review.scope.ReviewScopeDecisionService throwingDecisionService()
+    {
+        return new com.acr.review.scope.ReviewScopeDecisionService()
+        {
+            @Override
+            public com.acr.review.scope.ReviewScopeDecision decide(
+                com.acr.review.scope.DiffParseResult parsed, com.acr.review.scope.ReviewScopeConfig config)
+            {
+                throw new IllegalStateException("模拟决策异常");
+            }
+        };
+    }
+
+    private ReviewEngineProperties engineProperties()
+    {
+        ReviewEngineProperties properties = new ReviewEngineProperties();
+        properties.setMaxConcurrency(2);
+        return properties;
+    }
+
+    /** LLM 快照任务（范围配置列留空，走平台默认：排除测试/不报存量/开启扩展）。 */
+    private ReviewTask llmTask(long taskId)
+    {
+        ReviewTask task = new ReviewTask();
+        task.setTaskId(taskId);
+        task.setProjectId(2L);
+        task.setPrNumber(101);
+        task.setBaseSha("abc1234");
+        task.setHeadSha("def5678");
+        task.setSnapshotReviewMode("LLM_DIRECT");
+        task.setSnapshotModelId(3L);
+        task.setSnapshotModelName("DeepSeek");
+        task.setSnapshotModelProvider("deepseek");
+        task.setSnapshotModel("deepseek-chat");
+        task.setSnapshotTemplateId(4L);
+        task.setSnapshotTemplateName("Java");
+        task.setSnapshotTemplateCode("builtin_java");
+        task.setSnapshotTemplateVersion(2);
+        task.setSnapshotPromptContent("请审查以下变更：\n{{diff}}");
+        return task;
+    }
+
+    private void stubLlmPathPrerequisites(ReviewTask task)
+    {
+        when(taskMapper.claimTask(eq(task.getTaskId()), any(), any(Date.class), anyInt())).thenReturn(1);
+        when(taskMapper.selectReviewTaskById(task.getTaskId())).thenReturn(task);
+        when(runMapper.selectMaxAttemptNo(task.getTaskId())).thenReturn(null);
+        ReviewProject project = new ReviewProject();
+        project.setProjectId(2L);
+        project.setStatus("0");
+        project.setProvider("GITHUB");
+        project.setCredentialId(5L);
+        when(projectMapper.selectReviewProjectById(2L)).thenReturn(project);
+        when(credentialService.getPlainToken(5L, true)).thenReturn("token");
+    }
+
+    /** 覆盖四类文件：锁文件（默认排除）、普通 Java（L0）、依赖清单（扩展+拉取失败）、配置（扩展+拉取成功）。 */
+    private String scopeTestDiff()
+    {
+        return "diff --git a/package-lock.json b/package-lock.json\n"
+            + "index 1111111..2222222 100644\n"
+            + "--- a/package-lock.json\n"
+            + "+++ b/package-lock.json\n"
+            + "@@ -1 +1 @@\n"
+            + "-\"version\": \"1.0.0\"\n"
+            + "+\"version\": \"1.0.1\"\n"
+            + "diff --git a/src/main/java/Main.java b/src/main/java/Main.java\n"
+            + "index 3333333..4444444 100644\n"
+            + "--- a/src/main/java/Main.java\n"
+            + "+++ b/src/main/java/Main.java\n"
+            + "@@ -10,4 +10,5 @@ public class Main {\n"
+            + "     void call() {\n"
+            + "         helper();\n"
+            + "+        audit();\n"
+            + "     }\n"
+            + " }\n"
+            + "diff --git a/pom.xml b/pom.xml\n"
+            + "index 5555555..6666666 100644\n"
+            + "--- a/pom.xml\n"
+            + "+++ b/pom.xml\n"
+            + "@@ -1 +1 @@\n"
+            + "-<version>1.2.2</version>\n"
+            + "+<version>1.2.3</version>\n"
+            + "diff --git a/src/main/resources/application.yml b/src/main/resources/application.yml\n"
+            + "index 7777777..8888888 100644\n"
+            + "--- a/src/main/resources/application.yml\n"
+            + "+++ b/src/main/resources/application.yml\n"
+            + "@@ -1 +1 @@\n"
+            + "-timeout: 10\n"
+            + "+timeout: 30\n";
     }
 
     @Test
