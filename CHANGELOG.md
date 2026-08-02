@@ -2,6 +2,11 @@
 
 ## [Unreleased] - 2026-08-02
 
+### M3.2 审查范围策略（设计 + 步 1-2 实现）
+
+- 新增设计文档 `docs/planning/review-scope-policy-m3.2.md`：审查范围默认以本次 Diff 变更行为核心（禁止单文件少量修改即扫描上报整个文件历史问题），高影响变更（新增文件/公共签名/权限安全/配置/依赖/数据库脚本）自动扩展；问题按后端 Diff 行号映射区分新增与存量（协议 v1.1 `origin`），存量默认不进 Top 3 与评分；项目级范围配置随任务快照冻结；LLM 注入 scoped diff、OCR 经 `--exclude` 统一口径，范围决策快照落库
+- 步 1-2 已落地（`com.acr.review.scope`，未接入执行链、不改变现有行为）：统一 Diff 解析器（文件/hunk/右侧变更行区间/新增·删除·改名·二进制·gitlink·mode-only 识别，残缺尾部容错记 warnings）；范围决策服务（记录类→默认排除→项目排除→测试文件→高影响→普通的分类顺序，scoped diff 按文件边界截断，扩展按 SECURITY > DEPENDENCY > DB_SCRIPT > CONFIG > SIGNATURE > NEW_FILE 优先级，决策快照 `toSnapshotMap`）；新增 24 例单测
+
 ### M3.1 审查任务与审查记录体验优化
 
 - 审查任务收敛为执行队列：默认仅展示待执行/执行中/失败，列表字段精简为项目、PR、分支、状态、步骤、执行次数、失败原因、创建时间与操作
