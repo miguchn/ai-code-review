@@ -1,6 +1,6 @@
 # M3.2 审查范围策略：Diff 增量核心、高影响扩展与问题归属
 
-> **状态（2026-08-02）：步 1–2 已落地，步 3–7 待实施。** 前置：`docs/planning/review-pipeline-m3.md`、`docs/planning/review-scoring-result-protocol.md`。本设计明确审查范围、扩展条件、问题归属与可配置规则；实现按第 8 节分步计划推进。
+> **状态（2026-08-02）：步 1–4 已落地，步 5–7 待实施。** 前置：`docs/planning/review-pipeline-m3.md`、`docs/planning/review-scoring-result-protocol.md`。本设计明确审查范围、扩展条件、问题归属与可配置规则；实现按第 8 节分步计划推进。
 
 ## 1. 目标与成功指标
 
@@ -92,14 +92,25 @@ GitHub 服务端可能截断超大 Diff（尾部半行/残缺 hunk）。解析�
 - **OCR_ENGINE**：同一份范围决策的平台排除 + 项目排除合并后经 CLI 原生 `--exclude` 传入；扩展文件由 CLI 在工作区内自然可见（整文件本就存在于工作区），范围决策快照同样落库。`--preview` 可用于排障对照。
 - 统一口径的保证：范围决策（哪些文件审、哪些排除、哪些扩展）由平台确定性代码完成，两条路径共用同一决策服务与快照结构。
 
+### 7.1 步 3-4 实施定稿（2026-08-02 实施前复核补充）
+
+- **webhook 建单链路补列**：`ReviewProjectMapper.selectByRepository`（webhook 受理的项目查询）必须查询范围四列，否则自动建单冻结的 scope 恒为 NULL、项目配置不生效；
+- **快照列可空 + 执行层默认**：任务范围快照列保持可空，M3.2 前冻结的历史任务为 NULL；`ReviewScopeConfig.fromTaskSnapshot` 将 NULL 归一为平台默认（不审测试/不报存量/开启扩展），历史任务行为不变；
+- **扩展全文段位置**：决策服务输出的 scoped diff 无文件内插入点，全文段统一**追加在 scoped diff 末尾**，带 `===== 高影响扩展文件完整内容（规则：X，变更行见上方 Diff）：path =====` 标题；第二段预算（剩余 = `MAX_DIFF_CHARS` − L0 已用）由 `ReviewScopePromptAssembler` 整文件纳入或整文件跳过；
+- **拉取保护**：单文件全文上限 256KB（`MAX_EXPANDED_FILE_BYTES`，超限记 `FILE_TOO_LARGE` 降级），单次执行拉取数量上限 30（`MAX_EXPANDED_FETCH_COUNT`，超出记 `FETCH_LIMIT_SKIPPED`）；contents API 用 `raw` media type 免 base64；
+- **范围指令块与协议解耦**：`ReviewScoringConstants.scopeInstructionBlock(scopeApplied, hasFullContent)` 位于模板正文与输出协议之间；决策失败降级全量 Diff 时不出现"已经过平台范围筛选"表述，但"只报变更引入问题"约束始终生效；origin 输出要求不在本块，归步 5 协议 v1.1；
+- **空范围**：`effectiveFileCount=0` 时不调用模型，任务/执行记录按 `SUCCESS + PASS` 落库，summary 说明"无有效审查范围"；
+- **决策快照**：`review_task_run.scope_decision_json`（mediumtext，OCR 路径步 6 复用同列），内容 = 决策服务快照 + 扩展文件最终处置（IN_DIFF/FULL/BUDGET_SKIPPED/DEGRADED/FETCH_LIMIT_SKIPPED）+ 生效配置 + `finalDiffChars`；决策异常记 `degraded=DECISION_FAILED`。
+
+
 ## 8. 分步实现计划
 
 | 步 | 内容 | 验证 | 状态（2026-08-02） |
 |---|---|---|---|
 | 1 | 统一 Diff 解析器：文件/hunk/变更行区间/new·deleted file 识别（`com.acr.review.scope.UnifiedDiffParser`） | 单测覆盖标准/新增/删除/重命名/二进制/截断尾部，11 例 | ✅ 已完成 |
 | 2 | 范围决策服务：默认排除 + 项目配置 + 高影响规则 + 优先级截断，输出 scoped diff 与决策快照（`ReviewScopeDecisionService` / `ReviewScopeRules` / `ReviewScopeConfig` / `ReviewScopeDecision` / `GlobPattern`） | 单测覆盖各扩展条件、排除优先级、截断顺序，13 例 | ✅ 已完成（纯确定性代码，未接入执行链，不改变现有行为） |
-| 3 | 项目配置四列 + SQL 脚本 + 快照冻结 + 项目表单分区 | SQL 幂等执行；快照含范围配置；表单保存回显 | 待实施 |
-| 4 | LLM 路径接入 scoped diff + 范围指令块 | 渲染单测：排除文件不进 Prompt、扩展文件含完整内容 | 待实施 |
+| 3 | 项目配置四列 + SQL 脚本（`sql/22_review_scope_config.sql`）+ 快照冻结 + 项目表单「审查范围」tab | SQL 幂等实跑；快照服务/配置转换单测 7 例；表单保存回显联调（归一化生效） | ✅ 已完成 |
+| 4 | LLM 路径接入 scoped diff + 范围指令块 + 决策快照落库（`GitHubFileContentFetcher` / `ReviewScopePromptAssembler` / `executeLlmPath` 接入） | 单测：排除/扩展/降级/空范围/预算跳过/指令块变体 15 例；全量 158 例绿 | ✅ 已完成 |
 | 5 | 归属打标 + 协议 v1.1 + EXISTING 剔除/保留策略 | 解析单测：行号映射、邻近宽限、不可判定计数、v1.0 兼容 | 待实施 |
 | 6 | OCR 路径接入 `--exclude` + 决策快照落库 | 适配器单测断言命令行参数与快照内容 | 待实施 |
 | 7 | 范围决策快照在任务/记录详情可见（纳入/排除/扩展/截断） | 前端构建 + 详情页核对 | 待实施 |
