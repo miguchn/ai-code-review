@@ -14,6 +14,9 @@ public interface IReviewProjectService
 
     List<ReviewProject> selectReviewProjectList(ReviewProject project);
 
+    /** 与项目列表同口径计数。 */
+    int countReviewProjectList(ReviewProject project);
+
     ReviewProjectOptions getFormOptions();
 
     ReviewRepositoryInfo readRepositoryInfo(GitRepositoryReadRequest request);

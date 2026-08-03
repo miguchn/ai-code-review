@@ -51,6 +51,13 @@ public class ReviewRecordServiceImpl implements IReviewRecordService
     }
 
     @Override
+    @DataScope(deptAlias = "d", userAlias = "owner", permission = "review:record:list")
+    public int countReviewRecordList(ReviewTask query)
+    {
+        return taskMapper.countReviewRecordList(query);
+    }
+
+    @Override
     public ReviewTaskDetail selectReviewRecordDetail(Long taskId)
     {
         ReviewTask task = taskMapper.selectReviewTaskById(taskId);

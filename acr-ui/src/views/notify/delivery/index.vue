@@ -135,10 +135,21 @@ function handleRetry(row) {
 }
 
 loadProjects()
-if (route.query.taskId) {
-  queryParams.value.taskId = Number(route.query.taskId) || route.query.taskId
-}
+applyRouteQuery()
 getList()
+
+function applyRouteQuery() {
+  const q = route.query || {}
+  if (q.taskId) {
+    queryParams.value.taskId = Number(q.taskId) || q.taskId
+  }
+  if (q.deliveryStatus) {
+    queryParams.value.deliveryStatus = String(q.deliveryStatus)
+  }
+  if (q.projectId) queryParams.value.projectId = Number(q.projectId) || q.projectId
+  if (q.channel) queryParams.value.channel = String(q.channel)
+  if (q.prNumber) queryParams.value.prNumber = Number(q.prNumber) || q.prNumber
+}
 </script>
 
 <style scoped>

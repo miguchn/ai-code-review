@@ -460,11 +460,21 @@ function openFromRoute() {
 }
 
 loadProjects()
+applyRouteQuery()
 getList()
 watch(() => route.query.issueId, () => {
   if (route.query.issueId && !drawerVisible.value) openFromRoute()
 })
 onMounted(() => openFromRoute())
+
+function applyRouteQuery() {
+  const q = route.query || {}
+  if (q.status) queryParams.value.status = String(q.status)
+  if (q.origin) queryParams.value.origin = String(q.origin)
+  if (q.severity) queryParams.value.severity = String(q.severity)
+  if (q.projectId) queryParams.value.projectId = Number(q.projectId) || q.projectId
+  if (q.keyword) queryParams.value.keyword = String(q.keyword)
+}
 </script>
 
 <style scoped>

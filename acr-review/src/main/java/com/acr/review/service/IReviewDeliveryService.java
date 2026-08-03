@@ -44,4 +44,7 @@ public interface IReviewDeliveryService
     ReviewDeliveryRecord selectDeliveryById(Long deliveryId);
 
     List<ReviewDeliveryRecord> selectDeliveryList(ReviewDeliveryRecord query);
+
+    /** 与投递列表同口径计数。 */
+    int countDeliveryList(ReviewDeliveryRecord query);
 }

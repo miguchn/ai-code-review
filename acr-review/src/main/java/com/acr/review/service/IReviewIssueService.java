@@ -41,4 +41,10 @@ public interface IReviewIssueService
 
     /** 未关闭新增问题数（排除 EXISTING）。 */
     int countOpenNewByProject(Long projectId);
+
+    /** 与台账列表同口径计数（含 DataScope）。 */
+    int countIssueList(ReviewIssue query);
+
+    /** 今日关闭问题数（CLOSED + CURDATE）；query 仅承载 DataScope。 */
+    int countClosedToday(ReviewIssue query);
 }

@@ -247,6 +247,20 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
         return issueMapper.countOpenNewByProject(projectId);
     }
 
+    @Override
+    @DataScope(deptAlias = "d", userAlias = "owner", permission = "review:issue:list")
+    public int countIssueList(ReviewIssue query)
+    {
+        return issueMapper.countIssueList(query);
+    }
+
+    @Override
+    @DataScope(deptAlias = "d", userAlias = "owner", permission = "review:issue:list")
+    public int countClosedToday(ReviewIssue query)
+    {
+        return issueMapper.countClosedToday(query);
+    }
+
     private void transition(ReviewIssue issue, String actionType, String toStatus, String resolveNote)
     {
         if (ReviewIssueConstants.STATUS_RECHECKING.equals(toStatus)

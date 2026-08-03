@@ -102,6 +102,37 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         order by rdr.last_attempt_time desc, rdr.delivery_id desc
     </select>
 
+    <select id="countDeliveryList" parameterType="com.acr.review.domain.ReviewDeliveryRecord" resultType="int">
+        select count(1)
+        from review_delivery_record rdr
+        left join review_project p on p.project_id = rdr.project_id
+        left join sys_dept d on d.dept_id = p.dept_id
+        left join sys_user owner on owner.user_id = p.owner_user_id
+        where 1 = 1
+        <if test="projectId != null">
+            and rdr.project_id = #{projectId}
+        </if>
+        <if test="channel != null and channel != ''">
+            and rdr.channel = #{channel}
+        </if>
+        <if test="deliveryStatus != null and deliveryStatus != ''">
+            and rdr.delivery_status = #{deliveryStatus}
+        </if>
+        <if test="prNumber != null">
+            and rdr.pr_number = #{prNumber}
+        </if>
+        <if test="taskId != null">
+            and rdr.task_id = #{taskId}
+        </if>
+        <if test="beginTime != null and beginTime != ''">
+            and rdr.last_attempt_time &gt;= #{beginTime}
+        </if>
+        <if test="endTime != null and endTime != ''">
+            and rdr.last_attempt_time &lt;= #{endTime}
+        </if>
+        ${params.dataScope}
+    </select>
+
     <insert id="insertDelivery" parameterType="com.acr.review.domain.ReviewDeliveryRecord"
             useGeneratedKeys="true" keyProperty="deliveryId">
         insert into review_delivery_record

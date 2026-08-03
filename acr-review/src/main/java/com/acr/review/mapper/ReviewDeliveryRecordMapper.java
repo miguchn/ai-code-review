@@ -19,6 +19,9 @@ public interface ReviewDeliveryRecordMapper
 
     List<ReviewDeliveryRecord> selectDeliveryList(ReviewDeliveryRecord query);
 
+    /** 与 selectDeliveryList 同筛选、同 DataScope 的计数。 */
+    int countDeliveryList(ReviewDeliveryRecord query);
+
     /** 首次插入投递结果（成功或失败）。 */
     int insertDelivery(ReviewDeliveryRecord record);
 

@@ -83,6 +83,8 @@ spring:
       password:        # 如有密码请配置
 ```
 
+> 工作台「今日摘要」与高风险 7 天窗口依赖 MySQL `CURDATE()` / 会话日期。请保持 JDBC `serverTimezone` 与业务时区一致（开发默认 `GMT+8`）；更换时区后「今日」边界会随之变化。
+
 ### 3. 启动后端
 
 ```bash
