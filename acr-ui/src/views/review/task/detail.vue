@@ -109,7 +109,7 @@ import DeliveryStatusView from '@/views/review/components/DeliveryStatusView.vue
 import ScopeDecisionView from '@/views/review/components/ScopeDecisionView.vue'
 import {
   emptyDash, formatDuration, formatCodeChange, normalizeMode,
-  shortSha, engineOrModelLabel, templateLabel
+  shortSha, engineOrModelLabel, templateLabel, formatDateTime
 } from '@/utils/reviewDisplay'
 
 const { proxy } = getCurrentInstance()
@@ -208,10 +208,6 @@ function goBack() {
 
 function goRecord() {
   proxy.$router.push('/review/record-detail/index/' + detailTask.value.taskId)
-}
-
-function formatDateTime(value) {
-  return value ? proxy.parseTime(value) : '—'
 }
 
 watch(taskId, () => loadDetail(), { immediate: true })

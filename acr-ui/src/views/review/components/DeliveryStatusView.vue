@@ -13,22 +13,25 @@
       >{{ retryLabel }}</el-button>
     </div>
     <p class="section-hint">与审查结论独立：投递失败不影响任务成功状态。同一 PR 仅维护一条 ACR 总结评论。</p>
-    <el-descriptions :column="2" border>
+    <p v-if="!delivery" class="section-hint">
+      {{ isMissingOnSuccess ? '尚未投递 PR 总结评论，可点击右上角「补投递」。' : '本任务未投递 PR 总结评论。' }}
+    </p>
+    <el-descriptions v-else :column="2" border>
       <el-descriptions-item label="投递状态">
-        <el-tag v-if="delivery?.deliveryStatus === 'SUCCESS'" type="success" size="small">已投递</el-tag>
-        <el-tag v-else-if="delivery?.deliveryStatus === 'FAILED'" type="danger" size="small">投递失败</el-tag>
+        <el-tag v-if="delivery.deliveryStatus === 'SUCCESS'" type="success" size="small">已投递</el-tag>
+        <el-tag v-else-if="delivery.deliveryStatus === 'FAILED'" type="danger" size="small">投递失败</el-tag>
         <span v-else class="empty-tip">—</span>
       </el-descriptions-item>
       <el-descriptions-item label="最近尝试">
-        {{ formatTime(delivery?.lastAttemptTime) }}
+        {{ formatDateTime(delivery.lastAttemptTime) }}
       </el-descriptions-item>
       <el-descriptions-item label="尝试次数">
-        {{ delivery?.attemptCount == null ? '—' : delivery.attemptCount }}
+        {{ delivery.attemptCount == null ? '—' : delivery.attemptCount }}
       </el-descriptions-item>
       <el-descriptions-item label="外部评论 ID">
-        {{ delivery?.externalId || '—' }}
+        {{ delivery.externalId || '—' }}
       </el-descriptions-item>
-      <el-descriptions-item v-if="delivery?.deliveryStatus === 'FAILED'" label="失败原因" :span="2">
+      <el-descriptions-item v-if="delivery.deliveryStatus === 'FAILED'" label="失败原因" :span="2">
         <span class="failure-message">{{ delivery.failureMessage || '—' }}</span>
       </el-descriptions-item>
     </el-descriptions>
@@ -37,6 +40,7 @@
 
 <script setup name="DeliveryStatusView">
 import { retryReviewDelivery } from '@/api/review/delivery'
+import { formatDateTime } from '@/utils/reviewDisplay'
 import auth from '@/plugins/auth'
 
 const props = defineProps({
@@ -60,10 +64,6 @@ const canRetry = computed(() => {
 })
 
 const retryLabel = computed(() => (isMissingOnSuccess.value ? '补投递' : '重试投递'))
-
-function formatTime(value) {
-  return value ? proxy.parseTime(value) : '—'
-}
 
 function onRetry() {
   if (!canRetry.value) return

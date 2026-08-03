@@ -39,6 +39,13 @@
           </el-descriptions>
         </section>
 
+        <DeliveryStatusView
+          :delivery="detailDelivery"
+          :task-id="detailTask.taskId"
+          :task-status="detailTask.taskStatus"
+          @retried="loadDetail"
+        />
+
         <el-tabs v-model="activeTab" class="record-tabs">
           <el-tab-pane label="审查结果" name="result">
             <el-alert v-if="detailTask.taskStatus === 'FAILED'" class="mb12" type="error" :closable="false" show-icon
@@ -139,12 +146,6 @@
           </el-tab-pane>
 
           <el-tab-pane label="执行记录" name="runs">
-            <DeliveryStatusView
-              :delivery="detailDelivery"
-              :task-id="detailTask.taskId"
-              :task-status="detailTask.taskStatus"
-              @retried="loadDetail"
-            />
             <p class="section-hint">技术排障信息：状态、模型/引擎、模板、SHA、耗时、范围决策与失败原因。</p>
             <el-empty v-if="!detailRuns.length" description="暂无执行记录" :image-size="64" />
             <el-table v-else :data="detailRuns" border>
@@ -199,7 +200,7 @@ import {
   severityLabel, severityTagType, formatIssueLines, pickLatestSuccessRun,
   engineOrModelLabel, templateLabel, buildGithubPrUrl,
   recordConclusionLabel, recordConclusionTagType,
-  issueOriginLabel, issueOriginTagType
+  issueOriginLabel, issueOriginTagType, formatDateTime
 } from '@/utils/reviewDisplay'
 
 const { proxy } = getCurrentInstance()
@@ -263,10 +264,6 @@ function handleRetry() {
     proxy.$modal.msgSuccess('已提交重新执行')
     proxy.$router.push('/review/task')
   }).catch(() => {})
-}
-
-function formatDateTime(value) {
-  return value ? proxy.parseTime(value) : '--'
 }
 
 watch(taskId, () => loadDetail(), { immediate: true })
