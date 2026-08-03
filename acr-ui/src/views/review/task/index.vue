@@ -107,7 +107,7 @@
 import { listReviewTask, retryReviewTask } from '@/api/review/task'
 import { listReviewProject } from '@/api/review/project'
 import auth from '@/plugins/auth'
-import { emptyDash } from '@/utils/reviewDisplay'
+import { emptyDash, formatDateTime } from '@/utils/reviewDisplay'
 
 const { proxy } = getCurrentInstance()
 const { review_task_status, review_task_step } = proxy.useDict('review_task_status', 'review_task_step')
@@ -229,10 +229,6 @@ function handleRetryClick(row) {
 
 function onStatusChange(value) {
   if (value) queryParams.value.queueOnly = false
-}
-
-function formatDateTime(value) {
-  return value ? proxy.parseTime(value) : '—'
 }
 
 function handleQuery() { queryParams.value.pageNum = 1; getList() }

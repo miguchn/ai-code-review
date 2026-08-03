@@ -147,6 +147,7 @@ import {
   listReviewTemplate, getPlatformRules, getReviewTemplate, addReviewTemplate, updateReviewTemplate,
   delReviewTemplate
 } from '@/api/review/template'
+import { formatDateTime } from '@/utils/reviewDisplay'
 
 const { proxy } = getCurrentInstance()
 const { review_tech_stack } = proxy.useDict('review_tech_stack')
@@ -306,10 +307,6 @@ function handleDelete(row) {
     proxy.$modal.msgSuccess('删除成功')
     getList()
   }).catch(() => {})
-}
-
-function formatDateTime(value) {
-  return value ? proxy.parseTime(value) : '—'
 }
 
 getList()

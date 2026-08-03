@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.acr.review.mapper.ReviewDeliveryRecordMapper">
+
+    <resultMap type="com.acr.review.domain.ReviewDeliveryRecord" id="ReviewDeliveryRecordResult">
+        <id property="deliveryId" column="delivery_id" />
+        <result property="taskId" column="task_id" />
+        <result property="runId" column="run_id" />
+        <result property="projectId" column="project_id" />
+        <result property="provider" column="provider" />
+        <result property="channel" column="channel" />
+        <result property="prNumber" column="pr_number" />
+        <result property="idempotencyKey" column="idempotency_key" />
+        <result property="externalId" column="external_id" />
+        <result property="deliveryStatus" column="delivery_status" />
+        <result property="failureMessage" column="failure_message" />
+        <result property="attemptCount" column="attempt_count" />
+        <result property="lastAttemptTime" column="last_attempt_time" />
+        <result property="createBy" column="create_by" />
+        <result property="createTime" column="create_time" />
+        <result property="updateBy" column="update_by" />
+        <result property="updateTime" column="update_time" />
+    </resultMap>
+
+    <sql id="selectColumns">
+        select delivery_id, task_id, run_id, project_id, provider, channel, pr_number,
+               idempotency_key, external_id, delivery_status, failure_message,
+               attempt_count, last_attempt_time, create_by, create_time, update_by, update_time
+        from review_delivery_record
+    </sql>
+
+    <select id="selectByIdempotencyKey" resultMap="ReviewDeliveryRecordResult">
+        <include refid="selectColumns" />
+        where idempotency_key = #{idempotencyKey}
+        limit 1
+    </select>
+
+    <select id="selectByProjectAndPr" resultMap="ReviewDeliveryRecordResult">
+        <include refid="selectColumns" />
+        where project_id = #{projectId}
+          and pr_number = #{prNumber}
+          and channel = #{channel}
+        limit 1
+    </select>
+
+    <insert id="insertDelivery" parameterType="com.acr.review.domain.ReviewDeliveryRecord"
+            useGeneratedKeys="true" keyProperty="deliveryId">
+        insert into review_delivery_record
+        (task_id, run_id, project_id, provider, channel, pr_number, idempotency_key,
+         external_id, delivery_status, failure_message, attempt_count, last_attempt_time,
+         create_by, create_time, update_by, update_time)
+        values
+        (#{taskId}, #{runId}, #{projectId}, #{provider}, #{channel}, #{prNumber}, #{idempotencyKey},
+         #{externalId}, #{deliveryStatus}, #{failureMessage}, #{attemptCount}, #{lastAttemptTime},
+         #{createBy}, sysdate(), #{updateBy}, sysdate())
+    </insert>
+
+    <update id="updateDeliveryResult" parameterType="com.acr.review.domain.ReviewDeliveryRecord">
+        update review_delivery_record
+        set task_id = #{taskId},
+            run_id = #{runId},
+            external_id = #{externalId},
+            delivery_status = #{deliveryStatus},
+            failure_message = #{failureMessage},
+            attempt_count = attempt_count + 1,
+            last_attempt_time = #{lastAttemptTime},
+            update_by = #{updateBy},
+            update_time = sysdate()
+        where idempotency_key = #{idempotencyKey}
+    </update>
+
+</mapper>

@@ -25,6 +25,8 @@
 19. `19_review_record_experience_m3_1.sql`：M3.1 审查记录体验（任务元数据字段、审查记录菜单；须 utf8mb4）。
 20. `20_review_record_charset_fix.sql`：修复 19 在非 utf8mb4 连接下执行导致的菜单/列注释乱码。
 21. `21_review_record_list_fields.sql`：补充 `changed_files`，校正 PR 发起人列注释（须 utf8mb4）。
+22. `22_review_scope_config.sql`：M3.2 审查范围项目配置（`review_project` 增 `scope_exclude_patterns`/`scope_include_tests`/`scope_report_existing`/`scope_expand_enabled` 四列）、`review_task` 增对应四快照列（可空，NULL 按平台默认）、`review_task_run` 增 `scope_decision_json`（须 utf8mb4）。
+23. `23_review_delivery_record.sql`：M4 GitHub PR 总结评论投递记录表 `review_delivery_record`、投递状态字典、审查记录下「投递重试」权限（须 utf8mb4）。
 
 含中文的增量脚本执行时请显式指定连接字符集，例如：
 
@@ -41,6 +43,8 @@ mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/18_review_
 mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/19_review_record_experience_m3_1.sql
 mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/20_review_record_charset_fix.sql
 mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/21_review_record_list_fields.sql
+mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/22_review_scope_config.sql
+mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/23_review_delivery_record.sql
 ```
 
 ## 命名规则

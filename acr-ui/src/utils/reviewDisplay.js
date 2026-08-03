@@ -1,5 +1,7 @@
 /** 审查任务/记录前端展示辅助（空值友好，不抛错）。 */
 
+import { parseTime } from '@/utils/common'
+
 export const SCORE_DIMENSION_DEFS = [
   { dimension: 'CORRECTNESS', label: '功能实现的正确性与健壮性', maxScore: 40, column: 'scoreCorrectness' },
   { dimension: 'SECURITY', label: '安全性与潜在风险', maxScore: 30, column: 'scoreSecurity' },
@@ -58,6 +60,11 @@ export const SCOPE_EXPAND_STATUS_LABELS = {
 export function emptyDash(value) {
   if (value == null || value === '') return '—'
   return value
+}
+
+/** 日期时间展示：空值统一「—」。 */
+export function formatDateTime(value) {
+  return value ? parseTime(value) : '—'
 }
 
 export function formatDuration(ms) {

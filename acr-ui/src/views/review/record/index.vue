@@ -112,7 +112,7 @@ import { listReviewProject } from '@/api/review/project'
 import { retryReviewTask } from '@/api/review/task'
 import {
   emptyDash, formatScore, formatCodeChange, formatFocusIssueCounts,
-  recordConclusionLabel, recordConclusionTagType, buildGithubPrUrl
+  recordConclusionLabel, recordConclusionTagType, buildGithubPrUrl, formatDateTime
 } from '@/utils/reviewDisplay'
 
 const { proxy } = getCurrentInstance()
@@ -181,10 +181,6 @@ function handleRetry(row) {
     proxy.$modal.msgSuccess('已提交重新执行')
     getList()
   }).catch(() => {})
-}
-
-function formatDateTime(value) {
-  return value ? proxy.parseTime(value) : '--'
 }
 
 function handleQuery() { queryParams.value.pageNum = 1; getList() }

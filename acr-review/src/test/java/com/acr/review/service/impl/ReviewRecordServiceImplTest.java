@@ -16,6 +16,7 @@ import com.acr.review.domain.ReviewTaskRun;
 import com.acr.review.mapper.ReviewProjectMapper;
 import com.acr.review.mapper.ReviewTaskMapper;
 import com.acr.review.mapper.ReviewTaskRunMapper;
+import com.acr.review.service.IReviewDeliveryService;
 import com.acr.system.service.ISysDeptService;
 
 class ReviewRecordServiceImplTest
@@ -24,8 +25,9 @@ class ReviewRecordServiceImplTest
     private final ReviewTaskRunMapper runMapper = mock(ReviewTaskRunMapper.class);
     private final ReviewProjectMapper projectMapper = mock(ReviewProjectMapper.class);
     private final ISysDeptService deptService = mock(ISysDeptService.class);
+    private final IReviewDeliveryService deliveryService = mock(IReviewDeliveryService.class);
     private final ReviewRecordServiceImpl service = new ReviewRecordServiceImpl(
-        taskMapper, runMapper, projectMapper, deptService);
+        taskMapper, runMapper, projectMapper, deptService, deliveryService);
 
     @Test
     void returnsDetailForSuccessTaskWithinDataScope()
@@ -33,6 +35,7 @@ class ReviewRecordServiceImplTest
         ReviewTask task = new ReviewTask();
         task.setTaskId(9L);
         task.setProjectId(3L);
+        task.setPrNumber(1);
         task.setTaskStatus("SUCCESS");
         ReviewProject project = new ReviewProject();
         project.setProjectId(3L);
@@ -69,6 +72,7 @@ class ReviewRecordServiceImplTest
         ReviewTask task = new ReviewTask();
         task.setTaskId(10L);
         task.setProjectId(3L);
+        task.setPrNumber(1);
         task.setTaskStatus("FAILED");
         ReviewProject project = new ReviewProject();
         project.setProjectId(3L);

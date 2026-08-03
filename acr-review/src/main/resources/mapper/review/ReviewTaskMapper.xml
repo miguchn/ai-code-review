@@ -248,6 +248,15 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         limit 1
     </select>
 
+    <select id="selectLatestSuccessByProjectAndPr" resultMap="ReviewTaskResult">
+        <include refid="taskSelect" />
+        where t.project_id = #{projectId}
+          and t.pr_number = #{prNumber}
+          and t.task_status = 'SUCCESS'
+        order by t.finished_time desc, t.task_id desc
+        limit 1
+    </select>
+
     <select id="selectReviewTaskList" parameterType="com.acr.review.domain.ReviewTask" resultMap="ReviewTaskResult">
         <include refid="taskListSelect" />
         where 1 = 1

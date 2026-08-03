@@ -39,6 +39,13 @@
           </el-descriptions>
         </section>
 
+        <DeliveryStatusView
+          :delivery="detailDelivery"
+          :task-id="detailTask.taskId"
+          :task-status="detailTask.taskStatus"
+          @retried="loadDetail"
+        />
+
         <el-tabs v-model="activeTab" class="record-tabs">
           <el-tab-pane label="审查结果" name="result">
             <el-alert v-if="detailTask.taskStatus === 'FAILED'" class="mb12" type="error" :closable="false" show-icon
@@ -185,6 +192,7 @@
 <script setup name="ReviewRecordDetail">
 import { getReviewRecord } from '@/api/review/record'
 import { retryReviewTask } from '@/api/review/task'
+import DeliveryStatusView from '@/views/review/components/DeliveryStatusView.vue'
 import ScopeDecisionView from '@/views/review/components/ScopeDecisionView.vue'
 import {
   emptyDash, formatCodeChange, formatScore, formatDuration, shortSha,
@@ -192,7 +200,7 @@ import {
   severityLabel, severityTagType, formatIssueLines, pickLatestSuccessRun,
   engineOrModelLabel, templateLabel, buildGithubPrUrl,
   recordConclusionLabel, recordConclusionTagType,
-  issueOriginLabel, issueOriginTagType
+  issueOriginLabel, issueOriginTagType, formatDateTime
 } from '@/utils/reviewDisplay'
 
 const { proxy } = getCurrentInstance()
@@ -202,6 +210,7 @@ const { review_task_status } = proxy.useDict('review_task_status')
 const detailLoading = ref(false)
 const detailTask = ref(null)
 const detailRuns = ref([])
+const detailDelivery = ref(null)
 const detailError = ref('')
 const activeTab = ref('result')
 
@@ -223,6 +232,7 @@ function loadDetail() {
     const payload = response.data || {}
     detailTask.value = payload.task || null
     detailRuns.value = payload.runs || []
+    detailDelivery.value = payload.delivery || null
     if (!detailTask.value) detailError.value = '未获取到审查记录'
     nextTick(() => focusIssuesIfNeeded())
   }).catch(error => {
@@ -254,10 +264,6 @@ function handleRetry() {
     proxy.$modal.msgSuccess('已提交重新执行')
     proxy.$router.push('/review/task')
   }).catch(() => {})
-}
-
-function formatDateTime(value) {
-  return value ? proxy.parseTime(value) : '--'
 }
 
 watch(taskId, () => loadDetail(), { immediate: true })

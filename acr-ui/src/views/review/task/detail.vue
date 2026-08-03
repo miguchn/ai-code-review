@@ -51,6 +51,13 @@
           </el-descriptions>
         </section>
 
+        <DeliveryStatusView
+          :delivery="detailDelivery"
+          :task-id="detailTask.taskId"
+          :task-status="detailTask.taskStatus"
+          @retried="loadDetail"
+        />
+
         <section class="detail-section">
           <h4>执行记录（排障）</h4>
           <p class="section-hint">仅展示每次 attempt 的技术信息。完整评分与重点问题请到审查记录查看。</p>
@@ -98,10 +105,11 @@
 <script setup name="ReviewTaskDetail">
 import { getReviewTask, retryReviewTask } from '@/api/review/task'
 import auth from '@/plugins/auth'
+import DeliveryStatusView from '@/views/review/components/DeliveryStatusView.vue'
 import ScopeDecisionView from '@/views/review/components/ScopeDecisionView.vue'
 import {
   emptyDash, formatDuration, formatCodeChange, normalizeMode,
-  shortSha, engineOrModelLabel, templateLabel
+  shortSha, engineOrModelLabel, templateLabel, formatDateTime
 } from '@/utils/reviewDisplay'
 
 const { proxy } = getCurrentInstance()
@@ -115,6 +123,7 @@ const {
 const detailLoading = ref(false)
 const detailTask = ref(null)
 const detailRuns = ref([])
+const detailDelivery = ref(null)
 const detailError = ref('')
 const pollTimer = ref(null)
 
@@ -131,6 +140,7 @@ function loadDetail() {
     const payload = response.data || {}
     detailTask.value = payload.task || null
     detailRuns.value = payload.runs || []
+    detailDelivery.value = payload.delivery || null
     if (!detailTask.value) detailError.value = '未获取到任务详情'
   }).catch(error => {
     detailError.value = error?.message || '详情加载失败'
@@ -198,10 +208,6 @@ function goBack() {
 
 function goRecord() {
   proxy.$router.push('/review/record-detail/index/' + detailTask.value.taskId)
-}
-
-function formatDateTime(value) {
-  return value ? proxy.parseTime(value) : '—'
 }
 
 watch(taskId, () => loadDetail(), { immediate: true })
