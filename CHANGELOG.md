@@ -2,6 +2,14 @@
 
 ## [Unreleased] - 2026-08-03
 
+### M6 问题台账基础闭环
+
+- 审查 SUCCESS 后将 `top_issues_json` 物化为 `review_issue`（PR 级指纹去重，FAILED 不物化）；支持确认 / 关闭 / 忽略 / 误报，动作写入 `review_issue_action`
+- 状态机：`AWAITING_CONFIRM → AWAITING_FIX`，终态 `CLOSED` / `IGNORED` / `FALSE_POSITIVE`；忽略/误报原因必填，关闭说明选填；`RECHECKING` 仅预留
+- 处置成功后重渲染该 PR 的 M4 总结评论（按指纹挂处置态）；评论失败不回滚处置，可走投递重试补偿
+- 审查中心「问题台账」菜单与 `review:issue:*` 权限；任务/记录详情 Top3 联动 `issueId` 与处置徽标；存量 `EXISTING` 入账但不计入未关闭统计口径
+- 设计文档：`docs/planning/issue-ledger-m6.md`；脚本：`sql/25_issue_ledger_m6.sql`
+
 ### M5 IM 三渠道通知与投递记录
 
 - 审查 SUCCESS/FAILED 结束后按项目绑定向钉钉/企微/飞书群机器人投递结论摘要或失败简讯；与 GitHub 总结评论共用内容模型，投递失败不回滚任务状态
