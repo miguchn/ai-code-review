@@ -1,6 +1,6 @@
 # M4 GitHub PR 审查结果回写：总结评论与投递记录
 
-> **状态（2026-08-03）：步 1–6 已落地，待 Review / 真实仓库验收。** 前置：`docs/planning/review-pipeline-m3.md`、`docs/planning/review-scoring-result-protocol.md`、`docs/planning/review-scope-policy-m3.2.md`、`docs/planning/review-record-experience-m3.1.md`。本设计明确审查成功后的 PR 总结评论回写、投递幂等与失败重试；实现按第 8 节分步计划推进。
+> **状态（2026-08-03）：Review 已通过（含投递记录唯一键冲突修复），待换新 PAT 后真实仓库验收。** 前置：`docs/planning/review-pipeline-m3.md`、`docs/planning/review-scoring-result-protocol.md`、`docs/planning/review-scope-policy-m3.2.md`、`docs/planning/review-record-experience-m3.1.md`。本设计明确审查成功后的 PR 总结评论回写、投递幂等与失败重试；实现按第 8 节分步计划推进。
 
 ## 1. 目标与成功指标
 
