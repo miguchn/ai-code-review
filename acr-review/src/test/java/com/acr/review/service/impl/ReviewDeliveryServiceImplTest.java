@@ -20,6 +20,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DuplicateKeyException;
 import com.acr.common.exception.ServiceException;
 import com.acr.review.delivery.ReviewDeliveryConstants;
 import com.acr.review.domain.ReviewDeliveryRecord;
@@ -163,6 +164,28 @@ class ReviewDeliveryServiceImplTest
 
         verify(taskMapper).selectLatestSuccessByProjectAndPr(3L, 8);
         verify(commentClient).createIssueComment(any(), eq("pat"), eq(8), anyString());
+    }
+
+    @Test
+    void uniqueKeyConflictFallsBackToUpdateInsteadOfFailed()
+    {
+        ReviewTask task = successTask(14L, 3L, 8);
+        ReviewTaskRun run = successRun(103L, 1);
+        stubProjectAndToken();
+        when(commentClient.findCommentWithMarker(any(), anyString(), anyInt(), anyString()))
+            .thenReturn(Optional.empty());
+        when(commentClient.createIssueComment(any(), anyString(), anyInt(), anyString()))
+            .thenReturn(new GitPullRequestComment("601", "body"));
+        when(deliveryMapper.selectByIdempotencyKey(anyString())).thenReturn(null);
+        when(deliveryMapper.insertDelivery(any()))
+            .thenThrow(new DuplicateKeyException("Duplicate entry"));
+
+        service.deliverAfterSuccess(task, run);
+
+        ArgumentCaptor<ReviewDeliveryRecord> captor = ArgumentCaptor.forClass(ReviewDeliveryRecord.class);
+        verify(deliveryMapper).updateDeliveryResult(captor.capture());
+        assertEquals(ReviewDeliveryConstants.STATUS_SUCCESS, captor.getValue().getDeliveryStatus());
+        assertEquals("601", captor.getValue().getExternalId());
     }
 
     @Test

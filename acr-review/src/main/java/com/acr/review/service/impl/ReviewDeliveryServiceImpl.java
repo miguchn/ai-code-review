@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import com.acr.common.exception.ServiceException;
 import com.acr.common.utils.StringUtils;
@@ -189,7 +190,16 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
         if (existing == null)
         {
             record.setAttemptCount(1);
-            deliveryMapper.insertDelivery(record);
+            try
+            {
+                deliveryMapper.insertDelivery(record);
+            }
+            catch (DuplicateKeyException conflict)
+            {
+                // 并发投递已占用幂等键（同 PR 两任务同时成功）：改更新已有行，避免误记 FAILED
+                log.info("投递记录唯一键冲突，改更新已有行, taskId={}", task.getTaskId());
+                deliveryMapper.updateDeliveryResult(record);
+            }
         }
         else
         {
