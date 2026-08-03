@@ -17,6 +17,7 @@ import com.acr.review.mapper.ReviewProjectMapper;
 import com.acr.review.mapper.ReviewTaskMapper;
 import com.acr.review.mapper.ReviewTaskRunMapper;
 import com.acr.review.service.IReviewDeliveryService;
+import com.acr.review.service.IReviewIssueService;
 import com.acr.system.service.ISysDeptService;
 
 class ReviewRecordServiceImplTest
@@ -26,8 +27,9 @@ class ReviewRecordServiceImplTest
     private final ReviewProjectMapper projectMapper = mock(ReviewProjectMapper.class);
     private final ISysDeptService deptService = mock(ISysDeptService.class);
     private final IReviewDeliveryService deliveryService = mock(IReviewDeliveryService.class);
+    private final IReviewIssueService issueService = mock(IReviewIssueService.class);
     private final ReviewRecordServiceImpl service = new ReviewRecordServiceImpl(
-        taskMapper, runMapper, projectMapper, deptService, deliveryService);
+        taskMapper, runMapper, projectMapper, deptService, deliveryService, issueService);
 
     @Test
     void returnsDetailForSuccessTaskWithinDataScope()
