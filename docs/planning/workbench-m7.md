@@ -119,7 +119,7 @@ M1–M6.1 已具备：
 ```text
 卡片点击：
   router.push({ path: card.link, query: card.query })
-  → 目标列表 onMounted / 首次加载：把 route.query 写入 queryParams（及记录页 dateRange）
+  → 目标列表激活时（onActivated：首次挂载或 keep-alive 重入 tab）：把 route.query 写入 queryParams（及记录页 dateRange）
   → 再 getList()
 
 最近动态行点击：
@@ -265,7 +265,7 @@ acr-ui
 1. **数据驱动卡片**：`v-for="card in summary.cards"`；禁止前端写死五张卡再按权限 `v-if` 隐藏（权限裁剪在后端）。
 2. **count=0**：灰色样式 + 可点击；不得 `v-if="count>0"`。
 3. **type→图标**：若需要图标，用前端常量映射（如 `CARD_ICON[type]`）；标题以接口 `title` 为准；**不**为此建字典。
-4. **列表回填**：四个列表在加载时读取 `route.query` 写入与表单字段同名的 `queryParams`；记录页额外把 `beginTime`/`endTime` 写入 `dateRange`；投递页在现有 `taskId` 回填基础上扩展 `deliveryStatus`；**任务页 query 含 `taskStatus` 时同时置 `queueOnly=false`（默认队列视图只显示在途任务，会排除 FAILED）**。
+4. **列表回填**：四个列表在激活时（`onActivated`，首次挂载或 keep-alive 重入 tab 都触发）读取 `route.query` 写入与表单字段同名的 `queryParams`；记录页额外把 `beginTime`/`endTime` 写入 `dateRange`；投递页在现有 `taskId` 回填基础上扩展 `deliveryStatus`；**任务页 query 含 `taskStatus` 时同时置 `queueOnly=false`（默认队列视图只显示在途任务，会排除 FAILED）**。不能用 setup 顶层一次性回填代替——RuoYi tab 页 keep-alive，重入已打开的列表 tab 时 setup/onMounted 不重跑，卡片筛选会失效。
 5. **相对时间**：复用或对齐项目内既有时间工具；悬停显示绝对时间。
 6. 首页路由 meta 文案可由「首页」改为「工作台」（constantRoutes，无菜单 SQL）。
 7. **时效性**：工作台在 `onActivated` 重新拉取 summary——RuoYi tab 页 keep-alive，从待办列表回到工作台不会重跑 `onMounted`，处置完问题回来后数字必须刷新。

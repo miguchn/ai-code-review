@@ -83,7 +83,7 @@ public class WorkbenchServiceImpl implements IWorkbenchService
             Date latest = taskService.selectLatestTaskTime(new ReviewTask());
             if (latest != null)
             {
-                scope.setLatestTaskTime(DateUtils.parseDateToStr(DateUtils.YYYY_MM_DD_HH_MM_SS, latest));
+                scope.setLatestTaskTime(DateUtils.parseDateToStr(DateUtils.YYYY_MM_DD_HH_MM, latest));
             }
         }
         return scope;
@@ -256,7 +256,7 @@ public class WorkbenchServiceImpl implements IWorkbenchService
         {
             return "待执行";
         }
-        if ("CANCELLED".equals(task.getTaskStatus()))
+        if (ReviewPipelineConstants.TASK_CANCELLED.equals(task.getTaskStatus()))
         {
             return "已取消";
         }

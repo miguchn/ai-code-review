@@ -177,7 +177,7 @@ function loadSummary() {
   })
 }
 
-onMounted(() => loadSummary())
+// keep-alive 首次挂载也会触发 onActivated，只保留一处避免重复请求
 onActivated(() => loadSummary())
 </script>
 

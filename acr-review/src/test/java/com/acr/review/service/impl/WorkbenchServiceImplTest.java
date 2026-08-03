@@ -81,7 +81,7 @@ class WorkbenchServiceImplTest
             WorkbenchSummary summary = service.getSummary();
 
             assertEquals(3, summary.getScope().getProjectCount());
-            assertEquals("2026-08-03 15:20:00", summary.getScope().getLatestTaskTime());
+            assertEquals("2026-08-03 15:20", summary.getScope().getLatestTaskTime());
             assertEquals(5, summary.getCards().size());
             assertEquals(WorkbenchConstants.CARD_ISSUE_AWAITING_CONFIRM, summary.getCards().get(0).getType());
             assertEquals(4, summary.getCards().get(0).getCount());

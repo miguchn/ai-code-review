@@ -32,8 +32,6 @@ public final class WorkbenchConstants
     /** 高风险结论窗口：含首尾共 7 天。 */
     public static final int HIGH_RISK_WINDOW_DAYS = 7;
 
-    public static final int RECENT_LIMIT = 5;
-
     private WorkbenchConstants()
     {
     }

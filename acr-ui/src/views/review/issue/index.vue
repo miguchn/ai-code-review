@@ -460,12 +460,15 @@ function openFromRoute() {
 }
 
 loadProjects()
-applyRouteQuery()
-getList()
 watch(() => route.query.issueId, () => {
   if (route.query.issueId && !drawerVisible.value) openFromRoute()
 })
 onMounted(() => openFromRoute())
+// keep-alive 下从工作台卡片重入 tab 不会重跑 onMounted，激活时回填筛选并刷新
+onActivated(() => {
+  applyRouteQuery()
+  getList()
+})
 
 function applyRouteQuery() {
   const q = route.query || {}

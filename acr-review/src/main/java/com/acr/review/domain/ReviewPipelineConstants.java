@@ -16,6 +16,7 @@ public final class ReviewPipelineConstants
     public static final String TASK_RUNNING = "RUNNING";
     public static final String TASK_SUCCESS = "SUCCESS";
     public static final String TASK_FAILED = "FAILED";
+    public static final String TASK_CANCELLED = "CANCELLED";
 
     public static final String RUN_RUNNING = "RUNNING";
     public static final String RUN_SUCCESS = "SUCCESS";
