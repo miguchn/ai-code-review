@@ -139,6 +139,12 @@
           </el-tab-pane>
 
           <el-tab-pane label="执行记录" name="runs">
+            <DeliveryStatusView
+              :delivery="detailDelivery"
+              :task-id="detailTask.taskId"
+              :task-status="detailTask.taskStatus"
+              @retried="loadDetail"
+            />
             <p class="section-hint">技术排障信息：状态、模型/引擎、模板、SHA、耗时、范围决策与失败原因。</p>
             <el-empty v-if="!detailRuns.length" description="暂无执行记录" :image-size="64" />
             <el-table v-else :data="detailRuns" border>
@@ -185,6 +191,7 @@
 <script setup name="ReviewRecordDetail">
 import { getReviewRecord } from '@/api/review/record'
 import { retryReviewTask } from '@/api/review/task'
+import DeliveryStatusView from '@/views/review/components/DeliveryStatusView.vue'
 import ScopeDecisionView from '@/views/review/components/ScopeDecisionView.vue'
 import {
   emptyDash, formatCodeChange, formatScore, formatDuration, shortSha,
@@ -202,6 +209,7 @@ const { review_task_status } = proxy.useDict('review_task_status')
 const detailLoading = ref(false)
 const detailTask = ref(null)
 const detailRuns = ref([])
+const detailDelivery = ref(null)
 const detailError = ref('')
 const activeTab = ref('result')
 
@@ -223,6 +231,7 @@ function loadDetail() {
     const payload = response.data || {}
     detailTask.value = payload.task || null
     detailRuns.value = payload.runs || []
+    detailDelivery.value = payload.delivery || null
     if (!detailTask.value) detailError.value = '未获取到审查记录'
     nextTick(() => focusIssuesIfNeeded())
   }).catch(error => {

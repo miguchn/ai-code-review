@@ -1,6 +1,14 @@
 # Changelog
 
-## [Unreleased] - 2026-08-02
+## [Unreleased] - 2026-08-03
+
+### M4 GitHub PR 审查结果回写
+
+- 审查 `SUCCESS` 后向 GitHub PR 回写/更新一条总结评论（结论、总分、Top3 新增/存量标签、范围统计）；正文含固定标记 `<!-- acr-review-summary -->`，同 PR 仅一条
+- 新增 `review_delivery_record` 与幂等键 `GITHUB:{projectId}:{prNumber}:SUMMARY_COMMENT`；投递结束后一次性 upsert（`SUCCESS`/`FAILED`），失败不改写审查结论与任务状态；`FAILED` 任务不发评论
+- 后台「投递重试」权限 `review:delivery:retry`：重试前重新 list 评论，并以该 PR 最近一次 SUCCESS 任务结论渲染，防止旧结论覆盖
+- 任务/记录详情执行记录区展示投递状态，失败可重试，无记录的成功任务可补投递
+- 设计文档：`docs/planning/review-comment-writeback-m4.md`；脚本：`sql/23_review_delivery_record.sql`
 
 ### M3.2 审查范围策略（设计 + 全部 7 步实现）
 

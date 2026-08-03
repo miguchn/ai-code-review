@@ -1,6 +1,6 @@
 # M4 GitHub PR 审查结果回写：总结评论与投递记录
 
-> **状态（2026-08-03）：实施中。** 前置：`docs/planning/review-pipeline-m3.md`、`docs/planning/review-scoring-result-protocol.md`、`docs/planning/review-scope-policy-m3.2.md`、`docs/planning/review-record-experience-m3.1.md`。本设计明确审查成功后的 PR 总结评论回写、投递幂等与失败重试；实现按第 8 节分步计划推进。
+> **状态（2026-08-03）：步 1–6 已落地，待 Review / 真实仓库验收。** 前置：`docs/planning/review-pipeline-m3.md`、`docs/planning/review-scoring-result-protocol.md`、`docs/planning/review-scope-policy-m3.2.md`、`docs/planning/review-record-experience-m3.1.md`。本设计明确审查成功后的 PR 总结评论回写、投递幂等与失败重试；实现按第 8 节分步计划推进。
 
 ## 1. 目标与成功指标
 
@@ -241,14 +241,14 @@ POST /review/delivery/{taskId}/retry
 
 ## 8. 分步实现计划
 
-| 步 | 内容 | 验证 |
-|---|---|---|
-| 1 | 设计文档定稿（本文） | 人工确认范围与表结构 |
-| 2 | SQL `23_review_delivery_record.sql`（建表 + 字典 + 权限）+ 更新 `docs/deployment.md`、`sql/README.md` | 脚本幂等、utf8mb4；清单连续编号 |
-| 3 | 领域对象 / Mapper / 常量 / `ReviewCommentBodyRenderer` + 单测 | 渲染单测绿 |
-| 4 | `GitPullRequestCommentClient` + GitHub 实现 + 投递服务（幂等 create/update） | 投递与幂等单测绿 |
-| 5 | 执行链 SUCCESS 后挂钩；失败隔离；重试 API + Controller | 全量 `mvn test`；执行失败不发评论用例 |
-| 6 | 详情透出 delivery；前端执行记录区展示与重试；CHANGELOG | `npm run build:prod` |
+| 步 | 内容 | 验证 | 状态 |
+|---|---|---|---|
+| 1 | 设计文档定稿（本文） | 人工确认范围与表结构 | ✅ |
+| 2 | SQL `23_review_delivery_record.sql`（建表 + 字典 + 权限）+ 更新 `docs/deployment.md`、`sql/README.md` | 脚本幂等、utf8mb4；清单连续编号 | ✅ |
+| 3 | 领域对象 / Mapper / 常量 / `ReviewCommentBodyRenderer` + 单测 | 渲染单测绿 | ✅ |
+| 4 | `GitPullRequestCommentClient` + GitHub 实现 + 投递服务（幂等 create/update） | 投递与幂等单测绿 | ✅ |
+| 5 | 执行链 SUCCESS 后挂钩；失败隔离；重试 API + Controller | 全量 `mvn test`；执行失败不发评论用例 | ✅ |
+| 6 | 详情透出 delivery；前端执行记录区展示与重试；CHANGELOG | `npm run build:prod` | ✅ |
 
 每步可独立提交；步 2–3 合入不改变线上行为，步 5 接入后生效。
 
