@@ -1,7 +1,9 @@
 package com.acr.review.service.impl;
 
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,6 +28,7 @@ import com.acr.review.git.GitPullRequestCommentException;
 import com.acr.review.git.GitRepositoryCoordinates;
 import com.acr.review.git.github.GitHubPullRequestCommentClient;
 import com.acr.review.mapper.ReviewDeliveryRecordMapper;
+import com.acr.review.mapper.ReviewIssueMapper;
 import com.acr.review.mapper.ReviewProjectMapper;
 import com.acr.review.mapper.ReviewTaskMapper;
 import com.acr.review.mapper.ReviewTaskRunMapper;
@@ -34,6 +37,8 @@ import com.acr.review.service.IGitCredentialService;
 import com.acr.review.service.IReviewDeliveryService;
 import com.acr.review.service.IReviewNotifyChannelService;
 import com.acr.review.service.IReviewNotifyChannelService.DecryptedNotifyChannel;
+import com.acr.review.service.ReviewIssueDispositionEnricher;
+import com.acr.review.domain.ReviewIssue;
 import com.acr.review.notify.NotifyRobotClients;
 import com.acr.system.service.ISysDeptService;
 
@@ -47,6 +52,7 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
     private final ReviewTaskMapper taskMapper;
     private final ReviewTaskRunMapper runMapper;
     private final ReviewProjectMapper projectMapper;
+    private final ReviewIssueMapper issueMapper;
     private final IGitCredentialService credentialService;
     private final IReviewNotifyChannelService notifyChannelService;
     private final NotifyRobotClients robotClients;
@@ -58,6 +64,7 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
                                      ReviewTaskMapper taskMapper,
                                      ReviewTaskRunMapper runMapper,
                                      ReviewProjectMapper projectMapper,
+                                     ReviewIssueMapper issueMapper,
                                      IGitCredentialService credentialService,
                                      IReviewNotifyChannelService notifyChannelService,
                                      NotifyRobotClients robotClients,
@@ -69,6 +76,7 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
         this.taskMapper = taskMapper;
         this.runMapper = runMapper;
         this.projectMapper = projectMapper;
+        this.issueMapper = issueMapper;
         this.credentialService = credentialService;
         this.notifyChannelService = notifyChannelService;
         this.robotClients = robotClients;
@@ -201,6 +209,43 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
             String message = sanitizeFailure(ex, null);
             upsertGithubResult(latest, run, ReviewDeliveryConstants.STATUS_FAILED, null, message);
             throw new ServiceException("投递重试失败：" + message);
+        }
+    }
+
+    @Override
+    public String rerenderSummaryComment(Long projectId, Integer prNumber)
+    {
+        if (projectId == null || prNumber == null)
+        {
+            return "SKIPPED";
+        }
+        ReviewTask latest = taskMapper.selectLatestSuccessByProjectAndPr(projectId, prNumber);
+        if (latest == null)
+        {
+            log.info("问题处置后跳过评论重渲染：PR 无 SUCCESS 任务, projectId={}, pr={}", projectId, prNumber);
+            return "SKIPPED";
+        }
+        ReviewTaskRun run = pickLatestSuccessRun(latest.getTaskId());
+        try
+        {
+            String externalId = writeComment(latest, run);
+            upsertGithubResult(latest, run, ReviewDeliveryConstants.STATUS_SUCCESS, externalId, null);
+            return ReviewDeliveryConstants.STATUS_SUCCESS;
+        }
+        catch (Exception ex)
+        {
+            String message = sanitizeFailure(ex, null);
+            log.warn("问题处置后评论重渲染失败（不回滚处置）, projectId={}, pr={}, reason={}",
+                projectId, prNumber, message);
+            try
+            {
+                upsertGithubResult(latest, run, ReviewDeliveryConstants.STATUS_FAILED, null, message);
+            }
+            catch (Exception persistEx)
+            {
+                log.warn("评论重渲染失败记录落库异常, projectId={}, pr={}", projectId, prNumber, persistEx);
+            }
+            return ReviewDeliveryConstants.STATUS_FAILED;
         }
     }
 
@@ -355,6 +400,7 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
         GitRepositoryCoordinates repository = new GitRepositoryCoordinates(
             project.getRepositoryOwner(), project.getRepositoryName(), project.getRepositoryUrl());
         ReviewSummaryContent content = contentFactory.build(task, run, project);
+        enrichDisposition(content, task.getProjectId(), task.getPrNumber());
         String body = ReviewCommentBodyRenderer.render(content);
 
         Optional<GitPullRequestComment> existing = commentClient.findCommentWithMarker(
@@ -366,6 +412,25 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
         }
         return commentClient.createIssueComment(
             repository, token, task.getPrNumber(), body).id();
+    }
+
+    private void enrichDisposition(ReviewSummaryContent content, Long projectId, Integer prNumber)
+    {
+        if (content == null || content.getTopIssues().isEmpty() || projectId == null || prNumber == null)
+        {
+            return;
+        }
+        List<ReviewIssue> issues = issueMapper.selectByProjectAndPr(projectId, prNumber);
+        if (issues == null || issues.isEmpty())
+        {
+            return;
+        }
+        Map<String, ReviewIssue> byFp = new HashMap<>();
+        for (ReviewIssue issue : issues)
+        {
+            byFp.put(issue.getFingerprint(), issue);
+        }
+        ReviewIssueDispositionEnricher.enrich(content.getTopIssues(), byFp);
     }
 
     private void upsertGithubResult(ReviewTask task, ReviewTaskRun run, String status,

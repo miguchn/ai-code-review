@@ -91,8 +91,11 @@
                         <el-tag v-if="issueOriginLabel(issue.origin)" :type="issueOriginTagType(issue.origin)" size="small" effect="plain">
                           {{ issueOriginLabel(issue.origin) }}
                         </el-tag>
+                        <dict-tag v-if="issue.dispositionStatus" :options="review_issue_status" :value="issue.dispositionStatus" />
                         <span v-if="issue.category" class="issue-category">{{ issue.category }}</span>
                         <strong class="issue-title">{{ emptyDash(issue.title) }}</strong>
+                        <el-button v-if="issue.issueId" link type="primary" size="small" class="issue-ledger-link"
+                          @click="goIssueLedger(issue.issueId)">台账</el-button>
                       </div>
                       <p v-if="issue.description" class="issue-text">{{ issue.description }}</p>
                       <div v-if="issue.filePath || formatIssueLines(issue)" class="issue-locate">
@@ -118,8 +121,11 @@
                           {{ severityLabel(issue.severity) }}
                         </el-tag>
                         <el-tag type="info" size="small" effect="plain">存量</el-tag>
+                        <dict-tag v-if="issue.dispositionStatus" :options="review_issue_status" :value="issue.dispositionStatus" />
                         <span v-if="issue.category" class="issue-category">{{ issue.category }}</span>
                         <strong class="issue-title">{{ emptyDash(issue.title) }}</strong>
+                        <el-button v-if="issue.issueId" link type="primary" size="small" class="issue-ledger-link"
+                          @click="goIssueLedger(issue.issueId)">台账</el-button>
                       </div>
                       <p v-if="issue.description" class="issue-text">{{ issue.description }}</p>
                       <div v-if="issue.filePath || formatIssueLines(issue)" class="issue-locate">
@@ -208,7 +214,7 @@ import {
 
 const { proxy } = getCurrentInstance()
 const route = useRoute()
-const { review_task_status } = proxy.useDict('review_task_status')
+const { review_task_status, review_issue_status } = proxy.useDict('review_task_status', 'review_issue_status')
 
 const detailLoading = ref(false)
 const detailTask = ref(null)
@@ -258,6 +264,10 @@ function goBack() {
 
 function openPr() {
   if (prUrl.value) window.open(prUrl.value, '_blank', 'noopener,noreferrer')
+}
+
+function goIssueLedger(issueId) {
+  proxy.$router.push({ path: '/review/issue', query: { issueId: String(issueId) } })
 }
 
 function handleRetry() {
@@ -340,6 +350,7 @@ watch(() => route.query.focus, () => focusIssuesIfNeeded())
 .issue-rank { font-size: 12px; font-weight: 600; color: var(--el-text-color-secondary); }
 .issue-category { font-size: 12px; color: var(--el-text-color-secondary); }
 .issue-title { font-size: 14px; font-weight: 600; }
+.issue-ledger-link { margin-left: auto; }
 .issue-text { margin: 0; font-size: 13px; line-height: 1.7; white-space: pre-wrap; }
 .issue-locate { margin-top: 6px; font-size: 12px; color: var(--el-text-color-secondary); }
 .issue-locate code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; }

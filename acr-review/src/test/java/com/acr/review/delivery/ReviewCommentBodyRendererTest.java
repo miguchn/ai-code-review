@@ -65,6 +65,28 @@ class ReviewCommentBodyRendererTest
     }
 
     @Test
+    void rendersDispositionLineWhenPresent()
+    {
+        ReviewTopIssue issue = new ReviewTopIssue();
+        issue.setSeverity("HIGH");
+        issue.setOrigin("NEW");
+        issue.setTitle("误报样例");
+        issue.setDispositionStatus("FALSE_POSITIVE");
+        issue.setDispositionNote("与本次变更无关");
+
+        ReviewSummaryContent content = ReviewSummaryContent.builder()
+            .taskId(1L)
+            .conclusionLabel("建议修改")
+            .totalScore(70)
+            .topIssues(List.of(issue))
+            .build();
+
+        String body = ReviewCommentBodyRenderer.render(content);
+        assertTrue(body.contains("处置：误报（与本次变更无关）"));
+        assertTrue(body.contains(ReviewDeliveryConstants.COMMENT_MARKER));
+    }
+
+    @Test
     void rendersPlaceholdersWhenFieldsMissing()
     {
         ReviewTask task = new ReviewTask();

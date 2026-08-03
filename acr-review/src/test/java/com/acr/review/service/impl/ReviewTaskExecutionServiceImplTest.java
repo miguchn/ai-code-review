@@ -33,6 +33,7 @@ import com.acr.review.mapper.ReviewTaskMapper;
 import com.acr.review.mapper.ReviewTaskRunMapper;
 import com.acr.review.service.IGitCredentialService;
 import com.acr.review.service.IReviewDeliveryService;
+import com.acr.review.service.IReviewIssueService;
 import com.acr.review.service.IReviewTemplateService;
 import com.acr.review.service.ReviewConclusionResolver;
 import com.acr.review.service.ReviewPromptComposer;
@@ -60,6 +61,7 @@ class ReviewTaskExecutionServiceImplTest
     private final OpenCodeReviewCliAdapter reviewEngine = mock(OpenCodeReviewCliAdapter.class);
     private final ReviewEngineWorkspaceManager workspaceManager = mock(ReviewEngineWorkspaceManager.class);
     private final IReviewDeliveryService deliveryService = mock(IReviewDeliveryService.class);
+    private final IReviewIssueService issueService = mock(IReviewIssueService.class);
     private ReviewTaskExecutionServiceImpl service;
 
     @BeforeEach
@@ -90,6 +92,7 @@ class ReviewTaskExecutionServiceImplTest
             eventPublisher,
             new ReviewTaskSnapshotServiceImpl(templateService, modelConfigService, properties),
             deliveryService,
+            issueService,
             120);
     }
 
@@ -386,6 +389,7 @@ class ReviewTaskExecutionServiceImplTest
             eventPublisher,
             new ReviewTaskSnapshotServiceImpl(templateService, modelConfigService, engineProperties()),
             deliveryService,
+            issueService,
             120);
         ReviewTask task = llmTask(23L);
         stubLlmPathPrerequisites(task);

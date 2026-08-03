@@ -16,6 +16,11 @@ public class ReviewTopIssue
     /** 归属（协议 v1.1）：NEW=本次变更引入，EXISTING=存量。由后端行号映射覆写，v1.0 结果缺省视为 NEW。 */
     private String origin;
 
+    /** 台账关联（非协议字段，详情/评论渲染时填充）。 */
+    private Long issueId;
+    private String dispositionStatus;
+    private String dispositionNote;
+
     public Integer getRank()
     {
         return rank;
@@ -124,5 +129,35 @@ public class ReviewTopIssue
     public void setOrigin(String origin)
     {
         this.origin = origin;
+    }
+
+    public Long getIssueId()
+    {
+        return issueId;
+    }
+
+    public void setIssueId(Long issueId)
+    {
+        this.issueId = issueId;
+    }
+
+    public String getDispositionStatus()
+    {
+        return dispositionStatus;
+    }
+
+    public void setDispositionStatus(String dispositionStatus)
+    {
+        this.dispositionStatus = dispositionStatus;
+    }
+
+    public String getDispositionNote()
+    {
+        return dispositionNote;
+    }
+
+    public void setDispositionNote(String dispositionNote)
+    {
+        this.dispositionNote = dispositionNote;
     }
 }
