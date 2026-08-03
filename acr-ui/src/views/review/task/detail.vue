@@ -58,6 +58,8 @@
           @retried="loadDetail"
         />
 
+        <ImDeliveryStatusView :task-id="detailTask.taskId" />
+
         <section class="detail-section">
           <h4>执行记录（排障）</h4>
           <p class="section-hint">仅展示每次 attempt 的技术信息。完整评分与重点问题请到审查记录查看。</p>
@@ -106,6 +108,7 @@
 import { getReviewTask, retryReviewTask } from '@/api/review/task'
 import auth from '@/plugins/auth'
 import DeliveryStatusView from '@/views/review/components/DeliveryStatusView.vue'
+import ImDeliveryStatusView from '@/views/review/components/ImDeliveryStatusView.vue'
 import ScopeDecisionView from '@/views/review/components/ScopeDecisionView.vue'
 import {
   emptyDash, formatDuration, formatCodeChange, normalizeMode,

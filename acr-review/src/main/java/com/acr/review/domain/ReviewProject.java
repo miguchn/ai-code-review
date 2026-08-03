@@ -51,6 +51,14 @@ public class ReviewProject extends BaseEntity
     /** 审查范围：高影响变更自动扩展整文件（Y/N，默认 Y）。 */
     private String scopeExpandEnabled;
 
+    /** 是否启用 IM 通知（Y/N，默认 N）。 */
+    private String notifyEnabled;
+    /** 通知渠道 ID。 */
+    private Long notifyChannelId;
+    private String notifyChannelName;
+    /** FAILED 时是否发送简讯（Y/N，默认 Y）。 */
+    private String notifyOnFailure;
+
     private String status;
     private String lastCheckStatus;
     private String lastCheckMessage;
@@ -374,6 +382,46 @@ public class ReviewProject extends BaseEntity
     public void setScopeExpandEnabled(String scopeExpandEnabled)
     {
         this.scopeExpandEnabled = scopeExpandEnabled;
+    }
+
+    public String getNotifyEnabled()
+    {
+        return notifyEnabled;
+    }
+
+    public void setNotifyEnabled(String notifyEnabled)
+    {
+        this.notifyEnabled = notifyEnabled;
+    }
+
+    public Long getNotifyChannelId()
+    {
+        return notifyChannelId;
+    }
+
+    public void setNotifyChannelId(Long notifyChannelId)
+    {
+        this.notifyChannelId = notifyChannelId;
+    }
+
+    public String getNotifyChannelName()
+    {
+        return notifyChannelName;
+    }
+
+    public void setNotifyChannelName(String notifyChannelName)
+    {
+        this.notifyChannelName = notifyChannelName;
+    }
+
+    public String getNotifyOnFailure()
+    {
+        return notifyOnFailure;
+    }
+
+    public void setNotifyOnFailure(String notifyOnFailure)
+    {
+        this.notifyOnFailure = notifyOnFailure;
     }
 
     public String getStatus()

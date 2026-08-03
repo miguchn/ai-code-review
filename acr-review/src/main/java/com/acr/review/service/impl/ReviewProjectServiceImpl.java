@@ -14,8 +14,10 @@ import com.acr.common.core.domain.entity.SysUser;
 import com.acr.common.exception.ServiceException;
 import com.acr.common.utils.SecurityUtils;
 import com.acr.common.utils.StringUtils;
+import com.acr.review.delivery.ReviewDeliveryConstants;
 import com.acr.review.domain.GitCredential;
 import com.acr.review.domain.GitRepositoryReadRequest;
+import com.acr.review.domain.ReviewNotifyChannel;
 import com.acr.review.domain.ReviewPipelineConstants;
 import com.acr.review.domain.ReviewProject;
 import com.acr.review.domain.ReviewProjectOptions;
@@ -27,6 +29,7 @@ import com.acr.review.git.GitProvider;
 import com.acr.review.git.GitRepositoryCoordinates;
 import com.acr.review.git.GitRepositoryInfoResult;
 import com.acr.review.mapper.GitCredentialMapper;
+import com.acr.review.mapper.ReviewNotifyChannelMapper;
 import com.acr.review.mapper.ReviewProjectMapper;
 import com.acr.review.security.CredentialCryptoService;
 import com.acr.review.service.IGitCredentialService;
@@ -54,6 +57,7 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
 
     private final ReviewProjectMapper projectMapper;
     private final GitCredentialMapper credentialMapper;
+    private final ReviewNotifyChannelMapper notifyChannelMapper;
     private final IGitCredentialService credentialService;
     private final GitProvider gitProvider;
     private final ISysBusinessSystemService businessSystemService;
@@ -67,6 +71,7 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
 
     public ReviewProjectServiceImpl(ReviewProjectMapper projectMapper,
                                     GitCredentialMapper credentialMapper,
+                                    ReviewNotifyChannelMapper notifyChannelMapper,
                                     IGitCredentialService credentialService,
                                     GitProvider gitProvider,
                                     ISysBusinessSystemService businessSystemService,
@@ -80,6 +85,7 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
     {
         this.projectMapper = projectMapper;
         this.credentialMapper = credentialMapper;
+        this.notifyChannelMapper = notifyChannelMapper;
         this.credentialService = credentialService;
         this.gitProvider = gitProvider;
         this.businessSystemService = businessSystemService;
@@ -371,6 +377,7 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
 
         validateReviewExecutionConfig(project);
         normalizeScopeConfig(project);
+        normalizeNotifyConfig(project);
 
         if (!"0".equals(project.getStatus()) && !"1".equals(project.getStatus()))
         {
@@ -395,6 +402,30 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
     private static String normalizeScopeFlag(String value, String defaultValue)
     {
         return ("Y".equals(value) || "N".equals(value)) ? value : defaultValue;
+    }
+
+    /** 通知绑定归一：总开关默认 N；失败简讯默认 Y；启用时渠道必须存在且可用。 */
+    private void normalizeNotifyConfig(ReviewProject project)
+    {
+        project.setNotifyEnabled(normalizeScopeFlag(project.getNotifyEnabled(), "N"));
+        project.setNotifyOnFailure(normalizeScopeFlag(project.getNotifyOnFailure(), "Y"));
+        if (!"Y".equals(project.getNotifyEnabled()))
+        {
+            return;
+        }
+        if (project.getNotifyChannelId() == null)
+        {
+            throw new ServiceException("启用通知时必须选择通知渠道");
+        }
+        ReviewNotifyChannel channel = notifyChannelMapper.selectReviewNotifyChannelById(project.getNotifyChannelId());
+        if (channel == null || !"0".equals(channel.getStatus()))
+        {
+            throw new ServiceException("通知渠道不存在或已停用");
+        }
+        if (!ReviewDeliveryConstants.isSupportedNotifyChannelType(channel.getChannelType()))
+        {
+            throw new ServiceException("通知渠道类型无效");
+        }
     }
 
     /** 审查方式二选一：大模型审查绑定模型+模板；审查引擎绑定引擎，不绑定项目级模型/模板。 */

@@ -33,6 +33,10 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="scopeIncludeTests" column="scope_include_tests" />
         <result property="scopeReportExisting" column="scope_report_existing" />
         <result property="scopeExpandEnabled" column="scope_expand_enabled" />
+        <result property="notifyEnabled" column="notify_enabled" />
+        <result property="notifyChannelId" column="notify_channel_id" />
+        <result property="notifyChannelName" column="notify_channel_name" />
+        <result property="notifyOnFailure" column="notify_on_failure" />
         <result property="status" column="status" />
         <result property="lastCheckStatus" column="last_check_status" />
         <result property="lastCheckMessage" column="last_check_message" />
@@ -62,6 +66,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                p.template_id, rt.template_name,
                p.review_mode, p.engine_code,
                p.scope_exclude_patterns, p.scope_include_tests, p.scope_report_existing, p.scope_expand_enabled,
+               p.notify_enabled, p.notify_channel_id, nc.channel_name as notify_channel_name, p.notify_on_failure,
                p.status, p.last_check_status, p.last_check_message, p.last_check_time,
                p.last_branch_sync_status, p.last_branch_sync_message, p.last_branch_sync_time,
                p.last_webhook_time, p.last_webhook_result,
@@ -73,6 +78,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         inner join review_git_credential c on c.credential_id = p.credential_id
         left join sys_ai_model_config m on m.model_id = p.model_id
         left join review_template rt on rt.template_id = p.template_id
+        left join review_notify_channel nc on nc.channel_id = p.notify_channel_id
     </sql>
 
     <select id="selectReviewProjectById" resultMap="ReviewProjectResult">
@@ -118,7 +124,8 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         select project_id, project_name, provider, repository_owner, repository_name,
                status, pr_review_enabled, pr_target_branches, webhook_secret_ciphertext, credential_id,
                model_id, primary_stack, template_id, review_mode, engine_code,
-               scope_exclude_patterns, scope_include_tests, scope_report_existing, scope_expand_enabled
+               scope_exclude_patterns, scope_include_tests, scope_report_existing, scope_expand_enabled,
+               notify_enabled, notify_channel_id, notify_on_failure
         from review_project
         where provider = #{provider}
           and repository_owner = #{repositoryOwner}
@@ -135,6 +142,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
          default_branch, pr_review_enabled, pr_target_branches, business_system_id, dept_id, owner_user_id,
          credential_id, model_id, primary_stack, template_id, review_mode, engine_code,
          scope_exclude_patterns, scope_include_tests, scope_report_existing, scope_expand_enabled,
+         notify_enabled, notify_channel_id, notify_on_failure,
          status, last_check_status, last_check_message, last_check_time,
          last_branch_sync_status, last_branch_sync_message, last_branch_sync_time,
          webhook_secret_ciphertext,
@@ -144,6 +152,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
          #{defaultBranch}, #{prReviewEnabled}, #{prTargetBranches}, #{businessSystemId}, #{deptId}, #{ownerUserId},
          #{credentialId}, #{modelId}, #{primaryStack}, #{templateId}, #{reviewMode}, #{engineCode},
          #{scopeExcludePatterns}, #{scopeIncludeTests}, #{scopeReportExisting}, #{scopeExpandEnabled},
+         #{notifyEnabled}, #{notifyChannelId}, #{notifyOnFailure},
          #{status}, #{lastCheckStatus}, #{lastCheckMessage}, #{lastCheckTime},
          #{lastBranchSyncStatus}, #{lastBranchSyncMessage}, #{lastBranchSyncTime},
          #{webhookSecretCiphertext},
@@ -172,6 +181,9 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             scope_include_tests = #{scopeIncludeTests},
             scope_report_existing = #{scopeReportExisting},
             scope_expand_enabled = #{scopeExpandEnabled},
+            notify_enabled = #{notifyEnabled},
+            notify_channel_id = #{notifyChannelId},
+            notify_on_failure = #{notifyOnFailure},
             last_check_status = #{lastCheckStatus},
             last_check_message = #{lastCheckMessage},
             last_check_time = #{lastCheckTime},

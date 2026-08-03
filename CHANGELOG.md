@@ -2,6 +2,14 @@
 
 ## [Unreleased] - 2026-08-03
 
+### M5 IM 三渠道通知与投递记录
+
+- 审查 SUCCESS/FAILED 结束后按项目绑定向钉钉/企微/飞书群机器人投递结论摘要或失败简讯；与 GitHub 总结评论共用内容模型，投递失败不回滚任务状态
+- 新增平台级 `review_notify_channel`（Webhook URL/加签 Secret 加密存储、测试发送、启停）；项目表单增加「通知」分区（启用开关、单渠道下拉、失败时通知）
+- `review_delivery_record` 扩展 IM 三渠道与任务级幂等键；投递记录页支持筛选与按记录补发（`POST /review/delivery/record/{deliveryId}/retry`），保留 M4 按 taskId 重试 PR 评论
+- 前端「通知管理」：通知渠道、投递记录两页；任务/记录详情展示 IM 投递摘要并链至投递记录
+- 设计文档：`docs/planning/notification-management-m5.md`；脚本：`sql/24_notification_management_m5.sql`
+
 ### M4 GitHub PR 审查结果回写
 
 - 审查 `SUCCESS` 后向 GitHub PR 回写/更新一条总结评论（结论、总分、Top3 新增/存量标签、范围统计）；正文含固定标记 `<!-- acr-review-summary -->`，同 PR 仅一条

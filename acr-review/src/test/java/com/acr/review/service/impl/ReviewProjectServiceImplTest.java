@@ -13,6 +13,7 @@ import com.acr.review.git.GitProvider;
 import com.acr.review.git.GitRepositoryCoordinates;
 import com.acr.review.git.GitRepositoryInfoResult;
 import com.acr.review.mapper.GitCredentialMapper;
+import com.acr.review.mapper.ReviewNotifyChannelMapper;
 import com.acr.review.mapper.ReviewProjectMapper;
 import com.acr.review.security.CredentialCryptoService;
 import com.acr.review.service.IGitCredentialService;
@@ -42,6 +43,7 @@ class ReviewProjectServiceImplTest
         when(configService.selectConfigByKey(any())).thenReturn("");
 
         ReviewProjectServiceImpl service = new ReviewProjectServiceImpl(projectMapper, credentialMapper,
+            mock(ReviewNotifyChannelMapper.class),
             credentialService, gitProvider, mock(ISysBusinessSystemService.class), configService,
             mock(ISysDeptService.class), mock(ISysUserService.class), mock(ISysAiModelConfigService.class),
             mock(IReviewTemplateService.class), mock(CredentialCryptoService.class), "http://localhost:8080");

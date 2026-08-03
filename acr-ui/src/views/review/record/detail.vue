@@ -46,6 +46,8 @@
           @retried="loadDetail"
         />
 
+        <ImDeliveryStatusView :task-id="detailTask.taskId" />
+
         <el-tabs v-model="activeTab" class="record-tabs">
           <el-tab-pane label="审查结果" name="result">
             <el-alert v-if="detailTask.taskStatus === 'FAILED'" class="mb12" type="error" :closable="false" show-icon
@@ -193,6 +195,7 @@
 import { getReviewRecord } from '@/api/review/record'
 import { retryReviewTask } from '@/api/review/task'
 import DeliveryStatusView from '@/views/review/components/DeliveryStatusView.vue'
+import ImDeliveryStatusView from '@/views/review/components/ImDeliveryStatusView.vue'
 import ScopeDecisionView from '@/views/review/components/ScopeDecisionView.vue'
 import {
   emptyDash, formatCodeChange, formatScore, formatDuration, shortSha,
