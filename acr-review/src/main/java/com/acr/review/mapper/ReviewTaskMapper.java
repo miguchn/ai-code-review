@@ -20,6 +20,10 @@ public interface ReviewTaskMapper
     /** 按事件 ID 查询（幂等校验）。 */
     ReviewTask selectByEventId(@Param("eventId") Long eventId);
 
+    /** 某项目某 PR 最近一次 SUCCESS 任务（投递重试渲染来源）。 */
+    ReviewTask selectLatestSuccessByProjectAndPr(@Param("projectId") Long projectId,
+                                                 @Param("prNumber") Integer prNumber);
+
     /**
      * 原子领取：PENDING/FAILED 可进入 RUNNING；RUNNING 超过回收阈值（上次执行已中断）也可重新领取。
      * @return 更新行数，1 表示领取成功
