@@ -119,6 +119,51 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
           and status in ('AWAITING_CONFIRM', 'AWAITING_FIX')
     </select>
 
+    <select id="countIssueList" parameterType="com.acr.review.domain.ReviewIssue" resultType="int">
+        select count(1)
+        from review_issue i
+        left join review_project p on p.project_id = i.project_id
+        left join sys_dept d on d.dept_id = p.dept_id
+        left join sys_user owner on owner.user_id = p.owner_user_id
+        where 1 = 1
+        <if test="projectId != null">
+            and i.project_id = #{projectId}
+        </if>
+        <if test="status != null and status != ''">
+            and i.status = #{status}
+        </if>
+        <if test="severity != null and severity != ''">
+            and i.severity = #{severity}
+        </if>
+        <if test="origin != null and origin != ''">
+            and i.origin = #{origin}
+        </if>
+        <if test="prNumber != null">
+            and i.pr_number = #{prNumber}
+        </if>
+        <if test="keyword != null and keyword != ''">
+            and (i.title like concat('%', #{keyword}, '%') or i.file_path like concat('%', #{keyword}, '%'))
+        </if>
+        <if test="beginTime != null and beginTime != ''">
+            and i.create_time &gt;= #{beginTime}
+        </if>
+        <if test="endTime != null and endTime != ''">
+            and i.create_time &lt;= #{endTime}
+        </if>
+        ${params.dataScope}
+    </select>
+
+    <select id="countClosedToday" parameterType="com.acr.review.domain.ReviewIssue" resultType="int">
+        select count(1)
+        from review_issue i
+        left join review_project p on p.project_id = i.project_id
+        left join sys_dept d on d.dept_id = p.dept_id
+        left join sys_user owner on owner.user_id = p.owner_user_id
+        where i.status = 'CLOSED'
+          and date(i.closed_time) = curdate()
+        ${params.dataScope}
+    </select>
+
     <insert id="insertIssue" parameterType="com.acr.review.domain.ReviewIssue" useGeneratedKeys="true" keyProperty="issueId">
         insert into review_issue
         (project_id, provider, pr_number, fingerprint, first_task_id, first_run_id, last_task_id, last_run_id,

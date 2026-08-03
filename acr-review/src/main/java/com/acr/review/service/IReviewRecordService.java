@@ -10,4 +10,7 @@ public interface IReviewRecordService
     List<ReviewTask> selectReviewRecordList(ReviewTask query);
 
     ReviewTaskDetail selectReviewRecordDetail(Long taskId);
+
+    /** 与审查记录列表同口径计数。 */
+    int countReviewRecordList(ReviewTask query);
 }

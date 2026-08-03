@@ -314,4 +314,122 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         order by ifnull(t.finished_time, t.create_time) desc, t.task_id desc
     </select>
 
+    <select id="countReviewTaskList" parameterType="com.acr.review.domain.ReviewTask" resultType="int">
+        select count(1)
+        from review_task t
+        inner join review_project p on p.project_id = t.project_id
+        left join sys_business_system bs on bs.system_id = p.business_system_id
+        inner join sys_dept d on d.dept_id = p.dept_id
+        inner join sys_user owner on owner.user_id = p.owner_user_id
+        where 1 = 1
+        <if test="projectId != null">
+            and t.project_id = #{projectId}
+        </if>
+        <if test="prNumber != null">
+            and t.pr_number = #{prNumber}
+        </if>
+        <if test="taskStatus != null and taskStatus != ''">
+            and t.task_status = #{taskStatus}
+        </if>
+        <if test="queueOnly != null and queueOnly">
+            and t.task_status in ('PENDING', 'RUNNING', 'FAILED')
+        </if>
+        <if test="triggerType != null and triggerType != ''">
+            and t.trigger_type = #{triggerType}
+        </if>
+        <if test="params.beginTime != null and params.beginTime != ''">
+            and date_format(t.create_time,'%y%m%d') &gt;= date_format(#{params.beginTime},'%y%m%d')
+        </if>
+        <if test="params.endTime != null and params.endTime != ''">
+            and date_format(t.create_time,'%y%m%d') &lt;= date_format(#{params.endTime},'%y%m%d')
+        </if>
+        ${params.dataScope}
+    </select>
+
+    <select id="countReviewRecordList" parameterType="com.acr.review.domain.ReviewTask" resultType="int">
+        select count(1)
+        from review_task t
+        inner join review_project p on p.project_id = t.project_id
+        left join sys_business_system bs on bs.system_id = p.business_system_id
+        inner join sys_dept d on d.dept_id = p.dept_id
+        inner join sys_user owner on owner.user_id = p.owner_user_id
+        where t.task_status in ('SUCCESS', 'FAILED')
+        <if test="projectId != null">
+            and t.project_id = #{projectId}
+        </if>
+        <if test="prNumber != null">
+            and t.pr_number = #{prNumber}
+        </if>
+        <if test="prAuthor != null and prAuthor != ''">
+            and t.pr_author like concat('%', #{prAuthor}, '%')
+        </if>
+        <if test="reviewConclusion != null and reviewConclusion == 'FAILED'">
+            and t.task_status = 'FAILED'
+        </if>
+        <if test="reviewConclusion != null and reviewConclusion != '' and reviewConclusion != 'FAILED'">
+            and t.task_status = 'SUCCESS' and t.review_conclusion = #{reviewConclusion}
+        </if>
+        <if test="params.beginTime != null and params.beginTime != ''">
+            and date_format(ifnull(t.finished_time, t.create_time),'%y%m%d') &gt;= date_format(#{params.beginTime},'%y%m%d')
+        </if>
+        <if test="params.endTime != null and params.endTime != ''">
+            and date_format(ifnull(t.finished_time, t.create_time),'%y%m%d') &lt;= date_format(#{params.endTime},'%y%m%d')
+        </if>
+        ${params.dataScope}
+    </select>
+
+    <select id="countTodayNewTasks" parameterType="com.acr.review.domain.ReviewTask" resultType="int">
+        select count(1)
+        from review_task t
+        inner join review_project p on p.project_id = t.project_id
+        left join sys_business_system bs on bs.system_id = p.business_system_id
+        inner join sys_dept d on d.dept_id = p.dept_id
+        inner join sys_user owner on owner.user_id = p.owner_user_id
+        where date(t.create_time) = curdate()
+        ${params.dataScope}
+    </select>
+
+    <select id="countTodaySuccessTasks" parameterType="com.acr.review.domain.ReviewTask" resultType="int">
+        select count(1)
+        from review_task t
+        inner join review_project p on p.project_id = t.project_id
+        left join sys_business_system bs on bs.system_id = p.business_system_id
+        inner join sys_dept d on d.dept_id = p.dept_id
+        inner join sys_user owner on owner.user_id = p.owner_user_id
+        where t.task_status = 'SUCCESS'
+          and date(ifnull(t.finished_time, t.create_time)) = curdate()
+        ${params.dataScope}
+    </select>
+
+    <select id="countTodayFailedTasks" parameterType="com.acr.review.domain.ReviewTask" resultType="int">
+        select count(1)
+        from review_task t
+        inner join review_project p on p.project_id = t.project_id
+        left join sys_business_system bs on bs.system_id = p.business_system_id
+        inner join sys_dept d on d.dept_id = p.dept_id
+        inner join sys_user owner on owner.user_id = p.owner_user_id
+        where t.task_status = 'FAILED'
+          and date(ifnull(t.finished_time, t.create_time)) = curdate()
+        ${params.dataScope}
+    </select>
+
+    <select id="selectLatestTaskTime" parameterType="com.acr.review.domain.ReviewTask" resultType="java.util.Date">
+        select max(ifnull(t.finished_time, t.create_time))
+        from review_task t
+        inner join review_project p on p.project_id = t.project_id
+        left join sys_business_system bs on bs.system_id = p.business_system_id
+        inner join sys_dept d on d.dept_id = p.dept_id
+        inner join sys_user owner on owner.user_id = p.owner_user_id
+        where 1 = 1
+        ${params.dataScope}
+    </select>
+
+    <select id="selectRecentTasks" parameterType="com.acr.review.domain.ReviewTask" resultMap="ReviewTaskResult">
+        <include refid="taskListSelect" />
+        where 1 = 1
+        ${params.dataScope}
+        order by t.task_id desc
+        limit 5
+    </select>
+
 </mapper>

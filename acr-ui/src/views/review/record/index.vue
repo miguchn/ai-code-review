@@ -115,6 +115,7 @@ import {
   recordConclusionLabel, recordConclusionTagType, buildGithubPrUrl, formatDateTime
 } from '@/utils/reviewDisplay'
 
+const route = useRoute()
 const { proxy } = getCurrentInstance()
 
 const conclusionOptions = [
@@ -186,8 +187,23 @@ function handleRetry(row) {
 function handleQuery() { queryParams.value.pageNum = 1; getList() }
 function resetQuery() { proxy.resetForm('queryRef'); dateRange.value = []; handleQuery() }
 
+function applyRouteQuery() {
+  const q = route.query || {}
+  if (q.reviewConclusion) queryParams.value.reviewConclusion = String(q.reviewConclusion)
+  if (q.projectId) queryParams.value.projectId = Number(q.projectId) || q.projectId
+  if (q.prNumber) queryParams.value.prNumber = Number(q.prNumber) || q.prNumber
+  if (q.prAuthor) queryParams.value.prAuthor = String(q.prAuthor)
+  if (q.beginTime || q.endTime) {
+    dateRange.value = [q.beginTime ? String(q.beginTime) : '', q.endTime ? String(q.endTime) : '']
+  }
+}
+
 loadProjects()
-getList()
+// keep-alive 下从工作台卡片重入 tab 不会重跑 onMounted，激活时回填筛选并刷新
+onActivated(() => {
+  applyRouteQuery()
+  getList()
+})
 </script>
 
 <style scoped>

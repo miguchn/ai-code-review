@@ -11,6 +11,9 @@ public interface ReviewProjectMapper
 
     List<ReviewProject> selectReviewProjectList(ReviewProject project);
 
+    /** 与 selectReviewProjectList 同筛选、同 DataScope 的计数。 */
+    int countReviewProjectList(ReviewProject project);
+
     ReviewProject selectByRepository(@Param("provider") String provider,
                                      @Param("repositoryOwner") String repositoryOwner,
                                      @Param("repositoryName") String repositoryName,

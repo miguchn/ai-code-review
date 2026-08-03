@@ -120,6 +120,18 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
     }
 
     @Override
+    @DataScope(deptAlias = "d", userAlias = "owner", permission = "review:project:list")
+    public int countReviewProjectList(ReviewProject project)
+    {
+        project.setProvider(PROVIDER);
+        if (!SecurityUtils.isAdmin())
+        {
+            project.setAccessUserId(SecurityUtils.getUserId());
+        }
+        return projectMapper.countReviewProjectList(project);
+    }
+
+    @Override
     public ReviewProjectOptions getFormOptions()
     {
         ReviewProjectOptions options = new ReviewProjectOptions();

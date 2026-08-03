@@ -2,6 +2,13 @@
 
 ## [Unreleased] - 2026-08-03
 
+### M7 基础工作台
+
+- 登录后首页 `/index` 替换为行动工作台：范围与健康、权限驱动待办卡（最多 5 张）、今日摘要、最近动态；零项目引导态仅对有 `review:project:list` 且 `projectCount=0` 的用户触发
+- `GET /workbench/summary`：登录可调、无新权限串；`cards` 数据驱动；计数复用各列表同款 `@DataScope`；今日指标无权限返回 `null`（前端「—」）
+- 问题/任务/记录/投递四个列表支持 route query 回填筛选；任务页回填 `taskStatus` 时复位 `queueOnly=false`；工作台 `onActivated` 刷新
+- 设计文档：`docs/planning/workbench-m7.md`；无新表/新权限/新字典
+
 ### M6.1 问题处置与投递记录追溯打磨
 
 - 处置接口（confirm/close/dismiss）失败时返回 `commentSyncFailureMessage` + `deliveryId`；前端展示具体原因并可跳转投递记录页（无定位参数）

@@ -120,6 +120,44 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         order by p.project_id desc
     </select>
 
+    <select id="countReviewProjectList" parameterType="com.acr.review.domain.ReviewProject" resultType="int">
+        select count(1)
+        from review_project p
+        inner join sys_business_system bs on bs.system_id = p.business_system_id
+        inner join sys_dept d on d.dept_id = p.dept_id
+        inner join sys_user owner on owner.user_id = p.owner_user_id
+        inner join review_git_credential c on c.credential_id = p.credential_id
+        where 1 = 1
+        <if test="projectId != null">
+            and p.project_id = #{projectId}
+        </if>
+        <if test="projectName != null and projectName != ''">
+            and p.project_name like concat('%', #{projectName}, '%')
+        </if>
+        <if test="provider != null and provider != ''">
+            and p.provider = #{provider}
+        </if>
+        <if test="businessSystemId != null">
+            and p.business_system_id = #{businessSystemId}
+        </if>
+        <if test="deptId != null">
+            and p.dept_id = #{deptId}
+        </if>
+        <if test="ownerUserId != null">
+            and p.owner_user_id = #{ownerUserId}
+        </if>
+        <if test="status != null and status != ''">
+            and p.status = #{status}
+        </if>
+        <if test="lastCheckStatus != null and lastCheckStatus != ''">
+            and p.last_check_status = #{lastCheckStatus}
+        </if>
+        <if test="accessUserId != null">
+            and (p.owner_user_id = #{accessUserId} or find_in_set(#{accessUserId}, bs.manager_ids))
+        </if>
+        ${params.dataScope}
+    </select>
+
     <select id="selectByRepository" resultMap="ReviewProjectResult">
         select project_id, project_name, provider, repository_owner, repository_name,
                status, pr_review_enabled, pr_target_branches, webhook_secret_ciphertext, credential_id,

@@ -109,6 +109,7 @@ import { listReviewProject } from '@/api/review/project'
 import auth from '@/plugins/auth'
 import { emptyDash, formatDateTime } from '@/utils/reviewDisplay'
 
+const route = useRoute()
 const { proxy } = getCurrentInstance()
 const { review_task_status, review_task_step } = proxy.useDict('review_task_status', 'review_task_step')
 
@@ -240,7 +241,21 @@ function resetQuery() {
 }
 
 loadProjects()
-getList()
+// keep-alive 下从工作台卡片重入 tab 不会重跑 onMounted，激活时回填筛选并刷新
+onActivated(() => {
+  applyRouteQuery()
+  getList()
+})
+
+function applyRouteQuery() {
+  const q = route.query || {}
+  if (q.taskStatus) {
+    queryParams.value.taskStatus = String(q.taskStatus)
+    queryParams.value.queueOnly = false
+  }
+  if (q.projectId) queryParams.value.projectId = Number(q.projectId) || q.projectId
+  if (q.prNumber) queryParams.value.prNumber = Number(q.prNumber) || q.prNumber
+}
 </script>
 
 <style scoped>

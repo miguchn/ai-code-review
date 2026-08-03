@@ -1,5 +1,6 @@
 package com.acr.review.service.impl;
 
+import java.util.Date;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import com.acr.common.annotation.DataScope;
@@ -63,6 +64,48 @@ public class ReviewTaskServiceImpl implements IReviewTaskService
     public List<ReviewTask> selectReviewTaskList(ReviewTask task)
     {
         return taskMapper.selectReviewTaskList(task);
+    }
+
+    @Override
+    @DataScope(deptAlias = "d", userAlias = "owner", permission = "review:task:list")
+    public int countReviewTaskList(ReviewTask task)
+    {
+        return taskMapper.countReviewTaskList(task);
+    }
+
+    @Override
+    @DataScope(deptAlias = "d", userAlias = "owner", permission = "review:task:list")
+    public int countTodayNewTasks(ReviewTask task)
+    {
+        return taskMapper.countTodayNewTasks(task);
+    }
+
+    @Override
+    @DataScope(deptAlias = "d", userAlias = "owner", permission = "review:task:list")
+    public int countTodaySuccessTasks(ReviewTask task)
+    {
+        return taskMapper.countTodaySuccessTasks(task);
+    }
+
+    @Override
+    @DataScope(deptAlias = "d", userAlias = "owner", permission = "review:task:list")
+    public int countTodayFailedTasks(ReviewTask task)
+    {
+        return taskMapper.countTodayFailedTasks(task);
+    }
+
+    @Override
+    @DataScope(deptAlias = "d", userAlias = "owner", permission = "review:task:list")
+    public Date selectLatestTaskTime(ReviewTask task)
+    {
+        return taskMapper.selectLatestTaskTime(task);
+    }
+
+    @Override
+    @DataScope(deptAlias = "d", userAlias = "owner", permission = "review:task:list")
+    public List<ReviewTask> selectRecentTasks(ReviewTask task)
+    {
+        return taskMapper.selectRecentTasks(task);
     }
 
     @Override

@@ -24,4 +24,10 @@ public interface ReviewIssueMapper
     int updateIssueDisposition(ReviewIssue issue);
 
     int countOpenNewByProject(@Param("projectId") Long projectId);
+
+    /** 与 selectIssueList 同筛选、同 DataScope 的计数。 */
+    int countIssueList(ReviewIssue query);
+
+    /** 今日关闭问题数（status=CLOSED 且 DATE(closed_time)=CURDATE()）。 */
+    int countClosedToday(ReviewIssue query);
 }

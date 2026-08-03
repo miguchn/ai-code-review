@@ -37,4 +37,25 @@ public interface ReviewTaskMapper
 
     /** 仅更新执行快照列：历史任务（快照冻结上线前建单）执行前补冻结时使用。 */
     int updateTaskSnapshot(ReviewTask task);
+
+    /** 与 selectReviewTaskList 同筛选、同 DataScope 的计数。 */
+    int countReviewTaskList(ReviewTask task);
+
+    /** 与 selectReviewRecordList 同筛选、同 DataScope 的计数。 */
+    int countReviewRecordList(ReviewTask task);
+
+    /** 今日新建任务数（DATE(create_time)=CURDATE()）。 */
+    int countTodayNewTasks(ReviewTask task);
+
+    /** 今日成功任务数。 */
+    int countTodaySuccessTasks(ReviewTask task);
+
+    /** 今日失败任务数。 */
+    int countTodayFailedTasks(ReviewTask task);
+
+    /** 可见范围内最近任务时间（ifnull(finished_time, create_time)）。 */
+    Date selectLatestTaskTime(ReviewTask task);
+
+    /** 最近审查任务（按 task_id 倒序，LIMIT 5）。 */
+    List<ReviewTask> selectRecentTasks(ReviewTask task);
 }

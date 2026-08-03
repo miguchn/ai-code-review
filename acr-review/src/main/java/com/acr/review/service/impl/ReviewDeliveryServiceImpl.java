@@ -392,6 +392,13 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
         return deliveryMapper.selectDeliveryList(query);
     }
 
+    @Override
+    @DataScope(deptAlias = "d", userAlias = "owner", permission = "review:delivery:list")
+    public int countDeliveryList(ReviewDeliveryRecord query)
+    {
+        return deliveryMapper.countDeliveryList(query);
+    }
+
     private String writeComment(ReviewTask task, ReviewTaskRun run)
     {
         ReviewProject project = projectMapper.selectReviewProjectById(task.getProjectId());

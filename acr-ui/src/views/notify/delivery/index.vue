@@ -135,10 +135,24 @@ function handleRetry(row) {
 }
 
 loadProjects()
-if (route.query.taskId) {
-  queryParams.value.taskId = Number(route.query.taskId) || route.query.taskId
+// keep-alive 下从工作台卡片重入 tab 不会重跑 onMounted，激活时回填筛选并刷新
+onActivated(() => {
+  applyRouteQuery()
+  getList()
+})
+
+function applyRouteQuery() {
+  const q = route.query || {}
+  if (q.taskId) {
+    queryParams.value.taskId = Number(q.taskId) || q.taskId
+  }
+  if (q.deliveryStatus) {
+    queryParams.value.deliveryStatus = String(q.deliveryStatus)
+  }
+  if (q.projectId) queryParams.value.projectId = Number(q.projectId) || q.projectId
+  if (q.channel) queryParams.value.channel = String(q.channel)
+  if (q.prNumber) queryParams.value.prNumber = Number(q.prNumber) || q.prNumber
 }
-getList()
 </script>
 
 <style scoped>
