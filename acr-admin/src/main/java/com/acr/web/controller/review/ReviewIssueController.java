@@ -1,5 +1,6 @@
 package com.acr.web.controller.review;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -14,6 +15,8 @@ import com.acr.common.core.controller.BaseController;
 import com.acr.common.core.domain.AjaxResult;
 import com.acr.common.core.page.TableDataInfo;
 import com.acr.common.enums.BusinessType;
+import com.acr.review.delivery.ReviewDeliveryConstants;
+import com.acr.review.domain.ReviewCommentSyncResult;
 import com.acr.review.domain.ReviewIssue;
 import com.acr.review.domain.ReviewIssueDetail;
 import com.acr.review.service.IReviewIssueService;
@@ -51,8 +54,7 @@ public class ReviewIssueController extends BaseController
     @PutMapping("/{issueId}/confirm")
     public AjaxResult confirm(@PathVariable Long issueId)
     {
-        String sync = issueService.confirm(issueId);
-        return success(Map.of("commentSyncStatus", sync == null ? "SKIPPED" : sync));
+        return success(toCommentSyncData(issueService.confirm(issueId)));
     }
 
     @PreAuthorize("@ss.hasPermi('review:issue:close')")
@@ -61,8 +63,7 @@ public class ReviewIssueController extends BaseController
     public AjaxResult close(@PathVariable Long issueId, @RequestBody(required = false) Map<String, String> body)
     {
         String note = body == null ? null : body.get("resolveNote");
-        String sync = issueService.close(issueId, note);
-        return success(Map.of("commentSyncStatus", sync == null ? "SKIPPED" : sync));
+        return success(toCommentSyncData(issueService.close(issueId, note)));
     }
 
     @PreAuthorize("@ss.hasPermi('review:issue:close')")
@@ -74,7 +75,27 @@ public class ReviewIssueController extends BaseController
         {
             body = Map.of();
         }
-        String sync = issueService.dismiss(issueId, body.get("dismissType"), body.get("resolveNote"));
-        return success(Map.of("commentSyncStatus", sync == null ? "SKIPPED" : sync));
+        return success(toCommentSyncData(issueService.dismiss(issueId, body.get("dismissType"), body.get("resolveNote"))));
+    }
+
+    private static Map<String, Object> toCommentSyncData(ReviewCommentSyncResult sync)
+    {
+        Map<String, Object> data = new LinkedHashMap<>();
+        String status = sync == null || sync.getStatus() == null
+            ? ReviewDeliveryConstants.STATUS_SKIPPED
+            : sync.getStatus();
+        data.put("commentSyncStatus", status);
+        if (ReviewDeliveryConstants.STATUS_FAILED.equals(status))
+        {
+            if (sync.getFailureMessage() != null)
+            {
+                data.put("commentSyncFailureMessage", sync.getFailureMessage());
+            }
+            if (sync.getDeliveryId() != null)
+            {
+                data.put("deliveryId", sync.getDeliveryId());
+            }
+        }
+        return data;
     }
 }

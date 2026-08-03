@@ -17,9 +17,13 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import com.acr.common.exception.ServiceException;
+import com.acr.review.delivery.ReviewDeliveryConstants;
+import com.acr.review.domain.ReviewCommentSyncResult;
+import com.acr.review.domain.ReviewDeliveryRecord;
 import com.acr.review.domain.ReviewIssue;
 import com.acr.review.domain.ReviewIssueAction;
 import com.acr.review.domain.ReviewIssueConstants;
+import com.acr.review.domain.ReviewIssueDetail;
 import com.acr.review.domain.ReviewPipelineConstants;
 import com.acr.review.domain.ReviewProject;
 import com.acr.review.domain.ReviewTask;
@@ -125,9 +129,10 @@ class ReviewIssueServiceImplTest
         issue.setStatus(ReviewIssueConstants.STATUS_AWAITING_CONFIRM);
         stubProjectScope(issue);
         when(issueMapper.selectIssueById(7L)).thenReturn(issue);
-        when(deliveryService.rerenderSummaryComment(10L, 8)).thenReturn("SUCCESS");
+        when(deliveryService.rerenderSummaryComment(10L, 8))
+            .thenReturn(ReviewCommentSyncResult.of(ReviewDeliveryConstants.STATUS_SUCCESS, null, 100L));
 
-        assertEquals("SUCCESS", service.confirm(7L));
+        assertEquals(ReviewDeliveryConstants.STATUS_SUCCESS, service.confirm(7L).getStatus());
         assertEquals(ReviewIssueConstants.STATUS_AWAITING_FIX, issue.getStatus());
 
         when(issueMapper.selectIssueById(7L)).thenReturn(issue);
@@ -153,14 +158,39 @@ class ReviewIssueServiceImplTest
         ReviewIssue issue = openIssue(9L, "SEC", "a.java", "x");
         stubProjectScope(issue);
         when(issueMapper.selectIssueById(9L)).thenReturn(issue);
-        when(deliveryService.rerenderSummaryComment(10L, 8)).thenReturn("FAILED");
+        when(deliveryService.rerenderSummaryComment(10L, 8))
+            .thenReturn(ReviewCommentSyncResult.of(ReviewDeliveryConstants.STATUS_FAILED, "GitHub API 超时", 88L));
 
-        assertEquals("FAILED", service.dismiss(9L, "FALSE_POSITIVE", "历史噪声"));
+        ReviewCommentSyncResult sync = service.dismiss(9L, "FALSE_POSITIVE", "历史噪声");
+        assertEquals(ReviewDeliveryConstants.STATUS_FAILED, sync.getStatus());
+        assertEquals("GitHub API 超时", sync.getFailureMessage());
+        assertEquals(88L, sync.getDeliveryId());
         assertEquals(ReviewIssueConstants.STATUS_FALSE_POSITIVE, issue.getStatus());
         ArgumentCaptor<ReviewIssueAction> actionCaptor = ArgumentCaptor.forClass(ReviewIssueAction.class);
         verify(actionMapper).insertAction(actionCaptor.capture());
         assertEquals(ReviewIssueConstants.ACTION_DISMISS, actionCaptor.getValue().getActionType());
         assertNotNull(issue.getClosedTime());
+    }
+
+    @Test
+    void selectIssueDetailIncludesSummaryDelivery()
+    {
+        ReviewIssue issue = openIssue(11L, "SEC", "a.java", "x");
+        stubProjectScope(issue);
+        when(issueMapper.selectIssueById(11L)).thenReturn(issue);
+        when(actionMapper.selectByIssueId(11L)).thenReturn(List.of());
+        ReviewDeliveryRecord delivery = new ReviewDeliveryRecord();
+        delivery.setDeliveryId(55L);
+        delivery.setDeliveryStatus(ReviewDeliveryConstants.STATUS_FAILED);
+        delivery.setTriggerSource(ReviewDeliveryConstants.TRIGGER_ISSUE_DISPOSITION);
+        when(deliveryService.selectSummaryDelivery(10L, 8)).thenReturn(delivery);
+
+        ReviewIssueDetail detail = service.selectIssueDetail(11L);
+
+        assertNotNull(detail.getSummaryDelivery());
+        assertEquals(55L, detail.getSummaryDelivery().getDeliveryId());
+        assertEquals(ReviewDeliveryConstants.TRIGGER_ISSUE_DISPOSITION,
+            detail.getSummaryDelivery().getTriggerSource());
     }
 
     @Test

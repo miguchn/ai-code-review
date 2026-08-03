@@ -2,6 +2,13 @@
 
 ## [Unreleased] - 2026-08-03
 
+### M6.1 问题处置与投递记录追溯打磨
+
+- 处置接口（confirm/close/dismiss）失败时返回 `commentSyncFailureMessage` + `deliveryId`；前端展示具体原因并可跳转投递记录页（无定位参数）
+- `review_delivery_record` 新增可空列 `trigger_source`（`TASK_SUCCESS` / `ISSUE_DISPOSITION` / `MANUAL_RETRY`）；三口赋值，原地更新以最近一次为准；历史不回填
+- 投递记录列表展示「最后尝试时间」「触发来源」；失败原因保留截断 + tooltip 全文；问题台账详情抽屉展示该 PR 总结评论投递摘要并可跳转
+- 设计文档：`docs/planning/issue-delivery-trace-m6.1.md`；脚本：`sql/26_issue_delivery_trace_m6_1.sql`
+
 ### M6 问题台账基础闭环
 
 - 审查 SUCCESS 后将 `top_issues_json` 物化为 `review_issue`（PR 级指纹去重，FAILED 不物化）；支持确认 / 关闭 / 忽略 / 误报，动作写入 `review_issue_action`

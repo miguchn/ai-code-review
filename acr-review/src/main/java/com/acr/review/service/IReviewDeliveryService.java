@@ -1,6 +1,7 @@
 package com.acr.review.service;
 
 import java.util.List;
+import com.acr.review.domain.ReviewCommentSyncResult;
 import com.acr.review.domain.ReviewDeliveryRecord;
 import com.acr.review.domain.ReviewTask;
 import com.acr.review.domain.ReviewTaskRun;
@@ -30,9 +31,9 @@ public interface IReviewDeliveryService
 
     /**
      * 按项目+PR 用最近 SUCCESS 结论重渲染总结评论（含问题处置态）。
-     * @return SUCCESS / FAILED / SKIPPED
+     * 返回同步结果（status + 失败原因 + deliveryId），不抛出评论失败。
      */
-    String rerenderSummaryComment(Long projectId, Integer prNumber);
+    ReviewCommentSyncResult rerenderSummaryComment(Long projectId, Integer prNumber);
 
     /** 按项目+PR 查询总结评论投递记录（无则 null）。 */
     ReviewDeliveryRecord selectSummaryDelivery(Long projectId, Integer prNumber);

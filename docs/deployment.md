@@ -46,6 +46,7 @@ mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/22_review_
 mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/23_review_delivery_record.sql
 mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/24_notification_management_m5.sql
 mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/25_issue_ledger_m6.sql
+mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/26_issue_delivery_trace_m6_1.sql
 ```
 
 > 含中文的 SQL 必须使用 `--default-character-set=utf8mb4`（或脚本内 `SET NAMES utf8mb4`）执行，避免菜单/字典文案乱码。

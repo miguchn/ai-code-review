@@ -13,6 +13,14 @@ public final class ReviewDeliveryConstants
 
     public static final String STATUS_SUCCESS = "SUCCESS";
     public static final String STATUS_FAILED = "FAILED";
+    public static final String STATUS_SKIPPED = "SKIPPED";
+
+    /** 任务 SUCCESS/FAILED 后的外部投递（GitHub 总结评论或 IM）。 */
+    public static final String TRIGGER_TASK_SUCCESS = "TASK_SUCCESS";
+    /** 问题处置后重渲染 PR 总结评论。 */
+    public static final String TRIGGER_ISSUE_DISPOSITION = "ISSUE_DISPOSITION";
+    /** 投递记录页或任务详情手动重试/补发。 */
+    public static final String TRIGGER_MANUAL_RETRY = "MANUAL_RETRY";
 
     public static final String PROVIDER_GITHUB = "GITHUB";
 

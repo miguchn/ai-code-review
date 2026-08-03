@@ -29,6 +29,7 @@
 23. `23_review_delivery_record.sql`：M4 GitHub PR 总结评论投递记录表 `review_delivery_record`、投递状态字典、审查记录下「投递重试」权限（须 utf8mb4）。
 24. `24_notification_management_m5.sql`：M5 通知渠道表 `review_notify_channel`、项目 `notify_*` 三列、渠道/投递字典、`review.ui.base-url`、一级菜单「通知管理」及权限（须 utf8mb4）。
 25. `25_issue_ledger_m6.sql`：M6 问题台账表 `review_issue` / `review_issue_action`、状态/来源/归属字典、审查中心「问题台账」菜单与权限（须 utf8mb4）。
+26. `26_issue_delivery_trace_m6_1.sql`：M6.1 投递记录追溯（`review_delivery_record.trigger_source` 可空列 + 触发来源字典；须 utf8mb4）。
 
 含中文的增量脚本执行时请显式指定连接字符集，例如：
 
@@ -49,6 +50,7 @@ mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/22_review_
 mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/23_review_delivery_record.sql
 mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/24_notification_management_m5.sql
 mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/25_issue_ledger_m6.sql
+mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/26_issue_delivery_trace_m6_1.sql
 ```
 
 ## 命名规则

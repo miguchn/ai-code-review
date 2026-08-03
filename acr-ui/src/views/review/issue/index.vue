@@ -127,6 +127,28 @@
           </section>
 
           <section class="detail-block">
+            <div class="detail-block-title">
+              <span>PR 总结评论投递</span>
+              <el-button v-if="canOpenDeliveryList" link type="primary" @click="goDeliveryList">查看投递记录</el-button>
+            </div>
+            <template v-if="detailSummaryDelivery">
+              <div class="delivery-summary">
+                <dict-tag :options="review_delivery_status" :value="detailSummaryDelivery.deliveryStatus" />
+                <dict-tag v-if="detailSummaryDelivery.triggerSource" :options="review_delivery_trigger_source"
+                  :value="detailSummaryDelivery.triggerSource" />
+                <span v-if="detailSummaryDelivery.lastAttemptTime" class="delivery-time">
+                  {{ formatDateTime(detailSummaryDelivery.lastAttemptTime) }}
+                </span>
+              </div>
+              <p v-if="detailSummaryDelivery.deliveryStatus === 'FAILED'" class="delivery-failure"
+                :title="detailSummaryDelivery.failureMessage || ''">
+                {{ detailSummaryDelivery.failureMessage || '—' }}
+              </p>
+            </template>
+            <span v-else class="empty-tip">暂无该 PR 总结评论投递记录</span>
+          </section>
+
+          <section class="detail-block">
             <div class="detail-block-title">动作时间线</div>
             <el-empty v-if="!detailActions.length" description="暂无处置记录" :image-size="48" />
             <el-timeline v-else class="action-timeline">
@@ -197,6 +219,7 @@
 import { useRoute, useRouter } from 'vue-router'
 import { listIssue, getIssue, confirmIssue, closeIssue, dismissIssue } from '@/api/review/issue'
 import { listReviewProject } from '@/api/review/project'
+import auth from '@/plugins/auth'
 import {
   emptyDash, formatDateTime, severityLabel, severityTagType, formatIssueLines
 } from '@/utils/reviewDisplay'
@@ -204,7 +227,17 @@ import {
 const route = useRoute()
 const router = useRouter()
 const { proxy } = getCurrentInstance()
-const { review_issue_status, review_issue_origin } = proxy.useDict('review_issue_status', 'review_issue_origin')
+const {
+  review_issue_status,
+  review_issue_origin,
+  review_delivery_status,
+  review_delivery_trigger_source
+} = proxy.useDict(
+  'review_issue_status',
+  'review_issue_origin',
+  'review_delivery_status',
+  'review_delivery_trigger_source'
+)
 
 const severityOptions = [
   { label: '严重', value: 'CRITICAL' },
@@ -232,6 +265,7 @@ const detailLoading = ref(false)
 const detailIssue = ref(null)
 const detailSourceTask = ref(null)
 const detailActions = ref([])
+const detailSummaryDelivery = ref(null)
 const activeIssueId = ref(null)
 const actionLoading = ref(false)
 
@@ -263,6 +297,8 @@ const showDetailActions = computed(() => {
   const status = detailIssue.value?.status
   return status === 'AWAITING_CONFIRM' || isOpenStatus(status)
 })
+
+const canOpenDeliveryList = computed(() => auth.hasPermi('review:delivery:list'))
 
 function isOpenStatus(status) {
   return OPEN_STATUSES.includes(status)
@@ -309,11 +345,13 @@ function loadDetail(issueId) {
   detailIssue.value = null
   detailSourceTask.value = null
   detailActions.value = []
+  detailSummaryDelivery.value = null
   getIssue(issueId).then(response => {
     const payload = response.data || {}
     detailIssue.value = payload.issue || null
     detailSourceTask.value = payload.sourceTask || null
     detailActions.value = payload.actions || []
+    detailSummaryDelivery.value = payload.summaryDelivery || null
   }).catch(error => {
     proxy.$modal.msgError(error?.message || '详情加载失败')
     closeDrawer()
@@ -343,15 +381,28 @@ function goSourceTask() {
   proxy.$router.push('/review/record-detail/index/' + taskId)
 }
 
+function goDeliveryList() {
+  router.push('/notify/delivery')
+}
+
 function reloadDetailAndList() {
   if (activeIssueId.value) loadDetail(activeIssueId.value)
   getList()
 }
 
 function notifyCommentSync(response) {
-  const status = response?.data?.commentSyncStatus
-  if (status === 'FAILED') {
-    proxy.$modal.msgWarning('评论同步失败，可在投递记录重试')
+  const data = response?.data || {}
+  if (data.commentSyncStatus !== 'FAILED') return
+  const reason = data.commentSyncFailureMessage
+  const msg = reason
+    ? `评论同步失败：${reason}`
+    : '评论同步失败，可在投递记录重试'
+  if (canOpenDeliveryList.value) {
+    proxy.$modal.confirm(msg + '。是否前往投递记录？').then(() => {
+      goDeliveryList()
+    }).catch(() => {})
+  } else {
+    proxy.$modal.msgWarning(msg)
   }
 }
 
@@ -448,9 +499,28 @@ onMounted(() => openFromRoute())
 }
 .detail-block { margin-bottom: 16px; }
 .detail-block-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   margin-bottom: 8px;
   font-size: 13px;
   font-weight: 600;
+}
+.delivery-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.delivery-time { font-size: 12px; color: var(--el-text-color-secondary); }
+.delivery-failure {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--el-color-danger);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .detail-text {
   margin: 0;

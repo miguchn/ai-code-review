@@ -3,14 +3,16 @@ package com.acr.review.domain;
 import java.util.ArrayList;
 import java.util.List;
 
-/** 问题详情：快照 + 来源任务摘要 + 动作时间线。 */
+/** 问题详情：快照 + 来源任务摘要 + 动作时间线 + PR 总结评论投递摘要。 */
 public class ReviewIssueDetail
 {
     private ReviewIssue issue;
     private ReviewTask sourceTask;
     private List<ReviewIssueAction> actions = new ArrayList<>();
-    /** 评论同步结果：SUCCESS / FAILED / SKIPPED，可选。 */
+    /** 评论同步结果：SUCCESS / FAILED / SKIPPED，可选（处置响应使用）。 */
     private String commentSyncStatus;
+    /** 该 PR 的 GitHub 总结评论投递记录（无则 null）。 */
+    private ReviewDeliveryRecord summaryDelivery;
 
     public ReviewIssue getIssue() { return issue; }
     public void setIssue(ReviewIssue issue) { this.issue = issue; }
@@ -20,4 +22,6 @@ public class ReviewIssueDetail
     public void setActions(List<ReviewIssueAction> actions) { this.actions = actions; }
     public String getCommentSyncStatus() { return commentSyncStatus; }
     public void setCommentSyncStatus(String commentSyncStatus) { this.commentSyncStatus = commentSyncStatus; }
+    public ReviewDeliveryRecord getSummaryDelivery() { return summaryDelivery; }
+    public void setSummaryDelivery(ReviewDeliveryRecord summaryDelivery) { this.summaryDelivery = summaryDelivery; }
 }

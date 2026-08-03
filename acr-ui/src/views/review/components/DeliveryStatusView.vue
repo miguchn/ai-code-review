@@ -22,7 +22,7 @@
         <el-tag v-else-if="delivery.deliveryStatus === 'FAILED'" type="danger" size="small">投递失败</el-tag>
         <span v-else class="empty-tip">—</span>
       </el-descriptions-item>
-      <el-descriptions-item label="最近尝试">
+      <el-descriptions-item label="最后尝试时间">
         {{ formatDateTime(delivery.lastAttemptTime) }}
       </el-descriptions-item>
       <el-descriptions-item label="尝试次数">

@@ -28,6 +28,7 @@ import com.acr.common.exception.ServiceException;
 import com.acr.review.delivery.ReviewDeliveryConstants;
 import com.acr.review.delivery.ReviewSummaryContent;
 import com.acr.review.delivery.ReviewSummaryContentFactory;
+import com.acr.review.domain.ReviewCommentSyncResult;
 import com.acr.review.domain.ReviewDeliveryRecord;
 import com.acr.review.domain.ReviewNotifyChannel;
 import com.acr.review.domain.ReviewPipelineConstants;
@@ -95,6 +96,7 @@ class ReviewDeliveryServiceImplTest
         assertEquals(ReviewDeliveryConstants.STATUS_SUCCESS, captor.getValue().getDeliveryStatus());
         assertEquals("501", captor.getValue().getExternalId());
         assertEquals(ReviewDeliveryConstants.idempotencyKey(3L, 8), captor.getValue().getIdempotencyKey());
+        assertEquals(ReviewDeliveryConstants.TRIGGER_TASK_SUCCESS, captor.getValue().getTriggerSource());
     }
 
     @Test
@@ -419,9 +421,10 @@ class ReviewDeliveryServiceImplTest
     {
         when(taskMapper.selectLatestSuccessByProjectAndPr(3L, 8)).thenReturn(null);
 
-        String status = service.rerenderSummaryComment(3L, 8);
+        ReviewCommentSyncResult result = service.rerenderSummaryComment(3L, 8);
 
-        assertEquals("SKIPPED", status);
+        assertEquals(ReviewDeliveryConstants.STATUS_SKIPPED, result.getStatus());
+        assertNull(result.getDeliveryId());
         verify(commentClient, never()).findCommentWithMarker(any(), anyString(), anyInt(), anyString());
         verify(commentClient, never()).createIssueComment(any(), anyString(), anyInt(), anyString());
         verify(commentClient, never()).updateIssueComment(any(), anyString(), anyString(), anyString());
@@ -444,13 +447,14 @@ class ReviewDeliveryServiceImplTest
             .thenReturn(new GitPullRequestComment("88", "body"));
         when(deliveryMapper.selectByIdempotencyKey(anyString())).thenReturn(null);
 
-        String status = service.rerenderSummaryComment(3L, 8);
+        ReviewCommentSyncResult result = service.rerenderSummaryComment(3L, 8);
 
-        assertEquals(ReviewDeliveryConstants.STATUS_SUCCESS, status);
+        assertEquals(ReviewDeliveryConstants.STATUS_SUCCESS, result.getStatus());
         ArgumentCaptor<ReviewDeliveryRecord> captor = ArgumentCaptor.forClass(ReviewDeliveryRecord.class);
         verify(deliveryMapper).insertDelivery(captor.capture());
         assertEquals(ReviewDeliveryConstants.STATUS_SUCCESS, captor.getValue().getDeliveryStatus());
         assertEquals("88", captor.getValue().getExternalId());
+        assertEquals(ReviewDeliveryConstants.TRIGGER_ISSUE_DISPOSITION, captor.getValue().getTriggerSource());
     }
 
     @Test
@@ -466,14 +470,70 @@ class ReviewDeliveryServiceImplTest
             .thenThrow(new GitPullRequestCommentException("GitHub API 超时"));
         when(deliveryMapper.selectByIdempotencyKey(anyString())).thenReturn(null);
 
-        String status = service.rerenderSummaryComment(3L, 8);
+        ReviewCommentSyncResult result = service.rerenderSummaryComment(3L, 8);
 
-        assertEquals(ReviewDeliveryConstants.STATUS_FAILED, status);
+        assertEquals(ReviewDeliveryConstants.STATUS_FAILED, result.getStatus());
+        assertTrue(result.getFailureMessage().contains("超时"));
         ArgumentCaptor<ReviewDeliveryRecord> captor = ArgumentCaptor.forClass(ReviewDeliveryRecord.class);
         verify(deliveryMapper).insertDelivery(captor.capture());
         assertEquals(ReviewDeliveryConstants.STATUS_FAILED, captor.getValue().getDeliveryStatus());
         assertTrue(captor.getValue().getFailureMessage().contains("超时"));
+        assertEquals(ReviewDeliveryConstants.TRIGGER_ISSUE_DISPOSITION, captor.getValue().getTriggerSource());
         assertNull(captor.getValue().getExternalId());
+    }
+
+    @Test
+    void triggerSourceOverwrittenByLatestAttempt()
+    {
+        ReviewTask task = successTask(30L, 3L, 8);
+        ReviewTaskRun run = successRun(500L, 1);
+        stubProjectAndToken();
+        when(commentClient.findCommentWithMarker(any(), anyString(), anyInt(), anyString()))
+            .thenReturn(Optional.empty());
+        when(commentClient.createIssueComment(any(), anyString(), anyInt(), anyString()))
+            .thenReturn(new GitPullRequestComment("9", "body"));
+        ReviewDeliveryRecord existing = new ReviewDeliveryRecord();
+        existing.setDeliveryId(77L);
+        existing.setExternalId("9");
+        existing.setTriggerSource(ReviewDeliveryConstants.TRIGGER_TASK_SUCCESS);
+        when(deliveryMapper.selectByIdempotencyKey(anyString())).thenReturn(existing);
+        when(taskMapper.selectLatestSuccessByProjectAndPr(3L, 8)).thenReturn(task);
+        when(runMapper.selectRunsByTaskId(30L)).thenReturn(List.of(run));
+        when(contentFactory.build(any(), any(), any()))
+            .thenReturn(ReviewSummaryContent.builder().conclusionLabel("通过").build());
+
+        ReviewCommentSyncResult result = service.rerenderSummaryComment(3L, 8);
+
+        assertEquals(ReviewDeliveryConstants.STATUS_SUCCESS, result.getStatus());
+        assertEquals(77L, result.getDeliveryId());
+        ArgumentCaptor<ReviewDeliveryRecord> captor = ArgumentCaptor.forClass(ReviewDeliveryRecord.class);
+        verify(deliveryMapper).updateDeliveryResult(captor.capture());
+        assertEquals(ReviewDeliveryConstants.TRIGGER_ISSUE_DISPOSITION, captor.getValue().getTriggerSource());
+    }
+
+    @Test
+    void retryDeliveryWritesManualRetryTrigger()
+    {
+        ReviewTask anchor = successTask(40L, 3L, 8);
+        ReviewTask latest = successTask(41L, 3L, 8);
+        when(taskMapper.selectReviewTaskById(40L)).thenReturn(anchor);
+        when(projectMapper.selectReviewProjectById(3L)).thenReturn(project());
+        when(taskMapper.selectLatestSuccessByProjectAndPr(3L, 8)).thenReturn(latest);
+        when(runMapper.selectRunsByTaskId(41L)).thenReturn(List.of(successRun(601L, 1)));
+        when(credentialService.getPlainToken(5L, true)).thenReturn("pat");
+        when(contentFactory.build(any(), any(), any()))
+            .thenReturn(ReviewSummaryContent.builder().conclusionLabel("通过").build());
+        when(commentClient.findCommentWithMarker(any(), anyString(), anyInt(), anyString()))
+            .thenReturn(Optional.empty());
+        when(commentClient.createIssueComment(any(), anyString(), anyInt(), anyString()))
+            .thenReturn(new GitPullRequestComment("12", "body"));
+        when(deliveryMapper.selectByIdempotencyKey(anyString())).thenReturn(null);
+
+        service.retryDelivery(40L);
+
+        ArgumentCaptor<ReviewDeliveryRecord> captor = ArgumentCaptor.forClass(ReviewDeliveryRecord.class);
+        verify(deliveryMapper).insertDelivery(captor.capture());
+        assertEquals(ReviewDeliveryConstants.TRIGGER_MANUAL_RETRY, captor.getValue().getTriggerSource());
     }
 
     private void stubProjectAndToken()

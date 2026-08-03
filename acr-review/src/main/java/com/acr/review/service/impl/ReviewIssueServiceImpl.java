@@ -15,6 +15,7 @@ import com.acr.common.exception.ServiceException;
 import com.acr.common.utils.SecurityUtils;
 import com.acr.common.utils.StringUtils;
 import com.acr.review.delivery.ReviewSummaryContentFactory;
+import com.acr.review.domain.ReviewCommentSyncResult;
 import com.acr.review.domain.ReviewIssue;
 import com.acr.review.domain.ReviewIssueAction;
 import com.acr.review.domain.ReviewIssueConstants;
@@ -131,12 +132,13 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
             detail.setSourceTask(taskMapper.selectReviewTaskById(issue.getLastTaskId()));
         }
         detail.setActions(actionMapper.selectByIssueId(issueId));
+        detail.setSummaryDelivery(deliveryService.selectSummaryDelivery(issue.getProjectId(), issue.getPrNumber()));
         return detail;
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public String confirm(Long issueId)
+    public ReviewCommentSyncResult confirm(Long issueId)
     {
         ReviewIssue issue = requireIssue(issueId);
         checkIssueDataScope(issue);
@@ -151,7 +153,7 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public String close(Long issueId, String resolveNote)
+    public ReviewCommentSyncResult close(Long issueId, String resolveNote)
     {
         ReviewIssue issue = requireIssue(issueId);
         checkIssueDataScope(issue);
@@ -167,7 +169,7 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public String dismiss(Long issueId, String dismissType, String resolveNote)
+    public ReviewCommentSyncResult dismiss(Long issueId, String dismissType, String resolveNote)
     {
         ReviewIssue issue = requireIssue(issueId);
         checkIssueDataScope(issue);
@@ -278,7 +280,7 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
         actionMapper.insertAction(action);
     }
 
-    private String scheduleCommentRerender(ReviewIssue issue)
+    private ReviewCommentSyncResult scheduleCommentRerender(ReviewIssue issue)
     {
         // 处置已在本事务写入；评论失败由 delivery 内部落 FAILED 并返回，不回滚处置。
         return deliveryService.rerenderSummaryComment(issue.getProjectId(), issue.getPrNumber());

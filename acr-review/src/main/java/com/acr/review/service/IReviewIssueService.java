@@ -2,6 +2,7 @@ package com.acr.review.service;
 
 import java.util.List;
 import java.util.Map;
+import com.acr.review.domain.ReviewCommentSyncResult;
 import com.acr.review.domain.ReviewIssue;
 import com.acr.review.domain.ReviewIssueDetail;
 import com.acr.review.domain.ReviewTask;
@@ -18,14 +19,14 @@ public interface IReviewIssueService
 
     ReviewIssueDetail selectIssueDetail(Long issueId);
 
-    /** 确认：待确认 → 待修复。返回评论同步状态。 */
-    String confirm(Long issueId);
+    /** 确认：待确认 → 待修复。返回评论同步结果。 */
+    ReviewCommentSyncResult confirm(Long issueId);
 
-    /** 关闭 → CLOSED；resolveNote 选填。返回评论同步状态。 */
-    String close(Long issueId, String resolveNote);
+    /** 关闭 → CLOSED；resolveNote 选填。返回评论同步结果。 */
+    ReviewCommentSyncResult close(Long issueId, String resolveNote);
 
     /** 忽略/误报；dismissType=IGNORED|FALSE_POSITIVE；resolveNote 必填。 */
-    String dismiss(Long issueId, String dismissType, String resolveNote);
+    ReviewCommentSyncResult dismiss(Long issueId, String dismissType, String resolveNote);
 
     /** 按 PR 加载问题集合（指纹 → issue）。 */
     Map<String, ReviewIssue> mapByFingerprint(Long projectId, Integer prNumber);

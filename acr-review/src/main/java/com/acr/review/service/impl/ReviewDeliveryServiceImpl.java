@@ -17,7 +17,9 @@ import com.acr.review.delivery.ReviewDeliveryConstants;
 import com.acr.review.delivery.ReviewNotifyMessageRenderer;
 import com.acr.review.delivery.ReviewSummaryContent;
 import com.acr.review.delivery.ReviewSummaryContentFactory;
+import com.acr.review.domain.ReviewCommentSyncResult;
 import com.acr.review.domain.ReviewDeliveryRecord;
+import com.acr.review.domain.ReviewIssue;
 import com.acr.review.domain.ReviewPipelineConstants;
 import com.acr.review.domain.ReviewProject;
 import com.acr.review.domain.ReviewTask;
@@ -38,7 +40,6 @@ import com.acr.review.service.IReviewDeliveryService;
 import com.acr.review.service.IReviewNotifyChannelService;
 import com.acr.review.service.IReviewNotifyChannelService.DecryptedNotifyChannel;
 import com.acr.review.service.ReviewIssueDispositionEnricher;
-import com.acr.review.domain.ReviewIssue;
 import com.acr.review.notify.NotifyRobotClients;
 import com.acr.system.service.ISysDeptService;
 
@@ -95,7 +96,8 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
         try
         {
             String externalId = writeComment(task, run);
-            upsertGithubResult(task, run, ReviewDeliveryConstants.STATUS_SUCCESS, externalId, null);
+            upsertGithubResult(task, run, ReviewDeliveryConstants.STATUS_SUCCESS, externalId, null,
+                ReviewDeliveryConstants.TRIGGER_TASK_SUCCESS);
         }
         catch (Exception ex)
         {
@@ -103,7 +105,8 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
             log.warn("审查结果投递失败（不影响任务状态）, taskId={}, reason={}", task.getTaskId(), message);
             try
             {
-                upsertGithubResult(task, run, ReviewDeliveryConstants.STATUS_FAILED, null, message);
+                upsertGithubResult(task, run, ReviewDeliveryConstants.STATUS_FAILED, null, message,
+                    ReviewDeliveryConstants.TRIGGER_TASK_SUCCESS);
             }
             catch (Exception persistEx)
             {
@@ -152,7 +155,8 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
             {
                 // 渠道停用/删除/解密失败：仍按真实渠道类型落幂等键，避免 UNKNOWN_IM 脏值
                 upsertImResult(task, run, resolveChannelType(project), ReviewDeliveryConstants.STATUS_FAILED,
-                    StringUtils.defaultIfEmpty(ex.getMessage(), "通知渠道不可用"));
+                    StringUtils.defaultIfEmpty(ex.getMessage(), "通知渠道不可用"),
+                    ReviewDeliveryConstants.TRIGGER_TASK_SUCCESS);
                 return;
             }
             ReviewSummaryContent content = contentFactory.build(task, run, project);
@@ -164,7 +168,8 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
                 : ReviewNotifyMessageRenderer.renderFailed(content);
             robotClients.require(channel.channelType()).send(
                 channel.webhookUrl(), channel.secret(), title, body);
-            upsertImResult(task, run, channel.channelType(), ReviewDeliveryConstants.STATUS_SUCCESS, null);
+            upsertImResult(task, run, channel.channelType(), ReviewDeliveryConstants.STATUS_SUCCESS, null,
+                ReviewDeliveryConstants.TRIGGER_TASK_SUCCESS);
         }
         catch (Exception ex)
         {
@@ -174,7 +179,8 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
             {
                 ReviewProject project = projectMapper.selectReviewProjectById(task.getProjectId());
                 String channelType = resolveChannelType(project);
-                upsertImResult(task, run, channelType, ReviewDeliveryConstants.STATUS_FAILED, message);
+                upsertImResult(task, run, channelType, ReviewDeliveryConstants.STATUS_FAILED, message,
+                    ReviewDeliveryConstants.TRIGGER_TASK_SUCCESS);
             }
             catch (Exception persistEx)
             {
@@ -202,50 +208,59 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
         try
         {
             String externalId = writeComment(latest, run);
-            upsertGithubResult(latest, run, ReviewDeliveryConstants.STATUS_SUCCESS, externalId, null);
+            upsertGithubResult(latest, run, ReviewDeliveryConstants.STATUS_SUCCESS, externalId, null,
+                ReviewDeliveryConstants.TRIGGER_MANUAL_RETRY);
         }
         catch (Exception ex)
         {
             String message = sanitizeFailure(ex, null);
-            upsertGithubResult(latest, run, ReviewDeliveryConstants.STATUS_FAILED, null, message);
+            upsertGithubResult(latest, run, ReviewDeliveryConstants.STATUS_FAILED, null, message,
+                ReviewDeliveryConstants.TRIGGER_MANUAL_RETRY);
             throw new ServiceException("投递重试失败：" + message);
         }
     }
 
     @Override
-    public String rerenderSummaryComment(Long projectId, Integer prNumber)
+    public ReviewCommentSyncResult rerenderSummaryComment(Long projectId, Integer prNumber)
     {
         if (projectId == null || prNumber == null)
         {
-            return "SKIPPED";
+            return ReviewCommentSyncResult.skipped();
         }
         ReviewTask latest = taskMapper.selectLatestSuccessByProjectAndPr(projectId, prNumber);
         if (latest == null)
         {
             log.info("问题处置后跳过评论重渲染：PR 无 SUCCESS 任务, projectId={}, pr={}", projectId, prNumber);
-            return "SKIPPED";
+            return ReviewCommentSyncResult.skipped();
         }
         ReviewTaskRun run = pickLatestSuccessRun(latest.getTaskId());
         try
         {
             String externalId = writeComment(latest, run);
-            upsertGithubResult(latest, run, ReviewDeliveryConstants.STATUS_SUCCESS, externalId, null);
-            return ReviewDeliveryConstants.STATUS_SUCCESS;
+            ReviewDeliveryRecord record = upsertGithubResult(latest, run,
+                ReviewDeliveryConstants.STATUS_SUCCESS, externalId, null,
+                ReviewDeliveryConstants.TRIGGER_ISSUE_DISPOSITION);
+            return ReviewCommentSyncResult.of(ReviewDeliveryConstants.STATUS_SUCCESS, null,
+                record == null ? null : record.getDeliveryId());
         }
         catch (Exception ex)
         {
             String message = sanitizeFailure(ex, null);
             log.warn("问题处置后评论重渲染失败（不回滚处置）, projectId={}, pr={}, reason={}",
                 projectId, prNumber, message);
+            Long deliveryId = null;
             try
             {
-                upsertGithubResult(latest, run, ReviewDeliveryConstants.STATUS_FAILED, null, message);
+                ReviewDeliveryRecord record = upsertGithubResult(latest, run,
+                    ReviewDeliveryConstants.STATUS_FAILED, null, message,
+                    ReviewDeliveryConstants.TRIGGER_ISSUE_DISPOSITION);
+                deliveryId = record == null ? null : record.getDeliveryId();
             }
             catch (Exception persistEx)
             {
                 log.warn("评论重渲染失败记录落库异常, projectId={}, pr={}", projectId, prNumber, persistEx);
             }
-            return ReviewDeliveryConstants.STATUS_FAILED;
+            return ReviewCommentSyncResult.of(ReviewDeliveryConstants.STATUS_FAILED, message, deliveryId);
         }
     }
 
@@ -313,12 +328,14 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
                 : ReviewNotifyMessageRenderer.renderFailed(content);
             robotClients.require(channel.channelType()).send(
                 channel.webhookUrl(), channel.secret(), title, body);
-            upsertImResult(task, run, record.getChannel(), ReviewDeliveryConstants.STATUS_SUCCESS, null);
+            upsertImResult(task, run, record.getChannel(), ReviewDeliveryConstants.STATUS_SUCCESS, null,
+                ReviewDeliveryConstants.TRIGGER_MANUAL_RETRY);
         }
         catch (Exception ex)
         {
             String message = sanitizeFailure(ex, null);
-            upsertImResult(task, run, record.getChannel(), ReviewDeliveryConstants.STATUS_FAILED, message);
+            upsertImResult(task, run, record.getChannel(), ReviewDeliveryConstants.STATUS_FAILED, message,
+                ReviewDeliveryConstants.TRIGGER_MANUAL_RETRY);
             throw new ServiceException("投递补发失败：" + message);
         }
     }
@@ -433,16 +450,17 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
         ReviewIssueDispositionEnricher.enrich(content.getTopIssues(), byFp);
     }
 
-    private void upsertGithubResult(ReviewTask task, ReviewTaskRun run, String status,
-                                    String externalId, String failureMessage)
+    private ReviewDeliveryRecord upsertGithubResult(ReviewTask task, ReviewTaskRun run, String status,
+                                                    String externalId, String failureMessage, String triggerSource)
     {
         String key = ReviewDeliveryConstants.idempotencyKey(task.getProjectId(), task.getPrNumber());
-        upsertResult(task, run, ReviewDeliveryConstants.PROVIDER_GITHUB,
-            ReviewDeliveryConstants.CHANNEL_GITHUB_PR_SUMMARY, key, externalId, status, failureMessage);
+        return upsertResult(task, run, ReviewDeliveryConstants.PROVIDER_GITHUB,
+            ReviewDeliveryConstants.CHANNEL_GITHUB_PR_SUMMARY, key, externalId, status, failureMessage,
+            triggerSource);
     }
 
-    private void upsertImResult(ReviewTask task, ReviewTaskRun run, String channelType,
-                                String status, String failureMessage)
+    private ReviewDeliveryRecord upsertImResult(ReviewTask task, ReviewTaskRun run, String channelType,
+                                                String status, String failureMessage, String triggerSource)
     {
         String type = StringUtils.isNotEmpty(channelType) ? channelType : "UNKNOWN_IM";
         String key = ReviewDeliveryConstants.imIdempotencyKey(type, task.getTaskId());
@@ -452,11 +470,12 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
         {
             provider = project.getProvider();
         }
-        upsertResult(task, run, provider, type, key, null, status, failureMessage);
+        return upsertResult(task, run, provider, type, key, null, status, failureMessage, triggerSource);
     }
 
-    private void upsertResult(ReviewTask task, ReviewTaskRun run, String provider, String channel,
-                              String key, String externalId, String status, String failureMessage)
+    private ReviewDeliveryRecord upsertResult(ReviewTask task, ReviewTaskRun run, String provider, String channel,
+                                              String key, String externalId, String status, String failureMessage,
+                                              String triggerSource)
     {
         Date now = new Date();
         ReviewDeliveryRecord existing = deliveryMapper.selectByIdempotencyKey(key);
@@ -474,6 +493,7 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
         record.setDeliveryStatus(status);
         record.setFailureMessage(truncate(failureMessage));
         record.setLastAttemptTime(now);
+        record.setTriggerSource(triggerSource);
         record.setCreateBy("system");
         record.setUpdateBy("system");
 
@@ -483,17 +503,23 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
             try
             {
                 deliveryMapper.insertDelivery(record);
+                return record;
             }
             catch (DuplicateKeyException conflict)
             {
                 log.info("投递记录唯一键冲突，改更新已有行, taskId={}, channel={}", task.getTaskId(), channel);
                 deliveryMapper.updateDeliveryResult(record);
+                ReviewDeliveryRecord after = deliveryMapper.selectByIdempotencyKey(key);
+                if (after != null)
+                {
+                    record.setDeliveryId(after.getDeliveryId());
+                }
+                return record;
             }
         }
-        else
-        {
-            deliveryMapper.updateDeliveryResult(record);
-        }
+        record.setDeliveryId(existing.getDeliveryId());
+        deliveryMapper.updateDeliveryResult(record);
+        return record;
     }
 
     private String resolveChannelType(ReviewProject project)

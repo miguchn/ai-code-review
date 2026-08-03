@@ -34,13 +34,19 @@
     </el-row>
 
     <el-table v-loading="loading" :data="deliveryList" empty-text="暂无投递记录">
-      <el-table-column label="最近尝试" width="170">
+      <el-table-column label="最后尝试时间" width="170">
         <template #default="scope">{{ formatDateTime(scope.row.lastAttemptTime) }}</template>
       </el-table-column>
       <el-table-column label="项目名称" prop="projectName" min-width="150" :show-overflow-tooltip="true" />
       <el-table-column label="投递渠道" width="140">
         <template #default="scope">
           <dict-tag :options="review_delivery_channel" :value="scope.row.channel" />
+        </template>
+      </el-table-column>
+      <el-table-column label="触发来源" width="110">
+        <template #default="scope">
+          <dict-tag v-if="scope.row.triggerSource" :options="review_delivery_trigger_source" :value="scope.row.triggerSource" />
+          <span v-else class="empty-tip">—</span>
         </template>
       </el-table-column>
       <el-table-column label="投递状态" width="100">
@@ -52,7 +58,7 @@
         <template #default="scope">#{{ scope.row.prNumber }}</template>
       </el-table-column>
       <el-table-column label="任务 ID" prop="taskId" width="100" />
-      <el-table-column label="失败原因" prop="failureMessage" min-width="200" :show-overflow-tooltip="true" />
+      <el-table-column label="失败原因" prop="failureMessage" min-width="220" :show-overflow-tooltip="true" />
       <el-table-column label="尝试次数" prop="attemptCount" width="90" />
       <el-table-column label="操作" width="100" fixed="right" class-name="small-padding fixed-width">
         <template #default="scope">
@@ -72,11 +78,16 @@
 import { useRoute } from 'vue-router'
 import { listDelivery, retryDeliveryById } from '@/api/review/delivery'
 import { listReviewProject } from '@/api/review/project'
+import { formatDateTime } from '@/utils/reviewDisplay'
 
 const route = useRoute()
 
 const { proxy } = getCurrentInstance()
-const { review_delivery_channel, review_delivery_status } = proxy.useDict('review_delivery_channel', 'review_delivery_status')
+const { review_delivery_channel, review_delivery_status, review_delivery_trigger_source } = proxy.useDict(
+  'review_delivery_channel',
+  'review_delivery_status',
+  'review_delivery_trigger_source'
+)
 const deliveryList = ref([])
 const projectOptions = ref([])
 const loading = ref(true)
@@ -129,3 +140,7 @@ if (route.query.taskId) {
 }
 getList()
 </script>
+
+<style scoped>
+.empty-tip { color: var(--el-text-color-placeholder); }
+</style>

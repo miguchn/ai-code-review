@@ -25,6 +25,9 @@ public class ReviewDeliveryRecord extends BaseEntity
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private Date lastAttemptTime;
 
+    /** 触发来源：TASK_SUCCESS / ISSUE_DISPOSITION / MANUAL_RETRY。 */
+    private String triggerSource;
+
     /** 列表展示：项目名称。 */
     private String projectName;
     /** 查询条件：开始时间。 */
@@ -160,6 +163,16 @@ public class ReviewDeliveryRecord extends BaseEntity
     public void setLastAttemptTime(Date lastAttemptTime)
     {
         this.lastAttemptTime = lastAttemptTime;
+    }
+
+    public String getTriggerSource()
+    {
+        return triggerSource;
+    }
+
+    public void setTriggerSource(String triggerSource)
+    {
+        this.triggerSource = triggerSource;
     }
 
     public String getProjectName()
