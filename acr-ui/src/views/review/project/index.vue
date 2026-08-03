@@ -266,6 +266,44 @@
             </el-form-item>
           </el-tab-pane>
 
+          <el-tab-pane label="通知" name="notify">
+            <el-form-item label="说明">
+              <div class="inline-tip">
+                审查结束后向 IM 群发送结论摘要（钉钉/企微/飞书机器人）。渠道为平台级资产，项目仅绑定一个已启用渠道。
+                <el-button link type="primary" @click="openNotifyChannelManagement">前往通知渠道</el-button>
+              </div>
+            </el-form-item>
+            <el-form-item label="启用通知">
+              <div class="form-control-block">
+                <el-switch v-model="form.notifyEnabled" active-value="Y" inactive-value="N"
+                  active-text="启用" inactive-text="关闭" />
+                <div class="inline-tip">关闭后审查结束不会向 IM 群发送任何消息。</div>
+              </div>
+            </el-form-item>
+            <el-form-item label="通知渠道" prop="notifyChannelId">
+              <div class="form-control-block">
+                <el-select v-model="form.notifyChannelId" filterable clearable placeholder="请选择已启用的通知渠道"
+                  :disabled="form.notifyEnabled !== 'Y'">
+                  <el-option v-for="item in notifyChannelOptions" :key="item.channelId"
+                    :label="formatNotifyChannelLabel(item)" :value="item.channelId" />
+                </el-select>
+                <div class="field-actions">
+                  <el-button link type="primary" icon="Refresh" @click="refreshNotifyChannelOptions">刷新列表</el-button>
+                </div>
+                <div v-if="form.notifyEnabled === 'Y' && !notifyChannelOptions.length" class="inline-tip">
+                  暂无已启用渠道，请先到「通知渠道」配置。
+                </div>
+              </div>
+            </el-form-item>
+            <el-form-item label="失败时通知">
+              <div class="form-control-block">
+                <el-switch v-model="form.notifyOnFailure" active-value="Y" inactive-value="N"
+                  active-text="通知" inactive-text="不通知" :disabled="form.notifyEnabled !== 'Y'" />
+                <div class="inline-tip">审查执行失败时发送简讯；关闭则仅在 SUCCESS 时发送摘要。</div>
+              </div>
+            </el-form-item>
+          </el-tab-pane>
+
           <el-tab-pane label="审查范围" name="scope">
             <el-form-item label="说明">
               <div class="inline-tip">
@@ -409,10 +447,12 @@ import {
   listReviewProject, getReviewProject, getReviewProjectOptions, readReviewProjectRepositoryInfo,
   addReviewProject, updateReviewProject, delReviewProject, changeReviewProjectStatus, testReviewProject
 } from '@/api/review/project'
+import { listNotifyChannel } from '@/api/review/notifyChannel'
 
 const { proxy } = getCurrentInstance()
 const router = useRouter()
-const { review_mode, review_engine_code, review_tech_stack } = proxy.useDict('review_mode', 'review_engine_code', 'review_tech_stack')
+const { review_mode, review_engine_code, review_tech_stack, review_notify_channel_type } =
+  proxy.useDict('review_mode', 'review_engine_code', 'review_tech_stack', 'review_notify_channel_type')
 const projectList = ref([])
 const loading = ref(true)
 const showSearch = ref(true)
@@ -432,7 +472,8 @@ const branchDialogOpen = ref(false)
 const branchSearch = ref('')
 const advancedSections = ref([])
 const activeTab = ref('basic')
-const tabOrder = ['basic', 'repository', 'webhook', 'scope', 'execution']
+const tabOrder = ['basic', 'repository', 'webhook', 'notify', 'scope', 'execution']
+const notifyChannelOptions = ref([])
 const options = reactive({
   businessSystems: [], departments: [], owners: [], credentials: [], models: [], templates: [],
   longLivedBranches: [], robotBranchPrefixes: [], prEvents: [], webhookCallbackUrl: ''
@@ -550,7 +591,8 @@ function reset() {
     lastBranchSyncMessage: undefined, lastBranchSyncTime: undefined, remark: undefined,
     webhookSecret: undefined, webhookSecretConfigured: false, webhookCallbackUrl: undefined,
     lastWebhookTime: undefined, lastWebhookResult: undefined,
-    scopeExcludePatterns: undefined, scopeIncludeTests: 'N', scopeReportExisting: 'N', scopeExpandEnabled: 'Y'
+    scopeExcludePatterns: undefined, scopeIncludeTests: 'N', scopeReportExisting: 'N', scopeExpandEnabled: 'Y',
+    notifyEnabled: 'N', notifyOnFailure: 'Y', notifyChannelId: undefined
   }
   activeTab.value = 'basic'
   repositoryInfoLoaded.value = false
@@ -577,6 +619,7 @@ function scrollProjectFormToTop() {
 }
 function handleAdd() {
   reset()
+  loadNotifyChannelOptions()
   open.value = true
   title.value = '新增 GitHub 项目'
 }
@@ -591,6 +634,8 @@ function handleUpdate(row) {
     project.scopeIncludeTests = project.scopeIncludeTests || 'N'
     project.scopeReportExisting = project.scopeReportExisting || 'N'
     project.scopeExpandEnabled = project.scopeExpandEnabled || 'Y'
+    project.notifyEnabled = project.notifyEnabled || 'N'
+    project.notifyOnFailure = project.notifyOnFailure || 'Y'
     if (project.reviewMode === 'OCR_ENGINE') {
       project.modelId = undefined
       project.templateId = undefined
@@ -601,6 +646,7 @@ function handleUpdate(row) {
     form.value = project
     availableBranches.value = [...project.prTargetBranches]
     originalRepositorySignature.value = repositorySignature(project)
+    loadNotifyChannelOptions()
     open.value = true
     title.value = '修改 GitHub 项目'
   })
@@ -749,6 +795,26 @@ function openCredentialManagement() {
   window.open(route.href, '_blank', 'noopener,noreferrer')
 }
 
+function openNotifyChannelManagement() {
+  const route = router.resolve({ path: '/notify/channel' })
+  window.open(route.href, '_blank', 'noopener,noreferrer')
+}
+
+function loadNotifyChannelOptions() {
+  return listNotifyChannel({ pageNum: 1, pageSize: 200, status: '0' }).then(response => {
+    notifyChannelOptions.value = response.rows || []
+  })
+}
+
+function refreshNotifyChannelOptions() {
+  loadNotifyChannelOptions().then(() => proxy.$modal.msgSuccess('通知渠道列表已刷新'))
+}
+
+function formatNotifyChannelLabel(item) {
+  const typeLabel = dictLabel(review_notify_channel_type.value, item.channelType)
+  return item.channelName + (typeLabel ? '（' + typeLabel + '）' : '')
+}
+
 function refreshCredentialOptions() {
   loadOptions().then(() => proxy.$modal.msgSuccess('凭据列表已刷新'))
 }
@@ -853,7 +919,7 @@ function syncTagType(status) {
   return { SUCCESS: 'success', FAILED: 'danger', UNSYNCED: 'info' }[status] || 'info'
 }
 
-Promise.all([loadOptions(), getList()])
+Promise.all([loadOptions(), loadNotifyChannelOptions(), getList()])
 </script>
 
 <style scoped>

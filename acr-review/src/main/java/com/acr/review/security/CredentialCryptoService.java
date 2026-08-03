@@ -19,6 +19,8 @@ public class CredentialCryptoService
     private static final String PREFIX = "v1:";
     private static final byte[] AAD = "acr-review:github-pat:v1".getBytes(StandardCharsets.UTF_8);
     private static final byte[] WEBHOOK_SECRET_AAD = "acr-review:github-webhook-secret:v1".getBytes(StandardCharsets.UTF_8);
+    private static final byte[] NOTIFY_WEBHOOK_URL_AAD = "acr-review:notify-webhook-url:v1".getBytes(StandardCharsets.UTF_8);
+    private static final byte[] NOTIFY_WEBHOOK_SECRET_AAD = "acr-review:notify-webhook-secret:v1".getBytes(StandardCharsets.UTF_8);
     private static final int IV_LENGTH = 12;
     private static final int TAG_LENGTH_BITS = 128;
 
@@ -50,6 +52,30 @@ public class CredentialCryptoService
     public String decryptWebhookSecret(String ciphertext)
     {
         return decrypt(ciphertext, WEBHOOK_SECRET_AAD);
+    }
+
+    /** 通知渠道 Webhook URL 加密（URL 含 access_token 等敏感参数）。 */
+    public String encryptNotifyWebhookUrl(String plaintext)
+    {
+        return encrypt(plaintext, NOTIFY_WEBHOOK_URL_AAD, "通知 Webhook URL 不能为空");
+    }
+
+    /** 通知渠道 Webhook URL 解密，仅供服务端发送使用。 */
+    public String decryptNotifyWebhookUrl(String ciphertext)
+    {
+        return decrypt(ciphertext, NOTIFY_WEBHOOK_URL_AAD);
+    }
+
+    /** 通知渠道加签 Secret 加密。 */
+    public String encryptNotifyWebhookSecret(String plaintext)
+    {
+        return encrypt(plaintext, NOTIFY_WEBHOOK_SECRET_AAD, "通知加签 Secret 不能为空");
+    }
+
+    /** 通知渠道加签 Secret 解密，仅供服务端发送使用。 */
+    public String decryptNotifyWebhookSecret(String ciphertext)
+    {
+        return decrypt(ciphertext, NOTIFY_WEBHOOK_SECRET_AAD);
     }
 
     private String encrypt(String plaintext, byte[] aad, String emptyMessage)

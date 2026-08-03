@@ -1,6 +1,5 @@
 package com.acr.review.delivery;
 
-import java.util.ArrayList;
 import java.util.List;
 import com.acr.common.utils.StringUtils;
 import com.acr.review.domain.ReviewPipelineConstants;
@@ -8,9 +7,6 @@ import com.acr.review.domain.ReviewTask;
 import com.acr.review.domain.ReviewTaskRun;
 import com.acr.review.domain.result.ReviewScopeStats;
 import com.acr.review.domain.result.ReviewTopIssue;
-import com.alibaba.fastjson2.JSON;
-import com.alibaba.fastjson2.JSONArray;
-import com.alibaba.fastjson2.JSONObject;
 
 /**
  * 将审查成功结果渲染为 GitHub PR 总结评论 Markdown（纯函数，无 IO）。
@@ -23,20 +19,22 @@ public final class ReviewCommentBodyRenderer
 
     public static String render(ReviewTask task, ReviewTaskRun run)
     {
-        String conclusion = conclusionLabel(task == null ? null : task.getReviewConclusion());
-        Integer totalScore = firstNonNull(
-            task == null ? null : task.getTotalScore(),
-            run == null ? null : run.getTotalScore());
-        String scoreText = totalScore == null ? "--" : totalScore + " / 100";
-        Long taskId = task == null ? null : task.getTaskId();
-        String headSha = shortSha(task == null ? null : task.getHeadSha());
-        if (StringUtils.isEmpty(headSha) && run != null)
-        {
-            headSha = shortSha(run.getSnapshotHeadSha());
-        }
+        return render(buildMinimalContent(task, run));
+    }
 
-        List<ReviewTopIssue> issues = resolveTopIssues(run);
-        ReviewScopeStats scopeStats = resolveScopeStats(run);
+    public static String render(ReviewSummaryContent content)
+    {
+        if (content == null)
+        {
+            content = ReviewSummaryContent.builder().build();
+        }
+        String conclusion = StringUtils.defaultIfEmpty(content.getConclusionLabel(), "--");
+        String scoreText = content.getTotalScore() == null ? "--" : content.getTotalScore() + " / 100";
+        Long taskId = content.getTaskId();
+        String headSha = StringUtils.defaultIfEmpty(content.getHeadShaShort(), "--");
+
+        List<ReviewTopIssue> issues = content.getTopIssues();
+        ReviewScopeStats scopeStats = content.getScopeStats();
 
         StringBuilder sb = new StringBuilder();
         sb.append("## AI Code Review 审查结论\n\n");
@@ -45,7 +43,7 @@ public final class ReviewCommentBodyRenderer
         sb.append("| 结论 | ").append(conclusion).append(" |\n");
         sb.append("| 总分 | ").append(scoreText).append(" |\n");
         sb.append("| 任务 | #").append(taskId == null ? "--" : taskId)
-            .append(" · `").append(StringUtils.isEmpty(headSha) ? "--" : headSha).append("` |\n");
+            .append(" · `").append(headSha).append("` |\n");
         sb.append("\n### Top 3 重点问题\n\n");
         if (issues.isEmpty())
         {
@@ -65,6 +63,27 @@ public final class ReviewCommentBodyRenderer
         sb.append("*由 AI Code Review 自动生成并更新；请勿手动删除本标记评论。*\n");
         sb.append(ReviewDeliveryConstants.COMMENT_MARKER).append("\n");
         return sb.toString();
+    }
+
+    static ReviewSummaryContent buildMinimalContent(ReviewTask task, ReviewTaskRun run)
+    {
+        String conclusion = task == null ? null : task.getReviewConclusion();
+        String headSha = ReviewSummaryContentFactory.shortSha(task == null ? null : task.getHeadSha());
+        if (StringUtils.isEmpty(headSha) && run != null)
+        {
+            headSha = ReviewSummaryContentFactory.shortSha(run.getSnapshotHeadSha());
+        }
+        return ReviewSummaryContent.builder()
+            .taskId(task == null ? null : task.getTaskId())
+            .conclusion(conclusion)
+            .conclusionLabel(conclusionLabel(conclusion))
+            .totalScore(firstNonNull(
+                task == null ? null : task.getTotalScore(),
+                run == null ? null : run.getTotalScore()))
+            .headShaShort(StringUtils.isEmpty(headSha) ? null : headSha)
+            .topIssues(ReviewSummaryContentFactory.resolveTopIssues(run))
+            .scopeStats(ReviewSummaryContentFactory.resolveScopeStats(run))
+            .build();
     }
 
     static String conclusionLabel(String conclusion)
@@ -115,7 +134,7 @@ public final class ReviewCommentBodyRenderer
         {
             return "范围统计：—";
         }
-        List<String> parts = new ArrayList<>();
+        List<String> parts = new java.util.ArrayList<>();
         if (stats.getIncludedFiles() != null)
         {
             parts.add("纳入 " + stats.getIncludedFiles());
@@ -194,94 +213,6 @@ public final class ReviewCommentBodyRenderer
         }
         Integer line = start != null ? start : end;
         return "L" + line;
-    }
-
-    private static List<ReviewTopIssue> resolveTopIssues(ReviewTaskRun run)
-    {
-        if (run == null)
-        {
-            return List.of();
-        }
-        List<ReviewTopIssue> fromColumn = parseTopIssues(run.getTopIssuesJson());
-        if (!fromColumn.isEmpty())
-        {
-            return fromColumn;
-        }
-        JSONObject result = parseJsonObject(run.getResultJson());
-        if (result == null)
-        {
-            return List.of();
-        }
-        JSONArray array = result.getJSONArray("topIssues");
-        return array == null ? List.of() : parseTopIssues(array.toJSONString());
-    }
-
-    private static List<ReviewTopIssue> parseTopIssues(String json)
-    {
-        if (StringUtils.isEmpty(json))
-        {
-            return List.of();
-        }
-        try
-        {
-            List<ReviewTopIssue> list = JSON.parseArray(json, ReviewTopIssue.class);
-            return list == null ? List.of() : list;
-        }
-        catch (Exception ex)
-        {
-            return List.of();
-        }
-    }
-
-    private static ReviewScopeStats resolveScopeStats(ReviewTaskRun run)
-    {
-        if (run == null || StringUtils.isEmpty(run.getResultJson()))
-        {
-            return null;
-        }
-        JSONObject result = parseJsonObject(run.getResultJson());
-        if (result == null || !result.containsKey("scopeStats"))
-        {
-            return null;
-        }
-        try
-        {
-            return result.getObject("scopeStats", ReviewScopeStats.class);
-        }
-        catch (Exception ex)
-        {
-            return null;
-        }
-    }
-
-    private static JSONObject parseJsonObject(String json)
-    {
-        if (StringUtils.isEmpty(json))
-        {
-            return null;
-        }
-        try
-        {
-            Object parsed = JSON.parse(json);
-            if (parsed instanceof JSONObject object)
-            {
-                return object;
-            }
-            return null;
-        }
-        catch (Exception ex)
-        {
-            return null;
-        }
-    }
-
-    private static String shortSha(String sha)
-    {
-        if (StringUtils.isEmpty(sha))
-        {
-            return "";
-        }
-        return sha.length() <= 7 ? sha : sha.substring(0, 7);
     }
 
     private static String truncate(String value, int max)

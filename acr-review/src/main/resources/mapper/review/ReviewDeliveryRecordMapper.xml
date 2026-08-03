@@ -9,6 +9,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="taskId" column="task_id" />
         <result property="runId" column="run_id" />
         <result property="projectId" column="project_id" />
+        <result property="projectName" column="project_name" />
         <result property="provider" column="provider" />
         <result property="channel" column="channel" />
         <result property="prNumber" column="pr_number" />
@@ -25,24 +26,79 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     </resultMap>
 
     <sql id="selectColumns">
+        select rdr.delivery_id, rdr.task_id, rdr.run_id, rdr.project_id, p.project_name, rdr.provider, rdr.channel, rdr.pr_number,
+               rdr.idempotency_key, rdr.external_id, rdr.delivery_status, rdr.failure_message,
+               rdr.attempt_count, rdr.last_attempt_time, rdr.create_by, rdr.create_time, rdr.update_by, rdr.update_time
+        from review_delivery_record rdr
+        left join review_project p on p.project_id = rdr.project_id
+        left join sys_dept d on d.dept_id = p.dept_id
+        left join sys_user owner on owner.user_id = p.owner_user_id
+    </sql>
+
+    <select id="selectDeliveryById" resultMap="ReviewDeliveryRecordResult">
+        <include refid="selectColumns" />
+        where rdr.delivery_id = #{deliveryId}
+        limit 1
+    </select>
+
+    <select id="selectByIdempotencyKey" resultMap="ReviewDeliveryRecordResult">
         select delivery_id, task_id, run_id, project_id, provider, channel, pr_number,
                idempotency_key, external_id, delivery_status, failure_message,
                attempt_count, last_attempt_time, create_by, create_time, update_by, update_time
         from review_delivery_record
-    </sql>
-
-    <select id="selectByIdempotencyKey" resultMap="ReviewDeliveryRecordResult">
-        <include refid="selectColumns" />
         where idempotency_key = #{idempotencyKey}
         limit 1
     </select>
 
     <select id="selectByProjectAndPr" resultMap="ReviewDeliveryRecordResult">
-        <include refid="selectColumns" />
+        select delivery_id, task_id, run_id, project_id, provider, channel, pr_number,
+               idempotency_key, external_id, delivery_status, failure_message,
+               attempt_count, last_attempt_time, create_by, create_time, update_by, update_time
+        from review_delivery_record
         where project_id = #{projectId}
           and pr_number = #{prNumber}
           and channel = #{channel}
         limit 1
+    </select>
+
+    <select id="selectLatestImByTaskId" resultMap="ReviewDeliveryRecordResult">
+        select delivery_id, task_id, run_id, project_id, provider, channel, pr_number,
+               idempotency_key, external_id, delivery_status, failure_message,
+               attempt_count, last_attempt_time, create_by, create_time, update_by, update_time
+        from review_delivery_record
+        where task_id = #{taskId}
+          and channel in ('DINGTALK_ROBOT', 'WECOM_ROBOT', 'FEISHU_BOT')
+        order by last_attempt_time desc, delivery_id desc
+        limit 1
+    </select>
+
+    <select id="selectDeliveryList" parameterType="com.acr.review.domain.ReviewDeliveryRecord"
+            resultMap="ReviewDeliveryRecordResult">
+        <include refid="selectColumns" />
+        where 1 = 1
+        <if test="projectId != null">
+            and rdr.project_id = #{projectId}
+        </if>
+        <if test="channel != null and channel != ''">
+            and rdr.channel = #{channel}
+        </if>
+        <if test="deliveryStatus != null and deliveryStatus != ''">
+            and rdr.delivery_status = #{deliveryStatus}
+        </if>
+        <if test="prNumber != null">
+            and rdr.pr_number = #{prNumber}
+        </if>
+        <if test="taskId != null">
+            and rdr.task_id = #{taskId}
+        </if>
+        <if test="beginTime != null and beginTime != ''">
+            and rdr.last_attempt_time &gt;= #{beginTime}
+        </if>
+        <if test="endTime != null and endTime != ''">
+            and rdr.last_attempt_time &lt;= #{endTime}
+        </if>
+        ${params.dataScope}
+        order by rdr.last_attempt_time desc, rdr.delivery_id desc
     </select>
 
     <insert id="insertDelivery" parameterType="com.acr.review.domain.ReviewDeliveryRecord"

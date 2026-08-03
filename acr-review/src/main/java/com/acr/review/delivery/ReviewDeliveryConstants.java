@@ -4,6 +4,9 @@ package com.acr.review.delivery;
 public final class ReviewDeliveryConstants
 {
     public static final String CHANNEL_GITHUB_PR_SUMMARY = "GITHUB_PR_SUMMARY_COMMENT";
+    public static final String CHANNEL_DINGTALK_ROBOT = "DINGTALK_ROBOT";
+    public static final String CHANNEL_WECOM_ROBOT = "WECOM_ROBOT";
+    public static final String CHANNEL_FEISHU_BOT = "FEISHU_BOT";
 
     /** 评论正文固定标记：用于查找并更新同一 PR 上的 ACR 总结评论。 */
     public static final String COMMENT_MARKER = "<!-- acr-review-summary -->";
@@ -13,8 +16,14 @@ public final class ReviewDeliveryConstants
 
     public static final String PROVIDER_GITHUB = "GITHUB";
 
-    /** Top3 单条描述最大字符数，避免评论过长。 */
+    /** GitHub Top3 单条描述最大字符数。 */
     public static final int MAX_ISSUE_DESCRIPTION_CHARS = 500;
+
+    /** IM Top3 单条描述最大字符数（企微字节上限更严）。 */
+    public static final int IM_MAX_ISSUE_DESCRIPTION_CHARS = 150;
+
+    /** 企微 markdown 正文最大字节数。 */
+    public static final int WECOM_MAX_MARKDOWN_BYTES = 4096;
 
     /** 失败原因落库上限。 */
     public static final int MAX_FAILURE_MESSAGE_CHARS = 500;
@@ -25,6 +34,11 @@ public final class ReviewDeliveryConstants
     /** 最多翻页数（合计最多 300 条）。 */
     public static final int COMMENT_MAX_PAGES = 3;
 
+    public static final String UI_BASE_URL_CONFIG_KEY = "review.ui.base-url";
+
+    public static final String TEST_MESSAGE_TITLE = "AI Code Review 测试";
+    public static final String TEST_MESSAGE_BODY = "### AI Code Review 渠道测试\n这是一条测试消息，用于验证通知渠道配置是否可用。";
+
     private ReviewDeliveryConstants()
     {
     }
@@ -33,5 +47,23 @@ public final class ReviewDeliveryConstants
     public static String idempotencyKey(Long projectId, Integer prNumber)
     {
         return PROVIDER_GITHUB + ":" + projectId + ":" + prNumber + ":SUMMARY_COMMENT";
+    }
+
+    /** IM 幂等键：{channelType}:{taskId}:REVIEW_DONE */
+    public static String imIdempotencyKey(String channelType, Long taskId)
+    {
+        return channelType + ":" + taskId + ":REVIEW_DONE";
+    }
+
+    public static boolean isImChannel(String channel)
+    {
+        return CHANNEL_DINGTALK_ROBOT.equals(channel)
+            || CHANNEL_WECOM_ROBOT.equals(channel)
+            || CHANNEL_FEISHU_BOT.equals(channel);
+    }
+
+    public static boolean isSupportedNotifyChannelType(String channelType)
+    {
+        return isImChannel(channelType);
     }
 }

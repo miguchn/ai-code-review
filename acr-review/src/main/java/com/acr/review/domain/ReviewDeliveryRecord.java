@@ -25,6 +25,13 @@ public class ReviewDeliveryRecord extends BaseEntity
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private Date lastAttemptTime;
 
+    /** 列表展示：项目名称。 */
+    private String projectName;
+    /** 查询条件：开始时间。 */
+    private String beginTime;
+    /** 查询条件：结束时间。 */
+    private String endTime;
+
     public Long getDeliveryId()
     {
         return deliveryId;
@@ -153,5 +160,35 @@ public class ReviewDeliveryRecord extends BaseEntity
     public void setLastAttemptTime(Date lastAttemptTime)
     {
         this.lastAttemptTime = lastAttemptTime;
+    }
+
+    public String getProjectName()
+    {
+        return projectName;
+    }
+
+    public void setProjectName(String projectName)
+    {
+        this.projectName = projectName;
+    }
+
+    public String getBeginTime()
+    {
+        return beginTime;
+    }
+
+    public void setBeginTime(String beginTime)
+    {
+        this.beginTime = beginTime;
+    }
+
+    public String getEndTime()
+    {
+        return endTime;
+    }
+
+    public void setEndTime(String endTime)
+    {
+        this.endTime = endTime;
     }
 }

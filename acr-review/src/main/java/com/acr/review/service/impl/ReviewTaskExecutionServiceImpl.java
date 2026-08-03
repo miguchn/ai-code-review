@@ -874,6 +874,21 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         {
             log.warn("审查结果投递调用异常（不影响任务状态）, taskId={}", task.getTaskId(), ex);
         }
+        notifyQuietly(task, run);
+    }
+
+    /** IM 通知失败不影响任务状态。 */
+    private void notifyQuietly(ReviewTask task, ReviewTaskRun run)
+    {
+        try
+        {
+            deliveryService.deliverNotifyAfterTerminal(task, run);
+        }
+        catch (Exception ex)
+        {
+            log.warn("IM 通知投递调用异常（不影响任务状态）, taskId={}",
+                task == null ? null : task.getTaskId(), ex);
+        }
     }
 
     private void persistLlmFormatFailure(ReviewTask task, ReviewTaskRun run, long beginMs,
@@ -911,6 +926,7 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         task.setFinishedTime(finished);
         task.setDurationMs(duration);
         taskMapper.updateTaskExecution(task);
+        notifyQuietly(task, run);
     }
 
     private Map<String, Integer> dimensionScoreMap(ReviewScoreResult result)
@@ -1015,6 +1031,7 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
             task.setFinishedTime(finished);
             task.setDurationMs(duration);
             taskMapper.updateTaskExecution(task);
+            notifyQuietly(task, run);
         }
     }
 
