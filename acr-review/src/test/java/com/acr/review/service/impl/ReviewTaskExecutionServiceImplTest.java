@@ -32,6 +32,7 @@ import com.acr.review.mapper.ReviewProjectMapper;
 import com.acr.review.mapper.ReviewTaskMapper;
 import com.acr.review.mapper.ReviewTaskRunMapper;
 import com.acr.review.service.IGitCredentialService;
+import com.acr.review.service.IReviewDeliveryService;
 import com.acr.review.service.IReviewTemplateService;
 import com.acr.review.service.ReviewConclusionResolver;
 import com.acr.review.service.ReviewPromptComposer;
@@ -58,6 +59,7 @@ class ReviewTaskExecutionServiceImplTest
     private final GitPullRequestMetadataFetcher metadataFetcher = mock(GitPullRequestMetadataFetcher.class);
     private final OpenCodeReviewCliAdapter reviewEngine = mock(OpenCodeReviewCliAdapter.class);
     private final ReviewEngineWorkspaceManager workspaceManager = mock(ReviewEngineWorkspaceManager.class);
+    private final IReviewDeliveryService deliveryService = mock(IReviewDeliveryService.class);
     private ReviewTaskExecutionServiceImpl service;
 
     @BeforeEach
@@ -87,6 +89,7 @@ class ReviewTaskExecutionServiceImplTest
             llmCallService,
             eventPublisher,
             new ReviewTaskSnapshotServiceImpl(templateService, modelConfigService, properties),
+            deliveryService,
             120);
     }
 
@@ -120,6 +123,7 @@ class ReviewTaskExecutionServiceImplTest
         ReviewTask saved = captor.getValue();
         org.junit.jupiter.api.Assertions.assertEquals(ReviewPipelineConstants.TASK_FAILED, saved.getTaskStatus());
         org.junit.jupiter.api.Assertions.assertEquals(ReviewPipelineConstants.FAILURE_UNKNOWN, saved.getFailureType());
+        verify(deliveryService, never()).deliverAfterSuccess(any(), any());
     }
 
     @Test
@@ -352,6 +356,7 @@ class ReviewTaskExecutionServiceImplTest
         assertTrue(run.getResultSummary().contains("无有效审查范围"));
         org.junit.jupiter.api.Assertions.assertNotNull(run.getScopeDecisionJson());
         assertTrue(run.getScopeDecisionJson().contains("package-lock.json"));
+        verify(deliveryService).deliverAfterSuccess(any(ReviewTask.class), any(ReviewTaskRun.class));
     }
 
     @Test
@@ -380,6 +385,7 @@ class ReviewTaskExecutionServiceImplTest
             llmCallService,
             eventPublisher,
             new ReviewTaskSnapshotServiceImpl(templateService, modelConfigService, engineProperties()),
+            deliveryService,
             120);
         ReviewTask task = llmTask(23L);
         stubLlmPathPrerequisites(task);

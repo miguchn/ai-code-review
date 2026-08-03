@@ -52,6 +52,7 @@ import com.acr.review.scope.ReviewScopePromptAssembler;
 import com.acr.review.scope.ReviewScopeRules;
 import com.acr.review.scope.UnifiedDiffParser;
 import com.acr.review.service.IGitCredentialService;
+import com.acr.review.service.IReviewDeliveryService;
 import com.acr.review.service.IReviewTaskExecutionService;
 import com.acr.review.service.IReviewTaskSnapshotService;
 import com.acr.review.service.ReviewConclusionResolver;
@@ -97,6 +98,7 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
     private final LlmCallService llmCallService;
     private final ApplicationEventPublisher eventPublisher;
     private final IReviewTaskSnapshotService snapshotService;
+    private final IReviewDeliveryService deliveryService;
     private final Semaphore concurrencyLimiter;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final int llmTimeoutSeconds;
@@ -124,6 +126,7 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
                                           LlmCallService llmCallService,
                                           ApplicationEventPublisher eventPublisher,
                                           IReviewTaskSnapshotService snapshotService,
+                                          IReviewDeliveryService deliveryService,
                                           @Value("${review.task.llm-timeout-seconds:120}") int llmTimeoutSeconds)
     {
         this.taskMapper = taskMapper;
@@ -149,6 +152,7 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         this.llmCallService = llmCallService;
         this.eventPublisher = eventPublisher;
         this.snapshotService = snapshotService;
+        this.deliveryService = deliveryService;
         this.llmTimeoutSeconds = llmTimeoutSeconds;
         this.concurrencyLimiter = new Semaphore(Math.max(1, engineProperties.getMaxConcurrency()), true);
     }
@@ -647,6 +651,7 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         task.setFinishedTime(finished);
         task.setDurationMs(duration);
         taskMapper.updateTaskExecution(task);
+        deliverQuietly(task, run);
     }
 
     private ExecutionPlan resolveConfig(ReviewTask task, ReviewTaskRun run)
@@ -786,6 +791,7 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         task.setFinishedTime(finished);
         task.setDurationMs(duration);
         taskMapper.updateTaskExecution(task);
+        deliverQuietly(task, run);
     }
 
     private void persistLlmSuccess(ReviewTask task, ReviewTaskRun run, long beginMs,
@@ -854,6 +860,20 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         task.setHasCriticalSecurity(run.getHasCriticalSecurity());
         task.setParseStatus(ReviewScoringConstants.PARSE_SUCCESS);
         taskMapper.updateTaskExecution(task);
+        deliverQuietly(task, run);
+    }
+
+    /** 投递失败不影响审查结论；服务内部已吞异常，此处再兜底一次。 */
+    private void deliverQuietly(ReviewTask task, ReviewTaskRun run)
+    {
+        try
+        {
+            deliveryService.deliverAfterSuccess(task, run);
+        }
+        catch (Exception ex)
+        {
+            log.warn("审查结果投递调用异常（不影响任务状态）, taskId={}", task.getTaskId(), ex);
+        }
     }
 
     private void persistLlmFormatFailure(ReviewTask task, ReviewTaskRun run, long beginMs,

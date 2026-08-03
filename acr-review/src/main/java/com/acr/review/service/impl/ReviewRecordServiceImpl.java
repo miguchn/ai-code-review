@@ -4,6 +4,7 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 import com.acr.common.annotation.DataScope;
 import com.acr.common.exception.ServiceException;
+import com.acr.review.domain.ReviewDeliveryRecord;
 import com.acr.review.domain.ReviewProject;
 import com.acr.review.domain.ReviewTask;
 import com.acr.review.domain.ReviewTaskDetail;
@@ -11,6 +12,7 @@ import com.acr.review.domain.ReviewTaskRun;
 import com.acr.review.mapper.ReviewProjectMapper;
 import com.acr.review.mapper.ReviewTaskMapper;
 import com.acr.review.mapper.ReviewTaskRunMapper;
+import com.acr.review.service.IReviewDeliveryService;
 import com.acr.review.service.IReviewRecordService;
 import com.acr.system.service.ISysDeptService;
 
@@ -22,16 +24,19 @@ public class ReviewRecordServiceImpl implements IReviewRecordService
     private final ReviewTaskRunMapper runMapper;
     private final ReviewProjectMapper projectMapper;
     private final ISysDeptService deptService;
+    private final IReviewDeliveryService deliveryService;
 
     public ReviewRecordServiceImpl(ReviewTaskMapper taskMapper,
                                    ReviewTaskRunMapper runMapper,
                                    ReviewProjectMapper projectMapper,
-                                   ISysDeptService deptService)
+                                   ISysDeptService deptService,
+                                   IReviewDeliveryService deliveryService)
     {
         this.taskMapper = taskMapper;
         this.runMapper = runMapper;
         this.projectMapper = projectMapper;
         this.deptService = deptService;
+        this.deliveryService = deliveryService;
     }
 
     @Override
@@ -55,7 +60,8 @@ public class ReviewRecordServiceImpl implements IReviewRecordService
         }
         checkTaskDataScope(task);
         List<ReviewTaskRun> runs = runMapper.selectRunsByTaskId(taskId);
-        return new ReviewTaskDetail(task, runs);
+        ReviewDeliveryRecord delivery = deliveryService.selectSummaryDelivery(task.getProjectId(), task.getPrNumber());
+        return new ReviewTaskDetail(task, runs, delivery);
     }
 
     private void checkTaskDataScope(ReviewTask task)

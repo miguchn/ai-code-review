@@ -14,6 +14,7 @@ import com.acr.review.domain.ReviewTaskDetail;
 import com.acr.review.mapper.ReviewProjectMapper;
 import com.acr.review.mapper.ReviewTaskMapper;
 import com.acr.review.mapper.ReviewTaskRunMapper;
+import com.acr.review.service.IReviewDeliveryService;
 import com.acr.review.service.IReviewTaskExecutionService;
 import com.acr.system.service.ISysDeptService;
 
@@ -25,8 +26,9 @@ class ReviewTaskServiceImplTest
     private final ReviewProjectMapper projectMapper = mock(ReviewProjectMapper.class);
     private final ISysDeptService deptService = mock(ISysDeptService.class);
     private final IReviewTaskExecutionService executionService = mock(IReviewTaskExecutionService.class);
+    private final IReviewDeliveryService deliveryService = mock(IReviewDeliveryService.class);
     private final ReviewTaskServiceImpl service = new ReviewTaskServiceImpl(
-        taskMapper, runMapper, projectMapper, deptService, executionService);
+        taskMapper, runMapper, projectMapper, deptService, executionService, deliveryService);
 
     @Test
     void detailChecksDeptDataScope()
@@ -86,6 +88,7 @@ class ReviewTaskServiceImplTest
         ReviewTask task = new ReviewTask();
         task.setTaskId(taskId);
         task.setProjectId(projectId);
+        task.setPrNumber(1);
         return task;
     }
 
