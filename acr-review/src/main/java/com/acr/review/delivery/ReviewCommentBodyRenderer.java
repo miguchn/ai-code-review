@@ -2,6 +2,7 @@ package com.acr.review.delivery;
 
 import java.util.List;
 import com.acr.common.utils.StringUtils;
+import com.acr.review.domain.ReviewIssueConstants;
 import com.acr.review.domain.ReviewPipelineConstants;
 import com.acr.review.domain.ReviewTask;
 import com.acr.review.domain.ReviewTaskRun;
@@ -180,6 +181,26 @@ public final class ReviewCommentBodyRenderer
         {
             sb.append("   - ").append(escapePipe(description).replace("\n", " ")).append("\n");
         }
+        String disposition = formatDisposition(issue);
+        if (StringUtils.isNotEmpty(disposition))
+        {
+            sb.append("   - 处置：").append(escapePipe(disposition)).append("\n");
+        }
+    }
+
+    static String formatDisposition(ReviewTopIssue issue)
+    {
+        if (issue == null || StringUtils.isEmpty(issue.getDispositionStatus()))
+        {
+            return null;
+        }
+        String label = ReviewIssueConstants.statusLabel(issue.getDispositionStatus());
+        String note = truncate(issue.getDispositionNote(), ReviewIssueConstants.MAX_DISPOSITION_NOTE_IN_COMMENT);
+        if (StringUtils.isEmpty(note))
+        {
+            return label;
+        }
+        return label + "（" + note.replace("\n", " ") + "）";
     }
 
     private static String formatLocate(ReviewTopIssue issue)

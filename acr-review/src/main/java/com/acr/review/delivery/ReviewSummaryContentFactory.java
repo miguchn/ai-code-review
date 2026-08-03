@@ -78,7 +78,7 @@ public class ReviewSummaryContentFactory
     }
 
     /** 从 run 解析 Top3（优先 topIssuesJson 列，否则 resultJson.topIssues）。 */
-    static List<ReviewTopIssue> resolveTopIssues(ReviewTaskRun run)
+    public static List<ReviewTopIssue> resolveTopIssues(ReviewTaskRun run)
     {
         if (run == null)
         {

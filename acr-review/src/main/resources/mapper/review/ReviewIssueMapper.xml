@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.acr.review.mapper.ReviewIssueMapper">
+
+    <resultMap type="com.acr.review.domain.ReviewIssue" id="ReviewIssueResult">
+        <id property="issueId" column="issue_id" />
+        <result property="projectId" column="project_id" />
+        <result property="projectName" column="project_name" />
+        <result property="provider" column="provider" />
+        <result property="prNumber" column="pr_number" />
+        <result property="fingerprint" column="fingerprint" />
+        <result property="firstTaskId" column="first_task_id" />
+        <result property="firstRunId" column="first_run_id" />
+        <result property="lastTaskId" column="last_task_id" />
+        <result property="lastRunId" column="last_run_id" />
+        <result property="issueRank" column="issue_rank" />
+        <result property="severity" column="severity" />
+        <result property="category" column="category" />
+        <result property="title" column="title" />
+        <result property="description" column="description" />
+        <result property="filePath" column="file_path" />
+        <result property="startLine" column="start_line" />
+        <result property="endLine" column="end_line" />
+        <result property="evidence" column="evidence" />
+        <result property="suggestion" column="suggestion" />
+        <result property="origin" column="origin" />
+        <result property="status" column="status" />
+        <result property="resolveNote" column="resolve_note" />
+        <result property="closeSource" column="close_source" />
+        <result property="closedBy" column="closed_by" />
+        <result property="closedTime" column="closed_time" />
+        <result property="createBy" column="create_by" />
+        <result property="createTime" column="create_time" />
+        <result property="updateBy" column="update_by" />
+        <result property="updateTime" column="update_time" />
+    </resultMap>
+
+    <sql id="selectColumns">
+        select i.issue_id, i.project_id, p.project_name, i.provider, i.pr_number, i.fingerprint,
+               i.first_task_id, i.first_run_id, i.last_task_id, i.last_run_id, i.issue_rank,
+               i.severity, i.category, i.title, i.description, i.file_path, i.start_line, i.end_line,
+               i.evidence, i.suggestion, i.origin, i.status, i.resolve_note, i.close_source,
+               i.closed_by, i.closed_time, i.create_by, i.create_time, i.update_by, i.update_time
+        from review_issue i
+        left join review_project p on p.project_id = i.project_id
+        left join sys_dept d on d.dept_id = p.dept_id
+        left join sys_user owner on owner.user_id = p.owner_user_id
+    </sql>
+
+    <select id="selectIssueById" resultMap="ReviewIssueResult">
+        <include refid="selectColumns" />
+        where i.issue_id = #{issueId}
+        limit 1
+    </select>
+
+    <select id="selectByProjectPrFingerprint" resultMap="ReviewIssueResult">
+        select issue_id, project_id, provider, pr_number, fingerprint,
+               first_task_id, first_run_id, last_task_id, last_run_id, issue_rank,
+               severity, category, title, description, file_path, start_line, end_line,
+               evidence, suggestion, origin, status, resolve_note, close_source,
+               closed_by, closed_time, create_by, create_time, update_by, update_time
+        from review_issue
+        where project_id = #{projectId}
+          and pr_number = #{prNumber}
+          and fingerprint = #{fingerprint}
+        limit 1
+    </select>
+
+    <select id="selectByProjectAndPr" resultMap="ReviewIssueResult">
+        select issue_id, project_id, provider, pr_number, fingerprint,
+               first_task_id, first_run_id, last_task_id, last_run_id, issue_rank,
+               severity, category, title, description, file_path, start_line, end_line,
+               evidence, suggestion, origin, status, resolve_note, close_source,
+               closed_by, closed_time, create_by, create_time, update_by, update_time
+        from review_issue
+        where project_id = #{projectId}
+          and pr_number = #{prNumber}
+        order by issue_rank asc, issue_id asc
+    </select>
+
+    <select id="selectIssueList" parameterType="com.acr.review.domain.ReviewIssue" resultMap="ReviewIssueResult">
+        <include refid="selectColumns" />
+        where 1 = 1
+        <if test="projectId != null">
+            and i.project_id = #{projectId}
+        </if>
+        <if test="status != null and status != ''">
+            and i.status = #{status}
+        </if>
+        <if test="severity != null and severity != ''">
+            and i.severity = #{severity}
+        </if>
+        <if test="origin != null and origin != ''">
+            and i.origin = #{origin}
+        </if>
+        <if test="prNumber != null">
+            and i.pr_number = #{prNumber}
+        </if>
+        <if test="keyword != null and keyword != ''">
+            and (i.title like concat('%', #{keyword}, '%') or i.file_path like concat('%', #{keyword}, '%'))
+        </if>
+        <if test="beginTime != null and beginTime != ''">
+            and i.create_time &gt;= #{beginTime}
+        </if>
+        <if test="endTime != null and endTime != ''">
+            and i.create_time &lt;= #{endTime}
+        </if>
+        ${params.dataScope}
+        order by i.update_time desc, i.issue_id desc
+    </select>
+
+    <select id="countOpenNewByProject" resultType="int">
+        select count(1)
+        from review_issue
+        where project_id = #{projectId}
+          and origin = 'NEW'
+          and status in ('AWAITING_CONFIRM', 'AWAITING_FIX')
+    </select>
+
+    <insert id="insertIssue" parameterType="com.acr.review.domain.ReviewIssue" useGeneratedKeys="true" keyProperty="issueId">
+        insert into review_issue
+        (project_id, provider, pr_number, fingerprint, first_task_id, first_run_id, last_task_id, last_run_id,
+         issue_rank, severity, category, title, description, file_path, start_line, end_line,
+         evidence, suggestion, origin, status, resolve_note, close_source, closed_by, closed_time,
+         create_by, create_time, update_by, update_time)
+        values
+        (#{projectId}, #{provider}, #{prNumber}, #{fingerprint}, #{firstTaskId}, #{firstRunId}, #{lastTaskId}, #{lastRunId},
+         #{issueRank}, #{severity}, #{category}, #{title}, #{description}, #{filePath}, #{startLine}, #{endLine},
+         #{evidence}, #{suggestion}, #{origin}, #{status}, #{resolveNote}, #{closeSource}, #{closedBy}, #{closedTime},
+         #{createBy}, sysdate(), #{updateBy}, sysdate())
+    </insert>
+
+    <update id="updateIssueSnapshot" parameterType="com.acr.review.domain.ReviewIssue">
+        update review_issue
+        set last_task_id = #{lastTaskId},
+            last_run_id = #{lastRunId},
+            issue_rank = #{issueRank},
+            severity = #{severity},
+            category = #{category},
+            title = #{title},
+            description = #{description},
+            file_path = #{filePath},
+            start_line = #{startLine},
+            end_line = #{endLine},
+            evidence = #{evidence},
+            suggestion = #{suggestion},
+            origin = #{origin},
+            update_by = #{updateBy},
+            update_time = sysdate()
+        where issue_id = #{issueId}
+    </update>
+
+    <update id="updateIssueDisposition" parameterType="com.acr.review.domain.ReviewIssue">
+        update review_issue
+        set status = #{status},
+            resolve_note = #{resolveNote},
+            close_source = #{closeSource},
+            closed_by = #{closedBy},
+            closed_time = #{closedTime},
+            update_by = #{updateBy},
+            update_time = sysdate()
+        where issue_id = #{issueId}
+    </update>
+</mapper>

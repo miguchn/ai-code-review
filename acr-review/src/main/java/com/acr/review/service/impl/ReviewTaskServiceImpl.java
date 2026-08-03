@@ -13,6 +13,7 @@ import com.acr.review.mapper.ReviewProjectMapper;
 import com.acr.review.mapper.ReviewTaskMapper;
 import com.acr.review.mapper.ReviewTaskRunMapper;
 import com.acr.review.service.IReviewDeliveryService;
+import com.acr.review.service.IReviewIssueService;
 import com.acr.review.service.IReviewTaskExecutionService;
 import com.acr.review.service.IReviewTaskService;
 import com.acr.system.service.ISysDeptService;
@@ -27,13 +28,15 @@ public class ReviewTaskServiceImpl implements IReviewTaskService
     private final ISysDeptService deptService;
     private final IReviewTaskExecutionService executionService;
     private final IReviewDeliveryService deliveryService;
+    private final IReviewIssueService issueService;
 
     public ReviewTaskServiceImpl(ReviewTaskMapper taskMapper,
                                  ReviewTaskRunMapper runMapper,
                                  ReviewProjectMapper projectMapper,
                                  ISysDeptService deptService,
                                  IReviewTaskExecutionService executionService,
-                                 IReviewDeliveryService deliveryService)
+                                 IReviewDeliveryService deliveryService,
+                                 IReviewIssueService issueService)
     {
         this.taskMapper = taskMapper;
         this.runMapper = runMapper;
@@ -41,6 +44,7 @@ public class ReviewTaskServiceImpl implements IReviewTaskService
         this.deptService = deptService;
         this.executionService = executionService;
         this.deliveryService = deliveryService;
+        this.issueService = issueService;
     }
 
     @Override
@@ -67,6 +71,7 @@ public class ReviewTaskServiceImpl implements IReviewTaskService
         ReviewTask task = selectReviewTaskById(taskId);
         checkTaskDataScope(task);
         List<ReviewTaskRun> runs = runMapper.selectRunsByTaskId(taskId);
+        issueService.enrichRuns(runs, task.getProjectId(), task.getPrNumber());
         ReviewDeliveryRecord delivery = deliveryService.selectSummaryDelivery(task.getProjectId(), task.getPrNumber());
         return new ReviewTaskDetail(task, runs, delivery);
     }

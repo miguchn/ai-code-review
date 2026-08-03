@@ -13,6 +13,7 @@ import com.acr.review.mapper.ReviewProjectMapper;
 import com.acr.review.mapper.ReviewTaskMapper;
 import com.acr.review.mapper.ReviewTaskRunMapper;
 import com.acr.review.service.IReviewDeliveryService;
+import com.acr.review.service.IReviewIssueService;
 import com.acr.review.service.IReviewRecordService;
 import com.acr.system.service.ISysDeptService;
 
@@ -25,18 +26,21 @@ public class ReviewRecordServiceImpl implements IReviewRecordService
     private final ReviewProjectMapper projectMapper;
     private final ISysDeptService deptService;
     private final IReviewDeliveryService deliveryService;
+    private final IReviewIssueService issueService;
 
     public ReviewRecordServiceImpl(ReviewTaskMapper taskMapper,
                                    ReviewTaskRunMapper runMapper,
                                    ReviewProjectMapper projectMapper,
                                    ISysDeptService deptService,
-                                   IReviewDeliveryService deliveryService)
+                                   IReviewDeliveryService deliveryService,
+                                   IReviewIssueService issueService)
     {
         this.taskMapper = taskMapper;
         this.runMapper = runMapper;
         this.projectMapper = projectMapper;
         this.deptService = deptService;
         this.deliveryService = deliveryService;
+        this.issueService = issueService;
     }
 
     @Override
@@ -60,6 +64,7 @@ public class ReviewRecordServiceImpl implements IReviewRecordService
         }
         checkTaskDataScope(task);
         List<ReviewTaskRun> runs = runMapper.selectRunsByTaskId(taskId);
+        issueService.enrichRuns(runs, task.getProjectId(), task.getPrNumber());
         ReviewDeliveryRecord delivery = deliveryService.selectSummaryDelivery(task.getProjectId(), task.getPrNumber());
         return new ReviewTaskDetail(task, runs, delivery);
     }

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.acr.review.mapper.ReviewIssueActionMapper">
+
+    <resultMap type="com.acr.review.domain.ReviewIssueAction" id="ReviewIssueActionResult">
+        <id property="actionId" column="action_id" />
+        <result property="issueId" column="issue_id" />
+        <result property="operator" column="operator" />
+        <result property="actionType" column="action_type" />
+        <result property="fromStatus" column="from_status" />
+        <result property="toStatus" column="to_status" />
+        <result property="resolveNote" column="resolve_note" />
+        <result property="createTime" column="create_time" />
+    </resultMap>
+
+    <select id="selectByIssueId" resultMap="ReviewIssueActionResult">
+        select action_id, issue_id, operator, action_type, from_status, to_status, resolve_note, create_time
+        from review_issue_action
+        where issue_id = #{issueId}
+        order by create_time asc, action_id asc
+    </select>
+
+    <insert id="insertAction" parameterType="com.acr.review.domain.ReviewIssueAction"
+            useGeneratedKeys="true" keyProperty="actionId">
+        insert into review_issue_action
+        (issue_id, operator, action_type, from_status, to_status, resolve_note, create_time)
+        values
+        (#{issueId}, #{operator}, #{actionType}, #{fromStatus}, #{toStatus}, #{resolveNote}, #{createTime})
+    </insert>
+</mapper>

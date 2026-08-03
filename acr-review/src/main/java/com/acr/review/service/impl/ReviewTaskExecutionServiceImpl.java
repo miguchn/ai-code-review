@@ -53,6 +53,7 @@ import com.acr.review.scope.ReviewScopeRules;
 import com.acr.review.scope.UnifiedDiffParser;
 import com.acr.review.service.IGitCredentialService;
 import com.acr.review.service.IReviewDeliveryService;
+import com.acr.review.service.IReviewIssueService;
 import com.acr.review.service.IReviewTaskExecutionService;
 import com.acr.review.service.IReviewTaskSnapshotService;
 import com.acr.review.service.ReviewConclusionResolver;
@@ -99,6 +100,7 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
     private final ApplicationEventPublisher eventPublisher;
     private final IReviewTaskSnapshotService snapshotService;
     private final IReviewDeliveryService deliveryService;
+    private final IReviewIssueService issueService;
     private final Semaphore concurrencyLimiter;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final int llmTimeoutSeconds;
@@ -127,6 +129,7 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
                                           ApplicationEventPublisher eventPublisher,
                                           IReviewTaskSnapshotService snapshotService,
                                           IReviewDeliveryService deliveryService,
+                                          IReviewIssueService issueService,
                                           @Value("${review.task.llm-timeout-seconds:120}") int llmTimeoutSeconds)
     {
         this.taskMapper = taskMapper;
@@ -153,6 +156,7 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         this.eventPublisher = eventPublisher;
         this.snapshotService = snapshotService;
         this.deliveryService = deliveryService;
+        this.issueService = issueService;
         this.llmTimeoutSeconds = llmTimeoutSeconds;
         this.concurrencyLimiter = new Semaphore(Math.max(1, engineProperties.getMaxConcurrency()), true);
     }
@@ -875,6 +879,21 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
             log.warn("审查结果投递调用异常（不影响任务状态）, taskId={}", task.getTaskId(), ex);
         }
         notifyQuietly(task, run);
+        materializeIssuesQuietly(task, run);
+    }
+
+    /** 问题物化失败不影响任务状态。 */
+    private void materializeIssuesQuietly(ReviewTask task, ReviewTaskRun run)
+    {
+        try
+        {
+            issueService.materializeAfterSuccess(task, run);
+        }
+        catch (Exception ex)
+        {
+            log.warn("问题台账物化调用异常（不影响任务状态）, taskId={}",
+                task == null ? null : task.getTaskId(), ex);
+        }
     }
 
     /** IM 通知失败不影响任务状态。 */
