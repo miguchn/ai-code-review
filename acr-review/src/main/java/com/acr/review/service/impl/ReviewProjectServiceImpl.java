@@ -199,7 +199,7 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
         if (credential == null || !"0".equals(credential.getStatus()))
         {
             return new ReviewRepositoryInfo(false, GitConnectionFailure.INVALID_REPOSITORY_URL, "Git 凭据不存在或已停用",
-                null, null, null, null, List.of(), List.of(), new Date());
+                null, null, null, null, null, List.of(), List.of(), new Date());
         }
         String provider = credential.getProvider();
         GitProvider gitProvider = adapterRegistry.requireProvider(provider);
@@ -213,7 +213,7 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
         catch (IllegalArgumentException e)
         {
             return new ReviewRepositoryInfo(false, GitConnectionFailure.INVALID_REPOSITORY_URL, e.getMessage(),
-                null, null, null, null, List.of(), List.of(), new Date());
+                null, null, null, null, null, List.of(), List.of(), new Date());
         }
 
         ReviewProject existing = null;
@@ -237,8 +237,8 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
         }
 
         return new ReviewRepositoryInfo(result.success(), result.failure(), result.message(), result.repositoryUrl(),
-            result.repositoryOwner(), result.repositoryName(), result.defaultBranch(), result.branches(), recommended,
-            result.syncedAt());
+            result.repositoryOwner(), result.repositoryName(), repository.fullPath(), result.defaultBranch(),
+            result.branches(), recommended, result.syncedAt());
     }
 
     @Override

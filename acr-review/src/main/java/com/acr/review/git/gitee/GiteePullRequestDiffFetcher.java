@@ -3,6 +3,7 @@ package com.acr.review.git.gitee;
 import java.io.IOException;
 import java.io.InterruptedIOException;
 import java.util.concurrent.TimeUnit;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import com.acr.review.domain.ReviewPipelineConstants;
@@ -29,6 +30,7 @@ public class GiteePullRequestDiffFetcher implements GitPullRequestDiffFetcher
     private final HttpUrl apiBaseUrl;
     private final OkHttpClient client;
 
+    @Autowired
     public GiteePullRequestDiffFetcher(
         @Value("${review.gitee.server-url:https://gitee.com}") String serverUrl,
         @Value("${review.gitee.connect-timeout-ms:5000}") int connectTimeoutMs,

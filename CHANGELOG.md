@@ -11,6 +11,9 @@
 - 前端凭据/项目页支持平台选择、`server_url` 与分平台 Webhook/Token 说明；MR/PR 外链按平台生成
 - GitHub 存量行为与自动测试全量回归通过；GitLab/Gitee/Gitea 以契约测试覆盖，**未声称**真实生产环境闭环验收
 - 设计：`docs/superpowers/specs/2026-08-03-multi-git-provider-access-design.md`；计划：`docs/superpowers/plans/2026-08-03-multi-git-provider-access.md`；脚本：`sql/29_multi_git_provider_access.sql`
+- Review 修复（一）：Gitee/Gitea 合并请求外链改为 `/pulls/{n}`（前后端同源，含 `.git`/尾斜杠清理加固）；Gitee 五个适配 Bean 补 `@Autowired`、执行服务删除失效的平台直注入（两者均阻断启动，已真实启动验证）；deployment 文档明确 GitHub/Gitee 凭据 `server_url` 必须留空
+- Review 修复（二）：Webhook 项目匹配改为严格 `repository_full_path` 单键，删除 owner/name 兜底（该兜底无合法命中场景，仅引入错绑风险），未匹配事件记录载荷 fullPath 便于排障；Gitee 不可映射动作记 IGNORED 而非 FAILED
+- Review 修复（三）：IM 通知与工作台文案统一为平台中立「合并请求」；投递结果 upsert 改为平台中立命名，失败消息脱敏下沉到 `GitTokenSanitizer`；前端切换平台清空仓库地址残留、`server_url` 增加格式预校验、禁用态补充 tooltip、读取仓库信息后展示完整路径，平台兜底常量收敛至 `constants/gitProviders.js`
 
 ### 左侧菜单信息架构调整
 

@@ -250,12 +250,14 @@ public class GiteeWebhookAdapter implements GitWebhookAdapter
         {
             return null;
         }
-        return switch (rawAction.toLowerCase(Locale.ROOT))
+        String normalized = rawAction.toLowerCase(Locale.ROOT);
+        return switch (normalized)
         {
             case "open", "opened" -> "opened";
             case "reopen", "reopened" -> "reopened";
             case "update", "push_update", "synchronize" -> "synchronize";
-            default -> null;
+            // 无法映射的动作原样透传：由服务端白名单判为 IGNORED，而非按载荷解析失败记 FAILED
+            default -> normalized;
         };
     }
 

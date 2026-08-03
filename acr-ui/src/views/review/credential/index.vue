@@ -84,9 +84,13 @@
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="Git 平台" prop="provider">
-              <el-select v-model="form.provider" placeholder="请选择平台" :disabled="!!form.credentialId" @change="handleProviderChange">
-                <el-option v-for="item in gitProviderOptions" :key="item.value" :label="item.label" :value="item.value" />
-              </el-select>
+              <el-tooltip :disabled="!form.credentialId" content="凭据保存后平台不可更换" placement="top">
+                <span class="provider-select-wrap">
+                  <el-select v-model="form.provider" placeholder="请选择平台" :disabled="!!form.credentialId" @change="handleProviderChange">
+                    <el-option v-for="item in gitProviderOptions" :key="item.value" :label="item.label" :value="item.value" />
+                  </el-select>
+                </span>
+              </el-tooltip>
             </el-form-item>
           </el-col>
           <el-col :span="12"><el-form-item label="认证方式"><el-input model-value="Personal Access Token" disabled /></el-form-item></el-col>
@@ -121,20 +125,14 @@
 
 <script setup name="ReviewCredential">
 import { listGitCredential, getGitCredential, addGitCredential, updateGitCredential, delGitCredential, testGitCredential } from '@/api/review/credential'
+import { GIT_PROVIDER_FALLBACK, requiresServerUrl } from '@/constants/gitProviders'
 
 const { proxy } = getCurrentInstance()
 const { review_git_provider } = proxy.useDict('review_git_provider')
 
-const FALLBACK_GIT_PROVIDERS = [
-  { label: 'GitHub', value: 'GITHUB' },
-  { label: 'GitLab', value: 'GITLAB' },
-  { label: 'Gitee（码云）', value: 'GITEE' },
-  { label: 'Gitea', value: 'GITEA' }
-]
-
 const gitProviderOptions = computed(() => {
   const dictOptions = review_git_provider.value || []
-  return dictOptions.length ? dictOptions : FALLBACK_GIT_PROVIDERS
+  return dictOptions.length ? dictOptions : GIT_PROVIDER_FALLBACK
 })
 
 const credentialList = ref([])
@@ -155,8 +153,23 @@ const validateServerUrl = (rule, value, callback) => {
     callback()
     return
   }
-  if (!value || !String(value).trim()) {
+  const raw = value ? String(value).trim() : ''
+  if (!raw) {
     callback(new Error('GitLab / Gitea 必须填写服务地址'))
+    return
+  }
+  // 与后端 GitAccessContext.normalizeServerUrl 规则一致：仅 http/https，不含账号、查询参数或片段
+  let parsed
+  try {
+    parsed = new URL(raw)
+  } catch (e) {
+    callback(new Error('服务地址格式无效，应为 http/https 地址'))
+    return
+  }
+  if ((parsed.protocol !== 'http:' && parsed.protocol !== 'https:')
+    || !parsed.hostname || parsed.username || parsed.password
+    || parsed.search || parsed.hash) {
+    callback(new Error('服务地址仅支持 http/https，且不能包含账号、查询参数或片段'))
     return
   }
   callback()
@@ -173,11 +186,6 @@ const data = reactive({
   }
 })
 const { queryParams, form, rules } = toRefs(data)
-
-function requiresServerUrl(provider) {
-  const code = (provider || '').toUpperCase()
-  return code === 'GITLAB' || code === 'GITEA'
-}
 
 function tokenPlaceholder(provider, isEdit) {
   if (isEdit) return '留空保留原 Token；修改时请重新输入'
@@ -276,6 +284,7 @@ getList()
 </script>
 
 <style scoped>
+.provider-select-wrap { display: block; width: 100%; }
 .check-time { margin-left: 8px; color: var(--el-text-color-secondary); font-size: 12px; }
 .form-tip {
   margin: -2px 0 12px 100px;

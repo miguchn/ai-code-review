@@ -397,7 +397,7 @@ GitLab 使用 Notes（MR 讨论）实现“总结评论”语义：list/create/u
 现有 `buildGithubPrUrl`（`acr-ui/src/utils/reviewDisplay.js`，审查记录列表与详情使用）硬编码 `github.com`，改造为平台感知：
 
 - 入参使用任务/记录 VO 已有的 `provider` + `repositoryUrl` + `prNumber`（自建实例的 `repositoryUrl` 已含自身 host，无需额外字段）；
-- 路径规则与 §7.3 一致：GitHub/Gitee/Gitea `{repositoryUrl}/pull/{n}`，GitLab `{repositoryUrl}/-/merge_requests/{iid}`；
+- 路径规则与 §7.3 一致：GitHub `{repositoryUrl}/pull/{n}`；Gitee/Gitea `{repositoryUrl}/pulls/{n}`；GitLab `{repositoryUrl}/-/merge_requests/{iid}`；
 - 无法生成（字段缺失）时禁用「打开 PR」按钮并提示，提示文案不得出现 GitHub 专属表述；
 - GitHub 行为保持与现实现完全兼容（含 `.git` 后缀与尾斜杠清理、`repositoryOwner/repositoryName` 兜底路径）。
 

@@ -187,8 +187,8 @@ services:
 
 | 平台 | `server_url` | 说明 |
 |------|--------------|------|
-| GitHub | 留空或 `https://github.com` | 默认官方；API 由适配器映射 |
-| Gitee | 留空或 `https://gitee.com` | 默认官方 |
+| GitHub | **必须留空**（填写会被后端拒绝） | 默认官方 `https://github.com`；API 由适配器映射 |
+| Gitee | **必须留空**（填写会被后端拒绝） | 默认官方 `https://gitee.com` |
 | GitLab | **必填** Web 根地址，如 `https://gitlab.example.com` | 适配器推导 `{server_url}/api/v4` |
 | Gitea | **必填** Web 根地址，如 `https://gitea.example.com` | 适配器推导 `{server_url}/api/v1` |
 

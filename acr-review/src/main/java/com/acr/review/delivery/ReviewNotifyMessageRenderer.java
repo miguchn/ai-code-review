@@ -27,7 +27,7 @@ public final class ReviewNotifyMessageRenderer
 
         sb.append("总分 ");
         sb.append(content.getTotalScore() == null ? "--" : content.getTotalScore() + "/100");
-        sb.append(" · PR #");
+        sb.append(" · 合并请求 #");
         sb.append(content.getPrNumber() == null ? "--" : content.getPrNumber());
         if (StringUtils.isNotEmpty(content.getPrTitle()))
         {
@@ -66,7 +66,7 @@ public final class ReviewNotifyMessageRenderer
         StringBuilder sb = new StringBuilder();
         sb.append("### ❌ AI Code Review · 执行失败\n");
 
-        sb.append("PR #");
+        sb.append("合并请求 #");
         sb.append(content.getPrNumber() == null ? "--" : content.getPrNumber());
         if (StringUtils.isNotEmpty(content.getPrTitle()))
         {
@@ -248,7 +248,7 @@ public final class ReviewNotifyMessageRenderer
         }
         if (hasPr)
         {
-            sb.append("PR：").append(content.getPrUrl());
+            sb.append("合并请求：").append(content.getPrUrl());
         }
         if (hasDetail)
         {

@@ -240,10 +240,10 @@ class WorkbenchServiceImplTest
     void buildRecentTitle_usesChineseConclusion()
     {
         ReviewTask task = sampleTask();
-        assertEquals("demo-repo · PR #12 · 高风险", WorkbenchServiceImpl.buildRecentTitle(task));
+        assertEquals("demo-repo · 合并请求 #12 · 高风险", WorkbenchServiceImpl.buildRecentTitle(task));
 
         task.setTaskStatus(ReviewPipelineConstants.TASK_FAILED);
-        assertEquals("demo-repo · PR #12 · 已失败", WorkbenchServiceImpl.buildRecentTitle(task));
+        assertEquals("demo-repo · 合并请求 #12 · 已失败", WorkbenchServiceImpl.buildRecentTitle(task));
     }
 
     @Test

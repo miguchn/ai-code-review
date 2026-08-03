@@ -104,7 +104,6 @@ class ReviewWebhookServiceImplTest
     void ignoresEventWhenProjectNotMatched()
     {
         when(projectMapper.selectByFullPath("GITHUB", "miguchn/demo", null)).thenReturn(null);
-        when(projectMapper.selectByRepository("GITHUB", "miguchn", "demo", null)).thenReturn(null);
 
         WebhookHandleResult result = service.handleGitHubWebhook("pull_request", "d-1", "sig", PAYLOAD);
 

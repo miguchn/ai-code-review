@@ -31,7 +31,7 @@ import com.acr.review.git.GitPullRequestComment;
 import com.acr.review.git.GitPullRequestCommentClient;
 import com.acr.review.git.GitPullRequestCommentException;
 import com.acr.review.git.GitRepositoryCoordinates;
-import com.acr.review.git.github.GitHubPullRequestCommentClient;
+import com.acr.review.git.GitTokenSanitizer;
 import com.acr.review.mapper.GitCredentialMapper;
 import com.acr.review.mapper.ReviewDeliveryRecordMapper;
 import com.acr.review.mapper.ReviewIssueMapper;
@@ -103,7 +103,7 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
         try
         {
             String externalId = writeComment(task, run);
-            upsertGithubResult(task, run, ReviewDeliveryConstants.STATUS_SUCCESS, externalId, null,
+            upsertSummaryCommentResult(task, run, ReviewDeliveryConstants.STATUS_SUCCESS, externalId, null,
                 ReviewDeliveryConstants.TRIGGER_TASK_SUCCESS);
         }
         catch (Exception ex)
@@ -112,7 +112,7 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
             log.warn("审查结果投递失败（不影响任务状态）, taskId={}, reason={}", task.getTaskId(), message);
             try
             {
-                upsertGithubResult(task, run, ReviewDeliveryConstants.STATUS_FAILED, null, message,
+                upsertSummaryCommentResult(task, run, ReviewDeliveryConstants.STATUS_FAILED, null, message,
                     ReviewDeliveryConstants.TRIGGER_TASK_SUCCESS);
             }
             catch (Exception persistEx)
@@ -215,13 +215,13 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
         try
         {
             String externalId = writeComment(latest, run);
-            upsertGithubResult(latest, run, ReviewDeliveryConstants.STATUS_SUCCESS, externalId, null,
+            upsertSummaryCommentResult(latest, run, ReviewDeliveryConstants.STATUS_SUCCESS, externalId, null,
                 ReviewDeliveryConstants.TRIGGER_MANUAL_RETRY);
         }
         catch (Exception ex)
         {
             String message = sanitizeFailure(ex, null);
-            upsertGithubResult(latest, run, ReviewDeliveryConstants.STATUS_FAILED, null, message,
+            upsertSummaryCommentResult(latest, run, ReviewDeliveryConstants.STATUS_FAILED, null, message,
                 ReviewDeliveryConstants.TRIGGER_MANUAL_RETRY);
             throw new ServiceException("投递重试失败：" + message);
         }
@@ -244,7 +244,7 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
         try
         {
             String externalId = writeComment(latest, run);
-            ReviewDeliveryRecord record = upsertGithubResult(latest, run,
+            ReviewDeliveryRecord record = upsertSummaryCommentResult(latest, run,
                 ReviewDeliveryConstants.STATUS_SUCCESS, externalId, null,
                 ReviewDeliveryConstants.TRIGGER_ISSUE_DISPOSITION);
             return ReviewCommentSyncResult.of(ReviewDeliveryConstants.STATUS_SUCCESS, null,
@@ -258,7 +258,7 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
             Long deliveryId = null;
             try
             {
-                ReviewDeliveryRecord record = upsertGithubResult(latest, run,
+                ReviewDeliveryRecord record = upsertSummaryCommentResult(latest, run,
                     ReviewDeliveryConstants.STATUS_FAILED, null, message,
                     ReviewDeliveryConstants.TRIGGER_ISSUE_DISPOSITION);
                 deliveryId = record == null ? null : record.getDeliveryId();
@@ -479,8 +479,9 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
         ReviewIssueDispositionEnricher.enrich(content.getTopIssues(), byFp);
     }
 
-    private ReviewDeliveryRecord upsertGithubResult(ReviewTask task, ReviewTaskRun run, String status,
-                                                    String externalId, String failureMessage, String triggerSource)
+    /** 总结评论投递结果幂等落库。 */
+    private ReviewDeliveryRecord upsertSummaryCommentResult(ReviewTask task, ReviewTaskRun run, String status,
+                                                            String externalId, String failureMessage, String triggerSource)
     {
         ReviewProject project = projectMapper.selectReviewProjectById(task.getProjectId());
         String provider = project != null && StringUtils.isNotEmpty(project.getProvider())
@@ -645,7 +646,7 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
         {
             return truncate(serviceEx.getMessage());
         }
-        return truncate(GitHubPullRequestCommentClient.sanitize(
+        return truncate(GitTokenSanitizer.sanitize(
             StringUtils.defaultIfEmpty(ex.getMessage(), ex.getClass().getSimpleName()), token));
     }
 

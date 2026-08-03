@@ -5,6 +5,7 @@ import java.io.InterruptedIOException;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import com.acr.review.delivery.ReviewDeliveryConstants;
@@ -34,6 +35,7 @@ public class GiteePullRequestCommentClient implements GitPullRequestCommentClien
     private final HttpUrl apiBaseUrl;
     private final OkHttpClient client;
 
+    @Autowired
     public GiteePullRequestCommentClient(
         @Value("${review.gitee.server-url:https://gitee.com}") String serverUrl,
         @Value("${review.gitee.connect-timeout-ms:5000}") int connectTimeoutMs,

@@ -25,8 +25,8 @@
           <el-descriptions :column="2" border>
             <el-descriptions-item label="任务 ID">{{ detailTask.taskId }}</el-descriptions-item>
             <el-descriptions-item label="项目">{{ emptyDash(detailTask.projectName) }}</el-descriptions-item>
-            <el-descriptions-item label="PR">#{{ detailTask.prNumber }} {{ emptyDash(detailTask.prTitle) }}</el-descriptions-item>
-            <el-descriptions-item label="PR 发起人">{{ emptyDash(detailTask.prAuthor) }}</el-descriptions-item>
+            <el-descriptions-item label="合并请求">#{{ detailTask.prNumber }} {{ emptyDash(detailTask.prTitle) }}</el-descriptions-item>
+            <el-descriptions-item label="发起人">{{ emptyDash(detailTask.prAuthor) }}</el-descriptions-item>
             <el-descriptions-item label="分支">{{ emptyDash(detailTask.sourceBranch) }} → {{ emptyDash(detailTask.targetBranch) }}</el-descriptions-item>
             <el-descriptions-item label="代码变更">{{ formatCodeChange(detailTask.changedFiles, detailTask.additions, detailTask.deletions) }}</el-descriptions-item>
             <el-descriptions-item label="任务状态">

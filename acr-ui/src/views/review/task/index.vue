@@ -14,8 +14,8 @@
           <el-option v-for="item in projectOptions" :key="item.projectId" :label="item.projectName" :value="item.projectId" />
         </el-select>
       </el-form-item>
-      <el-form-item label="PR 编号" prop="prNumber">
-        <el-input v-model="queryParams.prNumber" placeholder="请输入 PR 编号" clearable style="width: 140px" @keyup.enter="handleQuery" />
+      <el-form-item label="合并请求编号" prop="prNumber">
+        <el-input v-model="queryParams.prNumber" placeholder="请输入合并请求编号" clearable style="width: 140px" @keyup.enter="handleQuery" />
       </el-form-item>
       <el-form-item label="任务状态" prop="taskStatus">
         <el-select v-model="queryParams.taskStatus" clearable placeholder="请选择状态" style="width: 130px" @change="onStatusChange">
@@ -44,7 +44,7 @@
 
     <el-table v-loading="loading" :data="taskList" empty-text="暂无审查任务">
       <el-table-column label="所属项目" prop="projectName" min-width="140" :show-overflow-tooltip="true" />
-      <el-table-column label="Pull Request" min-width="200">
+      <el-table-column label="合并请求" min-width="200">
         <template #default="scope">
           <div class="pr-cell">
             <el-tag size="small" type="primary">#{{ scope.row.prNumber }}</el-tag>

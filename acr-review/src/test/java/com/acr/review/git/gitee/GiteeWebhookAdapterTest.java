@@ -164,8 +164,8 @@ class GiteeWebhookAdapterTest
         assertEquals("synchronize", GiteeWebhookAdapter.mapAction("update"));
         assertEquals("synchronize", GiteeWebhookAdapter.mapAction("push_update"));
         assertEquals("synchronize", GiteeWebhookAdapter.mapAction("synchronize"));
-        assertNull(GiteeWebhookAdapter.mapAction("merge"));
-        assertNull(GiteeWebhookAdapter.mapAction("close"));
+        assertEquals("merge", GiteeWebhookAdapter.mapAction("merge"));
+        assertEquals("close", GiteeWebhookAdapter.mapAction("close"));
     }
 
     @Test
@@ -197,11 +197,13 @@ class GiteeWebhookAdapterTest
     }
 
     @Test
-    void returnsNullForIgnoredActions()
+    void passesThroughUnmappedActionForWhitelistToIgnore()
     {
         String mergePayload = PR_PAYLOAD.replace("\"action\": \"open\"", "\"action\": \"merge\"");
-        assertNull(adapter.parsePullRequestEvent(
-            "Merge Request Hook", "d-1", mergePayload.getBytes(StandardCharsets.UTF_8)));
+        GitPullRequestEvent event = adapter.parsePullRequestEvent(
+            "Merge Request Hook", "d-1", mergePayload.getBytes(StandardCharsets.UTF_8));
+        assertNotNull(event);
+        assertEquals("merge", event.action());
     }
 
     @Test

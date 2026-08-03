@@ -36,7 +36,7 @@
 
     <el-table v-loading="loading" :data="issueList" empty-text="暂无问题记录">
       <el-table-column label="项目名称" prop="projectName" min-width="150" :show-overflow-tooltip="true" />
-      <el-table-column label="PR" width="90">
+      <el-table-column label="合并请求" width="90">
         <template #default="scope">#{{ scope.row.prNumber }}</template>
       </el-table-column>
       <el-table-column label="问题标题" prop="title" min-width="200" :show-overflow-tooltip="true" />
@@ -86,7 +86,7 @@
             <div class="detail-meta">
               <span>{{ emptyDash(detailIssue.projectName) }}</span>
               <span class="meta-sep">·</span>
-              <span>PR #{{ detailIssue.prNumber }}</span>
+              <span>合并请求 #{{ detailIssue.prNumber }}</span>
               <span v-if="detailIssue.category" class="meta-sep">·</span>
               <span v-if="detailIssue.category">{{ detailIssue.category }}</span>
             </div>
@@ -128,7 +128,7 @@
 
           <section class="detail-block">
             <div class="detail-block-title">
-              <span>PR 总结评论投递</span>
+              <span>总结评论投递</span>
               <el-button v-if="canOpenDeliveryList" link type="primary" @click="goDeliveryList">查看投递记录</el-button>
             </div>
             <template v-if="detailSummaryDelivery">
@@ -145,7 +145,7 @@
                 {{ detailSummaryDelivery.failureMessage || '—' }}
               </p>
             </template>
-            <span v-else class="empty-tip">暂无该 PR 总结评论投递记录</span>
+            <span v-else class="empty-tip">暂无该总结评论投递记录</span>
           </section>
 
           <section class="detail-block">

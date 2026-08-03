@@ -149,12 +149,14 @@ const DEFAULT_REPO_HOSTS = {
 }
 
 function cleanRepoUrl(url) {
-  return (url || '').replace(/\.git$/, '').replace(/\/$/, '')
+  return (url || '').replace(/(\.git|\/)+$/, '')
 }
 
 function mergeRequestPathSegment(provider, prNumber) {
   const code = (provider || 'GITHUB').toUpperCase()
   if (code === 'GITLAB') return `/-/merge_requests/${prNumber}`
+  // Gitee/Gitea 的 Web 路径为 /pulls/{n}；GitHub 为 /pull/{n}
+  if (code === 'GITEE' || code === 'GITEA') return `/pulls/${prNumber}`
   return `/pull/${prNumber}`
 }
 

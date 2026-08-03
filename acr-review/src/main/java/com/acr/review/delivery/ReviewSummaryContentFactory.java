@@ -190,6 +190,12 @@ public class ReviewSummaryContentFactory
         {
             return repoBase + "/-/merge_requests/" + prNumber;
         }
+        // Gitee/Gitea 的 Web 路径为 /pulls/{n}；GitHub 为 /pull/{n}
+        if (GitProviderCodes.GITEE.equalsIgnoreCase(project.getProvider())
+            || GitProviderCodes.GITEA.equalsIgnoreCase(project.getProvider()))
+        {
+            return repoBase + "/pulls/" + prNumber;
+        }
         return repoBase + "/pull/" + prNumber;
     }
 
@@ -248,13 +254,11 @@ public class ReviewSummaryContentFactory
                 return null;
             }
             String path = uri.getPath();
-            if (path != null && path.endsWith(".git"))
+            while (path != null && (path.endsWith("/") || path.endsWith(".git")))
             {
-                path = path.substring(0, path.length() - 4);
-            }
-            while (path != null && path.endsWith("/"))
-            {
-                path = path.substring(0, path.length() - 1);
+                path = path.endsWith("/")
+                    ? path.substring(0, path.length() - 1)
+                    : path.substring(0, path.length() - 4);
             }
             StringBuilder base = new StringBuilder();
             base.append(uri.getScheme().toLowerCase()).append("://").append(uri.getHost().toLowerCase());

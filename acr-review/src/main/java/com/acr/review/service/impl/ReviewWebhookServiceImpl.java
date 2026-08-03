@@ -143,16 +143,13 @@ public class ReviewWebhookServiceImpl implements IReviewWebhookService
         event.setRepositoryName(repository.repository());
         event.setRepositoryFullPath(repository.fullPath());
 
+        // fullPath 是唯一匹配键（owner/name 仅为展示字段）：不做模糊兜底，避免把事件绑到错误项目。
+        // 未命中时事件记录已含载荷 fullPath，可在平台事件列表直接对照项目配置排障。
         ReviewProject project = projectMapper.selectByFullPath(
             event.getProvider(), repository.fullPath(), null);
         if (project == null)
         {
-            project = projectMapper.selectByRepository(
-                event.getProvider(), repository.owner(), repository.repository(), null);
-        }
-        if (project == null)
-        {
-            finishEvent(event, "IGNORED", "未匹配到已接入的代码项目");
+            finishEvent(event, "IGNORED", "未匹配到已接入的代码项目（仓库 " + repository.fullPath() + " 未接入）");
             return WebhookHandleResult.ok("未匹配到已接入项目，已忽略");
         }
         event.setProjectId(project.getProjectId());

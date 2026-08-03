@@ -222,7 +222,7 @@ public class WorkbenchServiceImpl implements IWorkbenchService
     static String buildRecentTitle(ReviewTask task)
     {
         String project = StringUtils.isNotEmpty(task.getProjectName()) ? task.getProjectName() : "未命名项目";
-        String pr = task.getPrNumber() == null ? "PR —" : "PR #" + task.getPrNumber();
+        String pr = task.getPrNumber() == null ? "合并请求 —" : "合并请求 #" + task.getPrNumber();
         return project + " · " + pr + " · " + taskStatusOrConclusionLabel(task);
     }
 

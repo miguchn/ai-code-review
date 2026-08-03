@@ -124,9 +124,13 @@
               </el-col>
               <el-col :span="12">
                 <el-form-item label="Git 平台" prop="provider">
-                  <el-select v-model="form.provider" placeholder="请选择平台" :disabled="!!form.projectId" @change="handleProviderChange">
-                    <el-option v-for="item in gitProviderOptions" :key="item.value" :label="item.label" :value="item.value" />
-                  </el-select>
+                  <el-tooltip :disabled="!form.projectId" content="项目保存后平台不可更换" placement="top">
+                    <span class="provider-select-wrap">
+                      <el-select v-model="form.provider" placeholder="请选择平台" :disabled="!!form.projectId" @change="handleProviderChange">
+                        <el-option v-for="item in gitProviderOptions" :key="item.value" :label="item.label" :value="item.value" />
+                      </el-select>
+                    </span>
+                  </el-tooltip>
                 </el-form-item>
               </el-col>
             </el-row>
@@ -221,7 +225,11 @@
                 <div class="field-actions field-actions--split">
                   <span class="inline-tip inline-tip--inline">来源分支默认全部允许，通常只选择 dev 或 develop，避免后续合并重复审查。</span>
                   <div class="field-actions__links">
-                    <el-button link type="primary" :disabled="!repositoryInfoLoaded" @click="branchDialogOpen = true">查看全部分支</el-button>
+                    <el-tooltip :disabled="repositoryInfoLoaded" content="请先读取仓库信息" placement="top">
+                      <span class="action-wrap">
+                        <el-button link type="primary" :disabled="!repositoryInfoLoaded" @click="branchDialogOpen = true">查看全部分支</el-button>
+                      </span>
+                    </el-tooltip>
                     <el-button link type="primary" :loading="repositoryReading" @click="handleReadRepositoryInfo"
                       v-hasPermi="['review:project:test']">刷新分支</el-button>
                   </div>
@@ -458,22 +466,16 @@ import {
 } from '@/api/review/project'
 import { listGitCredential } from '@/api/review/credential'
 import { listNotifyChannel } from '@/api/review/notifyChannel'
+import { GIT_PROVIDER_FALLBACK } from '@/constants/gitProviders'
 
 const { proxy } = getCurrentInstance()
 const router = useRouter()
 const { review_mode, review_engine_code, review_tech_stack, review_notify_channel_type, review_git_provider } =
   proxy.useDict('review_mode', 'review_engine_code', 'review_tech_stack', 'review_notify_channel_type', 'review_git_provider')
 
-const FALLBACK_GIT_PROVIDERS = [
-  { label: 'GitHub', value: 'GITHUB' },
-  { label: 'GitLab', value: 'GITLAB' },
-  { label: 'Gitee（码云）', value: 'GITEE' },
-  { label: 'Gitea', value: 'GITEA' }
-]
-
 const gitProviderOptions = computed(() => {
   const dictOptions = review_git_provider.value || []
-  return dictOptions.length ? dictOptions : FALLBACK_GIT_PROVIDERS
+  return dictOptions.length ? dictOptions : GIT_PROVIDER_FALLBACK
 })
 const projectList = ref([])
 const loading = ref(true)
@@ -809,8 +811,10 @@ function handleSystemChange(systemId) {
 function handleProviderChange() {
   form.value.credentialId = undefined
   form.value.webhookCallbackUrl = undefined
+  form.value.repositoryUrl = undefined
   invalidateRepositoryInfo()
   loadCredentialOptions()
+  proxy.$refs.projectRef?.clearValidate(['repositoryUrl'])
 }
 
 function loadCredentialOptions() {
@@ -872,6 +876,7 @@ function handleReadRepositoryInfo() {
     form.value.repositoryUrl = result.repositoryUrl
     form.value.repositoryOwner = result.repositoryOwner
     form.value.repositoryName = result.repositoryName
+    form.value.repositoryFullPath = result.repositoryFullPath
     form.value.defaultBranch = result.defaultBranch
     form.value.prTargetBranches = selected.length ? selected : [...(result.recommendedTargetBranches || [])]
     availableBranches.value = branches
@@ -1040,6 +1045,11 @@ Promise.all([loadOptions(), loadNotifyChannelOptions(), getList()])
 .project-form :deep(.el-form-item__content) {
   min-width: 0;
 }
+.provider-select-wrap {
+  display: block;
+  width: 100%;
+}
+.action-wrap { display: inline-block; }
 .project-form :deep(.el-form-item__content > .el-input),
 .project-form :deep(.el-form-item__content > .el-select),
 .project-form :deep(.el-form-item__content > .el-textarea),

@@ -13,6 +13,7 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import com.acr.review.git.GitAccessContext;
@@ -43,6 +44,7 @@ public class GiteeProvider implements GitProvider
     private final OkHttpClient client;
     private final String webBaseUrl;
 
+    @Autowired
     public GiteeProvider(
             @Value("${review.gitee.server-url:https://gitee.com}") String serverUrl,
             @Value("${review.gitee.connect-timeout-ms:5000}") int connectTimeoutMs,

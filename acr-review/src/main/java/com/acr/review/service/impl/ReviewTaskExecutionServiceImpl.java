@@ -33,13 +33,9 @@ import com.acr.review.engine.ReviewEngineWorkspaceManager;
 import com.acr.review.engine.config.ReviewEngineProperties;
 import com.acr.review.git.GitAccessContext;
 import com.acr.review.git.GitAdapterRegistry;
-import com.acr.review.git.GitFileContentFetcher;
 import com.acr.review.git.GitFileContentResult;
-import com.acr.review.git.GitPullRequestDiffFetcher;
 import com.acr.review.git.GitPullRequestDiffResult;
 import com.acr.review.git.GitPullRequestMetadata;
-import com.acr.review.git.GitPullRequestMetadataFetcher;
-import com.acr.review.git.GitPullRequestWorkspacePreparer;
 import com.acr.review.git.GitPullRequestWorkspaceRequest;
 import com.acr.review.git.GitPullRequestWorkspaceResult;
 import com.acr.review.git.GitRepositoryCoordinates;
@@ -88,9 +84,6 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
     private final GitAdapterRegistry adapterRegistry;
     private final ISysAiModelConfigService aiModelConfigService;
     private final OcrModelConfigMapper modelConfigMapper;
-    private final GitPullRequestWorkspacePreparer workspacePreparer;
-    private final GitPullRequestDiffFetcher diffFetcher;
-    private final GitPullRequestMetadataFetcher metadataFetcher;
     private final OpenCodeReviewCliAdapter reviewEngine;
     private final ReviewEngineWorkspaceManager workspaceManager;
     private final ReviewEngineProperties engineProperties;
@@ -101,7 +94,6 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
     private final UnifiedDiffParser diffParser;
     private final ReviewScopeDecisionService scopeDecisionService;
     private final ReviewScopePromptAssembler scopeAssembler;
-    private final GitFileContentFetcher fileContentFetcher;
     private final LlmCallService llmCallService;
     private final ApplicationEventPublisher eventPublisher;
     private final IReviewTaskSnapshotService snapshotService;
@@ -119,9 +111,6 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
                                           GitAdapterRegistry adapterRegistry,
                                           ISysAiModelConfigService aiModelConfigService,
                                           OcrModelConfigMapper modelConfigMapper,
-                                          GitPullRequestWorkspacePreparer workspacePreparer,
-                                          GitPullRequestDiffFetcher diffFetcher,
-                                          GitPullRequestMetadataFetcher metadataFetcher,
                                           OpenCodeReviewCliAdapter reviewEngine,
                                           ReviewEngineWorkspaceManager workspaceManager,
                                           ReviewEngineProperties engineProperties,
@@ -132,7 +121,6 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
                                           UnifiedDiffParser diffParser,
                                           ReviewScopeDecisionService scopeDecisionService,
                                           ReviewScopePromptAssembler scopeAssembler,
-                                          GitFileContentFetcher fileContentFetcher,
                                           LlmCallService llmCallService,
                                           ApplicationEventPublisher eventPublisher,
                                           IReviewTaskSnapshotService snapshotService,
@@ -148,9 +136,6 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         this.adapterRegistry = adapterRegistry;
         this.aiModelConfigService = aiModelConfigService;
         this.modelConfigMapper = modelConfigMapper;
-        this.workspacePreparer = workspacePreparer;
-        this.diffFetcher = diffFetcher;
-        this.metadataFetcher = metadataFetcher;
         this.reviewEngine = reviewEngine;
         this.workspaceManager = workspaceManager;
         this.engineProperties = engineProperties;
@@ -161,7 +146,6 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         this.diffParser = diffParser;
         this.scopeDecisionService = scopeDecisionService;
         this.scopeAssembler = scopeAssembler;
-        this.fileContentFetcher = fileContentFetcher;
         this.llmCallService = llmCallService;
         this.eventPublisher = eventPublisher;
         this.snapshotService = snapshotService;
