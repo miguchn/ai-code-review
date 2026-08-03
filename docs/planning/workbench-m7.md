@@ -1,6 +1,6 @@
 # M7 基础工作台
 
-> **状态（2026-08-03）：已实现，待真实环境验收。** 修订五点：①零项目引导态触发条件改为 `hasPermi('review:project:list')` 且 `projectCount===0`，无对应权限时 scope 字段返回 `null` 不展示，防止开发者误触发引导态（§1.4/§3.1/§4.1）；②任务页回填 `taskStatus` 时必须复位 `queueOnly=false`（§3.2/§4.6）；③`onActivated` 重新拉取 summary，解决 keep-alive 数字不更新（§4.6）；④`today` 字段无权限返回 `null`、前端渲染「—」（§4.2）；⑤更正「M6 催办口径」表述为「M6 PR 总结评论待办计数口径」，补聚合请求失败态（§3.2/§4.6）。前置：`docs/planning/product-roadmap.md`（§4.2 工作台、§5.1 行动优先、§6 首页工作台、§7.3 MVP）、`docs/planning/issue-ledger-m6.md`、`docs/planning/issue-delivery-trace-m6.1.md`（文档结构参照）、`rules/architecture.md`、`rules/delivery.md`、`rules/UI_THEME_RULES.md`。本设计把登录后首页从占位页替换为「我今天需要处理什么」的行动工作台：范围健康、权限驱动待办卡、今日摘要、最近动态；**不**做范围切换、逾期/复核卡、趋势图、角色化配置页、工作台内处置入口、新表/新权限串/新字典。做完 M7，MVP 功能面收口，进入真实试点验收。
+> **状态（2026-08-03）：已实现，待真实环境验收。** 修订五点：①零项目引导态触发条件改为 `hasPermi('review:project:list')` 且 `projectCount===0`，无对应权限时 scope 字段返回 `null` 不展示，防止开发者误触发引导态（§1.4/§3.1/§4.1）；②任务页回填 `taskStatus` 时必须复位 `queueOnly=false`（§3.2/§4.6）；③`onActivated` 重新拉取 summary，解决 keep-alive 数字不更新（§4.6）；④`today` 字段无权限返回 `null`、前端渲染「—」（§4.2）；⑤更正「M6 催办口径」表述为「M6 PR 总结评论待办计数口径」，补聚合请求失败态（§3.2/§4.6）；⑥列表页与工作台加载钩子改为 `onMounted` + 带首次守卫的 `onActivated` 双保险（§3.3/§4.6）——TagsView 写入 `cachedViews` 可能晚于首次渲染，只挂 `onActivated` 时未缓存的首次进入不加载、一直转圈。前置：`docs/planning/product-roadmap.md`（§4.2 工作台、§5.1 行动优先、§6 首页工作台、§7.3 MVP）、`docs/planning/issue-ledger-m6.md`、`docs/planning/issue-delivery-trace-m6.1.md`（文档结构参照）、`rules/architecture.md`、`rules/delivery.md`、`rules/UI_THEME_RULES.md`。本设计把登录后首页从占位页替换为「我今天需要处理什么」的行动工作台：范围健康、权限驱动待办卡、今日摘要、最近动态；**不**做范围切换、逾期/复核卡、趋势图、角色化配置页、工作台内处置入口、新表/新权限串/新字典。做完 M7，MVP 功能面收口，进入真实试点验收。
 
 ## 1. 用户场景与验收标准
 
@@ -119,7 +119,7 @@ M1–M6.1 已具备：
 ```text
 卡片点击：
   router.push({ path: card.link, query: card.query })
-  → 目标列表激活时（onActivated：首次挂载或 keep-alive 重入 tab）：把 route.query 写入 queryParams（及记录页 dateRange）
+  → 目标列表加载时（onMounted 首次挂载 / onActivated keep-alive 重入 tab，二者之一）：把 route.query 写入 queryParams（及记录页 dateRange）
   → 再 getList()
 
 最近动态行点击：
@@ -265,10 +265,10 @@ acr-ui
 1. **数据驱动卡片**：`v-for="card in summary.cards"`；禁止前端写死五张卡再按权限 `v-if` 隐藏（权限裁剪在后端）。
 2. **count=0**：灰色样式 + 可点击；不得 `v-if="count>0"`。
 3. **type→图标**：若需要图标，用前端常量映射（如 `CARD_ICON[type]`）；标题以接口 `title` 为准；**不**为此建字典。
-4. **列表回填**：四个列表在激活时（`onActivated`，首次挂载或 keep-alive 重入 tab 都触发）读取 `route.query` 写入与表单字段同名的 `queryParams`；记录页额外把 `beginTime`/`endTime` 写入 `dateRange`；投递页在现有 `taskId` 回填基础上扩展 `deliveryStatus`；**任务页 query 含 `taskStatus` 时同时置 `queueOnly=false`（默认队列视图只显示在途任务，会排除 FAILED）**。不能用 setup 顶层一次性回填代替——RuoYi tab 页 keep-alive，重入已打开的列表 tab 时 setup/onMounted 不重跑，卡片筛选会失效。
+4. **列表回填**：四个列表在加载时读取 `route.query` 写入与表单字段同名的 `queryParams`；记录页额外把 `beginTime`/`endTime` 写入 `dateRange`；投递页在现有 `taskId` 回填基础上扩展 `deliveryStatus`；**任务页 query 含 `taskStatus` 时同时置 `queueOnly=false`（默认队列视图只显示在途任务，会排除 FAILED）**。加载钩子必须双保险：`onMounted` 负责首次挂载，`onActivated`（带首次激活守卫，避免与 onMounted 重复请求）负责 keep-alive 重入 tab 的回填。**不能只挂 `onActivated`**——TagsView 写入 `cachedViews` 可能晚于页面首次渲染，未被 keep-alive 缓存的首次挂载不触发 activated，页面会一直转圈；也不能只用 setup 顶层/onMounted——重入已打开的列表 tab 时 onMounted 不重跑，卡片筛选会失效。
 5. **相对时间**：复用或对齐项目内既有时间工具；悬停显示绝对时间。
 6. 首页路由 meta 文案可由「首页」改为「工作台」（constantRoutes，无菜单 SQL）。
-7. **时效性**：工作台在 `onActivated` 重新拉取 summary——RuoYi tab 页 keep-alive，从待办列表回到工作台不会重跑 `onMounted`，处置完问题回来后数字必须刷新。
+7. **时效性**：工作台 `onMounted` + 带首次守卫的 `onActivated` 拉取 summary——从待办列表回到工作台 tab 不会重跑 `onMounted`，处置完问题回来后数字必须刷新；只挂 `onActivated` 会在未缓存的首次进入时不加载（同点 4）。
 8. **权限空值**：`scope.projectCount` 为 `null` 时不展示该项；引导态仅当 `scope.projectCount === 0` 触发；`today` 字段为 `null` 渲染「—」。
 9. **失败态**：summary 请求失败时展示错误提示与重试按钮，不白屏。
 

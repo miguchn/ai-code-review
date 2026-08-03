@@ -177,8 +177,15 @@ function loadSummary() {
   })
 }
 
-// keep-alive 首次挂载也会触发 onActivated，只保留一处避免重复请求
-onActivated(() => loadSummary())
+// 首次进入：TagsView 写入 cachedViews 可能晚于页面首次渲染，未被 keep-alive 缓存的组件
+// 不触发 onActivated，首次加载必须在 onMounted 完成；重入 tab 的刷新依赖 onActivated
+onMounted(() => loadSummary())
+let firstActivated = true
+onActivated(() => {
+  // 首次挂载紧随的激活已在 onMounted 加载，跳过避免重复请求
+  if (firstActivated) { firstActivated = false; return }
+  loadSummary()
+})
 </script>
 
 <style scoped lang="scss">

@@ -241,8 +241,17 @@ function resetQuery() {
 }
 
 loadProjects()
-// keep-alive 下从工作台卡片重入 tab 不会重跑 onMounted，激活时回填筛选并刷新
+// 首次进入：TagsView 写入 cachedViews 可能晚于页面首次渲染，未被 keep-alive 缓存的组件
+// 不触发 onActivated，首次加载必须在 onMounted 完成；
+// 重入 tab：keep-alive 不重跑 onMounted，工作台卡片 query 回填依赖 onActivated
+onMounted(() => {
+  applyRouteQuery()
+  getList()
+})
+let firstActivated = true
 onActivated(() => {
+  // 首次挂载紧随的激活已在 onMounted 加载，跳过避免重复请求
+  if (firstActivated) { firstActivated = false; return }
   applyRouteQuery()
   getList()
 })
