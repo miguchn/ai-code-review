@@ -33,4 +33,23 @@ class CredentialCryptoServiceTest
         CredentialCryptoService crypto = new CredentialCryptoService("");
         assertThrows(ServiceException.class, () -> crypto.encrypt("test-token-value"));
     }
+
+    @Test
+    void notifyWebhookUrlAndSecretRoundTripWithDistinctAadFromPat()
+    {
+        byte[] key = new byte[32];
+        IntStream.range(0, key.length).forEach(index -> key[index] = (byte) (index + 1));
+        CredentialCryptoService crypto = new CredentialCryptoService(Base64.getEncoder().encodeToString(key));
+        String plaintext = "https://oapi.dingtalk.com/robot/send?access_token=abc";
+
+        String patCipher = crypto.encrypt(plaintext);
+        String urlCipher = crypto.encryptNotifyWebhookUrl(plaintext);
+        String secretCipher = crypto.encryptNotifyWebhookSecret("SEC123");
+
+        assertEquals(plaintext, crypto.decryptNotifyWebhookUrl(urlCipher));
+        assertEquals("SEC123", crypto.decryptNotifyWebhookSecret(secretCipher));
+        assertNotEquals(patCipher, urlCipher);
+        assertNotEquals(patCipher, secretCipher);
+        assertNotEquals(urlCipher, secretCipher);
+    }
 }
