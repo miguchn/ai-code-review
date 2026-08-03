@@ -712,7 +712,7 @@ function openModelService() {
 }
 
 function openTemplateManagement() {
-  const route = router.resolve({ path: '/review/template' })
+  const route = router.resolve({ path: '/model-service/template' })
   window.open(route.href, '_blank', 'noopener,noreferrer')
 }
 
@@ -791,7 +791,7 @@ function handlePrReviewChange(value) {
 }
 
 function openCredentialManagement() {
-  const route = router.resolve({ path: '/review/credential' })
+  const route = router.resolve({ path: '/project-access/credential' })
   window.open(route.href, '_blank', 'noopener,noreferrer')
 }
 

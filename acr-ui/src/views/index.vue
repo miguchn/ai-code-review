@@ -14,7 +14,7 @@
           <el-button
             v-if="canAddProject"
             type="primary"
-            @click="$router.push('/review/project')"
+            @click="$router.push('/project-access/project')"
           >接入第一个项目</el-button>
           <p v-else class="wb-guide-hint">当前账号没有项目接入权限，请联系管理员创建代码项目。</p>
         </el-empty>
