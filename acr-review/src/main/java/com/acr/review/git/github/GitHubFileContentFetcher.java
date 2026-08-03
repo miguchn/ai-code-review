@@ -6,6 +6,7 @@ import java.util.concurrent.TimeUnit;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import com.acr.review.domain.ReviewPipelineConstants;
+import com.acr.review.git.GitAccessContext;
 import com.acr.review.git.GitFileContentFetcher;
 import com.acr.review.git.GitFileContentResult;
 import com.acr.review.git.GitRepositoryCoordinates;
@@ -52,9 +53,19 @@ public class GitHubFileContentFetcher implements GitFileContentFetcher
     }
 
     @Override
-    public GitFileContentResult fetchFileContent(GitRepositoryCoordinates repository, String token, String path, String ref)
+    public GitFileContentResult fetchFileContent(GitRepositoryCoordinates repository, GitAccessContext access,
+                                                 String path, String ref)
     {
-        if (repository == null || token == null || token.isBlank())
+        String token;
+        try
+        {
+            token = access.requireToken();
+        }
+        catch (IllegalArgumentException ex)
+        {
+            return GitFileContentResult.fail("CREDENTIAL");
+        }
+        if (repository == null)
         {
             return GitFileContentResult.fail("CREDENTIAL");
         }

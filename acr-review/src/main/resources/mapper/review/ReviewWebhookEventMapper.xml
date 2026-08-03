@@ -12,6 +12,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="action" column="action" />
         <result property="repositoryOwner" column="repository_owner" />
         <result property="repositoryName" column="repository_name" />
+        <result property="repositoryFullPath" column="repository_full_path" />
         <result property="projectId" column="project_id" />
         <result property="prNumber" column="pr_number" />
         <result property="prTitle" column="pr_title" />
@@ -30,12 +31,12 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 
     <insert id="insertEvent" parameterType="com.acr.review.domain.ReviewWebhookEvent" useGeneratedKeys="true" keyProperty="eventId">
         insert into review_webhook_event
-        (provider, delivery_id, event_type, action, repository_owner, repository_name,
+        (provider, delivery_id, event_type, action, repository_owner, repository_name, repository_full_path,
          project_id, pr_number, pr_title, source_branch, target_branch, base_sha, head_sha,
          process_status, process_message, duplicate_count, task_id, payload_size,
          receive_time, process_time, create_time)
         values
-        (#{provider}, #{deliveryId}, #{eventType}, #{action}, #{repositoryOwner}, #{repositoryName},
+        (#{provider}, #{deliveryId}, #{eventType}, #{action}, #{repositoryOwner}, #{repositoryName}, #{repositoryFullPath},
          #{projectId}, #{prNumber}, #{prTitle}, #{sourceBranch}, #{targetBranch}, #{baseSha}, #{headSha},
          #{processStatus}, #{processMessage}, #{duplicateCount}, #{taskId}, #{payloadSize},
          #{receiveTime}, #{processTime}, sysdate())
@@ -43,7 +44,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 
     <select id="selectByDelivery" resultMap="ReviewWebhookEventResult">
         select event_id, provider, delivery_id, event_type, action,
-               repository_owner, repository_name, project_id,
+               repository_owner, repository_name, repository_full_path, project_id,
                pr_number, pr_title, source_branch, target_branch, base_sha, head_sha,
                process_status, process_message, duplicate_count, task_id, payload_size,
                receive_time, process_time
@@ -58,6 +59,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="action != null">action = #{action},</if>
             <if test="repositoryOwner != null">repository_owner = #{repositoryOwner},</if>
             <if test="repositoryName != null">repository_name = #{repositoryName},</if>
+            <if test="repositoryFullPath != null">repository_full_path = #{repositoryFullPath},</if>
             <if test="projectId != null">project_id = #{projectId},</if>
             <if test="prNumber != null">pr_number = #{prNumber},</if>
             <if test="prTitle != null">pr_title = #{prTitle},</if>

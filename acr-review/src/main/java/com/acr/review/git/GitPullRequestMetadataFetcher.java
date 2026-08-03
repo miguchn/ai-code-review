@@ -5,5 +5,5 @@ public interface GitPullRequestMetadataFetcher
 {
     String providerCode();
 
-    GitPullRequestMetadata fetch(GitRepositoryCoordinates repository, String token, int prNumber);
+    GitPullRequestMetadata fetch(GitRepositoryCoordinates repository, GitAccessContext access, int prNumber);
 }

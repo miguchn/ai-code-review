@@ -13,6 +13,7 @@ import com.acr.review.domain.ReviewTask;
 import com.acr.review.domain.ReviewTaskRun;
 import com.acr.review.domain.result.ReviewScopeStats;
 import com.acr.review.domain.result.ReviewTopIssue;
+import com.acr.review.git.GitProviderCodes;
 import com.acr.system.service.ISysConfigService;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
@@ -67,10 +68,7 @@ public class ReviewSummaryContentFactory
         {
             builder.repositoryOwner(project.getRepositoryOwner())
                 .repositoryName(project.getRepositoryName());
-            if (isGithubProvider(task, project))
-            {
-                builder.prUrl(buildGithubPrUrl(project, task == null ? null : task.getPrNumber()));
-            }
+            builder.prUrl(buildMergeRequestUrl(project, task == null ? null : task.getPrNumber()));
         }
 
         builder.detailUrl(buildDetailUrl(task));
@@ -177,27 +175,60 @@ public class ReviewSummaryContentFactory
         return "/review/task-detail/index/" + taskId;
     }
 
-    static String buildGithubPrUrl(ReviewProject project, Integer prNumber)
+    static String buildMergeRequestUrl(ReviewProject project, Integer prNumber)
     {
         if (project == null || prNumber == null || prNumber <= 0)
         {
             return null;
         }
-        String webBase = resolveGithubWebBase(project.getRepositoryUrl());
-        if (webBase != null)
+        String repoBase = resolveRepositoryWebBase(project);
+        if (repoBase == null)
         {
-            return webBase + "/pull/" + prNumber;
+            return null;
+        }
+        if (GitProviderCodes.GITLAB.equalsIgnoreCase(project.getProvider()))
+        {
+            return repoBase + "/-/merge_requests/" + prNumber;
+        }
+        return repoBase + "/pull/" + prNumber;
+    }
+
+    /** @deprecated 使用 {@link #buildMergeRequestUrl(ReviewProject, Integer)} */
+    @Deprecated
+    static String buildGithubPrUrl(ReviewProject project, Integer prNumber)
+    {
+        return buildMergeRequestUrl(project, prNumber);
+    }
+
+    static String resolveRepositoryWebBase(ReviewProject project)
+    {
+        if (project == null)
+        {
+            return null;
+        }
+        String fromUrl = resolveRepositoryWebBase(project.getRepositoryUrl());
+        if (fromUrl != null)
+        {
+            return fromUrl;
         }
         String owner = project.getRepositoryOwner();
         String name = project.getRepositoryName();
-        if (StringUtils.isNotEmpty(owner) && StringUtils.isNotEmpty(name))
+        if (StringUtils.isEmpty(owner) || StringUtils.isEmpty(name))
         {
-            return "https://github.com/" + owner + "/" + name + "/pull/" + prNumber;
+            return null;
+        }
+        if (GitProviderCodes.GITHUB.equalsIgnoreCase(project.getProvider()))
+        {
+            return "https://github.com/" + owner + "/" + name;
+        }
+        if (GitProviderCodes.GITEE.equalsIgnoreCase(project.getProvider()))
+        {
+            return "https://gitee.com/" + owner + "/" + name;
         }
         return null;
     }
 
-    static String resolveGithubWebBase(String repositoryUrl)
+    static String resolveRepositoryWebBase(String repositoryUrl)
     {
         if (StringUtils.isEmpty(repositoryUrl))
         {
@@ -212,17 +243,30 @@ public class ReviewSummaryContentFactory
         try
         {
             URI uri = new URI(value);
-            if (!"https".equalsIgnoreCase(uri.getScheme())
-                || !"github.com".equalsIgnoreCase(uri.getHost()))
+            if (uri.getHost() == null || uri.getScheme() == null)
             {
                 return null;
             }
-            String[] parts = uri.getPath().split("/");
-            if (parts.length < 3 || parts[1].isBlank() || parts[2].isBlank())
+            String path = uri.getPath();
+            if (path != null && path.endsWith(".git"))
             {
-                return null;
+                path = path.substring(0, path.length() - 4);
             }
-            return "https://github.com/" + parts[1] + "/" + stripGitSuffix(parts[2]);
+            while (path != null && path.endsWith("/"))
+            {
+                path = path.substring(0, path.length() - 1);
+            }
+            StringBuilder base = new StringBuilder();
+            base.append(uri.getScheme().toLowerCase()).append("://").append(uri.getHost().toLowerCase());
+            if (uri.getPort() > 0)
+            {
+                base.append(':').append(uri.getPort());
+            }
+            if (path != null && !path.isBlank())
+            {
+                base.append(path);
+            }
+            return base.toString();
         }
         catch (URISyntaxException ex)
         {
@@ -230,15 +274,11 @@ public class ReviewSummaryContentFactory
         }
     }
 
-    private static boolean isGithubProvider(ReviewTask task, ReviewProject project)
+    /** @deprecated 使用 {@link #resolveRepositoryWebBase(String)} */
+    @Deprecated
+    static String resolveGithubWebBase(String repositoryUrl)
     {
-        if (project.getProvider() != null
-            && ReviewDeliveryConstants.PROVIDER_GITHUB.equalsIgnoreCase(project.getProvider()))
-        {
-            return true;
-        }
-        return task != null && task.getProvider() != null
-            && ReviewDeliveryConstants.PROVIDER_GITHUB.equalsIgnoreCase(task.getProvider());
+        return resolveRepositoryWebBase(repositoryUrl);
     }
 
     private static List<ReviewTopIssue> parseTopIssues(String json)

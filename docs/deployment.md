@@ -49,6 +49,7 @@ mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/25_issue_l
 mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/26_issue_delivery_trace_m6_1.sql
 mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/27_sidebar_menu_ia.sql
 mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/28_delivery_menu_route_name.sql
+mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/29_multi_git_provider_access.sql
 ```
 
 > 含中文的 SQL 必须使用 `--default-character-set=utf8mb4`（或脚本内 `SET NAMES utf8mb4`）执行，避免菜单/字典文案乱码。
@@ -63,7 +64,7 @@ mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/28_deliver
 
 | 变量 | 默认值 | 说明 |
 |---|---|---|
-| `ACR_WEBHOOK_CALLBACK_URL` | `http://localhost:8080` | 生成 GitHub Webhook 回调地址的外网 base URL，生产环境必须改为公网可达地址 |
+| `ACR_WEBHOOK_CALLBACK_URL` | `http://localhost:8080` | 生成各平台 Webhook 回调地址的外网 base URL（`/webhook/{provider}`），生产环境必须改为公网可达地址 |
 | `ACR_REVIEW_LLM_TIMEOUT_SECONDS` | `120` | 大模型审查单次执行超时秒数，记录进任务运行快照 |
 
 ### 2. 后端配置
@@ -167,16 +168,50 @@ services:
       - ./acr-ui/dist:/usr/share/nginx/html
 ```
 
-## GitLab Webhook 配置（待实现）
+## 多平台 Git Webhook 与凭据配置
 
-以下仅为 MVP（V0.1）试点建议，最终 URL、Secret 和支持版本须在该切片开发前确认：
+升级或新装环境须执行 `sql/29_multi_git_provider_access.sql`（含中文，须 `--default-character-set=utf8mb4`）。该脚本新增凭据 `server_url`、项目/事件 `repository_full_path`、平台字典与分平台投递渠道。
 
-1. 在 GitLab 项目设置中添加 Webhook
-2. URL: `http://your-server:8080/webhook/gitlab`
-3. Trigger Events: Merge Request Events（Push Events 不进入 MVP）
-4. Secret Token: 配置在管理后台
+### Webhook URL（四平台）
 
-## 通知推送配置（待实现）
+将 `<host>` 替换为公网可达地址（与 `ACR_WEBHOOK_CALLBACK_URL` 或项目页展示的回调 base 一致）：
+
+| 平台 | URL | Secret / Token | 触发事件 |
+|------|-----|----------------|----------|
+| GitHub | `https://<host>/webhook/github` | 与项目 Webhook Secret 一致 | Pull requests |
+| GitLab | `https://<host>/webhook/gitlab` | Secret Token = 项目 Secret | Merge request events |
+| Gitee | `https://<host>/webhook/gitee` | 密码模式：Token 与 Secret 一致；签名模式：按 Gitee 官方 HMAC 配置 | PR 相关 |
+| Gitea | `https://<host>/webhook/gitea` | 与项目 Secret 一致 | Pull Request |
+
+### 凭据 `server_url`（自建实例）
+
+| 平台 | `server_url` | 说明 |
+|------|--------------|------|
+| GitHub | 留空或 `https://github.com` | 默认官方；API 由适配器映射 |
+| Gitee | 留空或 `https://gitee.com` | 默认官方 |
+| GitLab | **必填** Web 根地址，如 `https://gitlab.example.com` | 适配器推导 `{server_url}/api/v4` |
+| Gitea | **必填** Web 根地址，如 `https://gitea.example.com` | 适配器推导 `{server_url}/api/v1` |
+
+本期仅支持 Web 根 + 标准 API 后缀；非常规 API 前缀或反代路径不在范围。
+
+### Token 最小权限（scope）建议
+
+凭据 Token 须能读取仓库元数据、Diff/文件内容，并在 MR/PR 上创建与更新总结评论（Notes/Issue Comment）。各平台常见最小 scope：
+
+| 平台 | 建议 scope / 权限 |
+|------|-------------------|
+| GitHub | `repo`（或 fine-grained：Contents Read、Pull requests Read & Write、Metadata Read） |
+| GitLab | `api` 或 `read_api` + `write_repository`（须能读写 MR Notes） |
+| Gitee | 仓库 **pull** + **push**（或等价 PR 读写权限） |
+| Gitea | 仓库 **read** + **write**（须能读写 PR 评论） |
+
+权限不足时连接测试或评论回写会失败，并在投递记录中单独标记；审查任务结论不受影响。
+
+### 人工验收
+
+有真实 Token/实例时，按设计文档 §11「人工验收清单」逐项执行闭环验证。无真实环境时标注「未执行真实闭环」，不得声称已验收。详见 `docs/superpowers/specs/2026-08-03-multi-git-provider-access-design.md` §11。
+
+## 通知推送配置
 
 ### 钉钉
 

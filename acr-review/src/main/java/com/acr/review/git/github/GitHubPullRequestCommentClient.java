@@ -8,6 +8,7 @@ import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import com.acr.review.delivery.ReviewDeliveryConstants;
+import com.acr.review.git.GitAccessContext;
 import com.acr.review.git.GitPullRequestComment;
 import com.acr.review.git.GitPullRequestCommentClient;
 import com.acr.review.git.GitPullRequestCommentException;
@@ -59,10 +60,11 @@ public class GitHubPullRequestCommentClient implements GitPullRequestCommentClie
 
     @Override
     public Optional<GitPullRequestComment> findCommentWithMarker(GitRepositoryCoordinates repository,
-                                                                 String token,
+                                                                 GitAccessContext access,
                                                                  int prNumber,
                                                                  String marker)
     {
+        String token = access.requireToken();
         validate(repository, token, prNumber);
         if (marker == null || marker.isBlank())
         {
@@ -104,10 +106,11 @@ public class GitHubPullRequestCommentClient implements GitPullRequestCommentClie
 
     @Override
     public GitPullRequestComment createIssueComment(GitRepositoryCoordinates repository,
-                                                    String token,
+                                                    GitAccessContext access,
                                                     int prNumber,
                                                     String body)
     {
+        String token = access.requireToken();
         validate(repository, token, prNumber);
         HttpUrl url = issueCommentsUrl(repository, prNumber);
         Request request = requestBuilder(token, url)
@@ -119,10 +122,11 @@ public class GitHubPullRequestCommentClient implements GitPullRequestCommentClie
 
     @Override
     public GitPullRequestComment updateIssueComment(GitRepositoryCoordinates repository,
-                                                    String token,
+                                                    GitAccessContext access,
                                                     String commentId,
                                                     String body)
     {
+        String token = access.requireToken();
         validate(repository, token, 1);
         if (commentId == null || commentId.isBlank())
         {

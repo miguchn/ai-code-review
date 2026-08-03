@@ -8,6 +8,7 @@ import java.io.IOException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import com.acr.review.git.GitAccessContext;
 import com.acr.review.git.GitPullRequestMetadata;
 import com.acr.review.git.GitRepositoryCoordinates;
 import okhttp3.mockwebserver.MockResponse;
@@ -15,6 +16,9 @@ import okhttp3.mockwebserver.MockWebServer;
 
 class GitHubPullRequestMetadataFetcherTest
 {
+    private static final GitAccessContext ACCESS = GitAccessContext.of("test-token", "https://github.com");
+    private static final GitAccessContext TOKEN_ACCESS = GitAccessContext.of("token", "https://github.com");
+
     private MockWebServer server;
     private GitHubPullRequestMetadataFetcher fetcher;
     private GitRepositoryCoordinates repository;
@@ -53,7 +57,7 @@ class GitHubPullRequestMetadataFetcherTest
             ]
             """));
 
-        GitPullRequestMetadata metadata = fetcher.fetch(repository, "test-token", 42);
+        GitPullRequestMetadata metadata = fetcher.fetch(repository, ACCESS, 42);
 
         assertTrue(metadata.fetched());
         assertEquals("Fix review pipeline", metadata.prDescription());
@@ -75,7 +79,7 @@ class GitHubPullRequestMetadataFetcherTest
     {
         server.enqueue(json(404, "{}"));
 
-        GitPullRequestMetadata metadata = fetcher.fetch(repository, "test-token", 42);
+        GitPullRequestMetadata metadata = fetcher.fetch(repository, ACCESS, 42);
 
         assertFalse(metadata.fetched());
         assertEquals("", metadata.prDescription());
@@ -98,7 +102,7 @@ class GitHubPullRequestMetadataFetcherTest
             """));
         server.enqueue(json(403, "{}"));
 
-        GitPullRequestMetadata metadata = fetcher.fetch(repository, "test-token", 42);
+        GitPullRequestMetadata metadata = fetcher.fetch(repository, ACCESS, 42);
 
         assertTrue(metadata.fetched());
         assertEquals("Only description", metadata.prDescription());
@@ -112,9 +116,9 @@ class GitHubPullRequestMetadataFetcherTest
     @Test
     void rejectsMissingInputsWithoutCallingApi()
     {
-        GitPullRequestMetadata missingRepository = fetcher.fetch(null, "token", 1);
-        GitPullRequestMetadata missingToken = fetcher.fetch(repository, " ", 1);
-        GitPullRequestMetadata invalidNumber = fetcher.fetch(repository, "token", 0);
+        GitPullRequestMetadata missingRepository = fetcher.fetch(null, TOKEN_ACCESS, 1);
+        GitPullRequestMetadata missingToken = fetcher.fetch(repository, GitAccessContext.of(" ", "https://github.com"), 1);
+        GitPullRequestMetadata invalidNumber = fetcher.fetch(repository, TOKEN_ACCESS, 0);
 
         assertFalse(missingRepository.fetched());
         assertFalse(missingToken.fetched());
@@ -128,7 +132,7 @@ class GitHubPullRequestMetadataFetcherTest
         // 200 但返回 HTML 错误页（网关/CDN 故障）时按不可用处理，不得抛运行时异常
         server.enqueue(json(200, "<html><body>Bad Gateway</body></html>"));
 
-        GitPullRequestMetadata metadata = fetcher.fetch(repository, "test-token", 42);
+        GitPullRequestMetadata metadata = fetcher.fetch(repository, ACCESS, 42);
 
         assertFalse(metadata.fetched());
         assertTrue(metadata.message().contains("JSON"));

@@ -5,8 +5,8 @@
         <el-input v-model="queryParams.credentialName" placeholder="请输入凭据名称" clearable style="width: 200px" @keyup.enter="handleQuery" />
       </el-form-item>
       <el-form-item label="Git 平台" prop="provider">
-        <el-select v-model="queryParams.provider" clearable placeholder="请选择平台" style="width: 130px">
-          <el-option label="GitHub" value="GITHUB" />
+        <el-select v-model="queryParams.provider" clearable placeholder="请选择平台" style="width: 150px">
+          <el-option v-for="item in gitProviderOptions" :key="item.value" :label="item.label" :value="item.value" />
         </el-select>
       </el-form-item>
       <el-form-item label="状态" prop="status">
@@ -30,8 +30,13 @@
 
     <el-table v-loading="loading" :data="credentialList" empty-text="暂无访问凭据">
       <el-table-column label="凭据名称" prop="credentialName" min-width="170" :show-overflow-tooltip="true" />
-      <el-table-column label="Git 平台" width="110">
-        <template #default="scope"><el-tag size="small">{{ scope.row.provider === 'GITHUB' ? 'GitHub' : scope.row.provider }}</el-tag></template>
+      <el-table-column label="Git 平台" width="130">
+        <template #default="scope">
+          <dict-tag :options="gitProviderOptions" :value="scope.row.provider" />
+        </template>
+      </el-table-column>
+      <el-table-column label="服务地址" min-width="180" :show-overflow-tooltip="true">
+        <template #default="scope">{{ scope.row.serverUrl || '—' }}</template>
       </el-table-column>
       <el-table-column label="认证方式" prop="authType" width="110" />
       <el-table-column label="Token" width="100">
@@ -74,15 +79,24 @@
     <el-dialog :title="title" v-model="open" width="600px" append-to-body>
       <el-form ref="credentialRef" :model="form" :rules="rules" label-width="100px">
         <el-form-item label="凭据名称" prop="credentialName">
-          <el-input v-model="form.credentialName" placeholder="如：GitHub 试点仓库只读凭据" />
+          <el-input v-model="form.credentialName" placeholder="如：GitLab 试点仓库只读凭据" />
         </el-form-item>
         <el-row :gutter="20">
-          <el-col :span="12"><el-form-item label="Git 平台"><el-input model-value="GitHub" disabled /></el-form-item></el-col>
+          <el-col :span="12">
+            <el-form-item label="Git 平台" prop="provider">
+              <el-select v-model="form.provider" placeholder="请选择平台" :disabled="!!form.credentialId" @change="handleProviderChange">
+                <el-option v-for="item in gitProviderOptions" :key="item.value" :label="item.label" :value="item.value" />
+              </el-select>
+            </el-form-item>
+          </el-col>
           <el-col :span="12"><el-form-item label="认证方式"><el-input model-value="Personal Access Token" disabled /></el-form-item></el-col>
         </el-row>
+        <el-form-item v-if="requiresServerUrl(form.provider)" label="服务地址" prop="serverUrl">
+          <el-input v-model="form.serverUrl" placeholder="https://gitlab.example.com" />
+        </el-form-item>
         <el-form-item label="Token" prop="token">
           <el-input v-model="form.token" type="password" show-password autocomplete="new-password"
-            :placeholder="form.credentialId ? '留空保留原 Token；修改时请重新输入' : '请输入 GitHub Personal Access Token'" />
+            :placeholder="tokenPlaceholder(form.provider, !!form.credentialId)" />
         </el-form-item>
         <el-alert title="Token 只在提交时发送，编辑页面不会回显历史值。" type="info" :closable="false" show-icon class="form-tip" />
         <el-form-item label="状态" prop="status">
@@ -109,6 +123,20 @@
 import { listGitCredential, getGitCredential, addGitCredential, updateGitCredential, delGitCredential, testGitCredential } from '@/api/review/credential'
 
 const { proxy } = getCurrentInstance()
+const { review_git_provider } = proxy.useDict('review_git_provider')
+
+const FALLBACK_GIT_PROVIDERS = [
+  { label: 'GitHub', value: 'GITHUB' },
+  { label: 'GitLab', value: 'GITLAB' },
+  { label: 'Gitee（码云）', value: 'GITEE' },
+  { label: 'Gitea', value: 'GITEA' }
+]
+
+const gitProviderOptions = computed(() => {
+  const dictOptions = review_git_provider.value || []
+  return dictOptions.length ? dictOptions : FALLBACK_GIT_PROVIDERS
+})
+
 const credentialList = ref([])
 const loading = ref(true)
 const showSearch = ref(true)
@@ -122,15 +150,55 @@ const validateToken = (rule, value, callback) => {
   else callback()
 }
 
+const validateServerUrl = (rule, value, callback) => {
+  if (!requiresServerUrl(form.value.provider)) {
+    callback()
+    return
+  }
+  if (!value || !String(value).trim()) {
+    callback(new Error('GitLab / Gitea 必须填写服务地址'))
+    return
+  }
+  callback()
+}
+
 const data = reactive({
   form: {},
   queryParams: { pageNum: 1, pageSize: 10, credentialName: undefined, provider: undefined, status: undefined },
   rules: {
     credentialName: [{ required: true, message: '凭据名称不能为空', trigger: 'blur' }],
+    provider: [{ required: true, message: '请选择 Git 平台', trigger: 'change' }],
+    serverUrl: [{ validator: validateServerUrl, trigger: 'blur' }],
     token: [{ validator: validateToken, trigger: 'blur' }]
   }
 })
 const { queryParams, form, rules } = toRefs(data)
+
+function requiresServerUrl(provider) {
+  const code = (provider || '').toUpperCase()
+  return code === 'GITLAB' || code === 'GITEA'
+}
+
+function tokenPlaceholder(provider, isEdit) {
+  if (isEdit) return '留空保留原 Token；修改时请重新输入'
+  const code = (provider || 'GITHUB').toUpperCase()
+  if (code === 'GITLAB') return '请输入 GitLab Personal Access Token'
+  if (code === 'GITEE') return '请输入 Gitee 私人令牌'
+  if (code === 'GITEA') return '请输入 Gitea Access Token'
+  return '请输入 GitHub Personal Access Token'
+}
+
+function providerLabel(provider) {
+  const hit = gitProviderOptions.value.find(item => item.value === provider)
+  return hit?.label || provider || 'Git'
+}
+
+function handleProviderChange() {
+  if (!requiresServerUrl(form.value.provider)) {
+    form.value.serverUrl = undefined
+  }
+  proxy.$refs.credentialRef?.clearValidate(['serverUrl'])
+}
 
 function getList() {
   loading.value = true
@@ -141,30 +209,43 @@ function getList() {
 }
 
 function reset() {
-  form.value = { credentialId: undefined, credentialName: undefined, provider: 'GITHUB', authType: 'PAT', token: undefined, status: '0', remark: undefined }
+  form.value = {
+    credentialId: undefined,
+    credentialName: undefined,
+    provider: 'GITHUB',
+    authType: 'PAT',
+    serverUrl: undefined,
+    token: undefined,
+    status: '0',
+    remark: undefined
+  }
   proxy.resetForm('credentialRef')
 }
 
 function handleQuery() { queryParams.value.pageNum = 1; getList() }
 function resetQuery() { proxy.resetForm('queryRef'); handleQuery() }
 function cancel() { open.value = false; reset() }
-function handleAdd() { reset(); open.value = true; title.value = '新增 GitHub 访问凭据' }
+function handleAdd() { reset(); open.value = true; title.value = '新增 Git 访问凭据' }
 
 function handleUpdate(row) {
   reset()
   getGitCredential(row.credentialId).then(response => {
     form.value = { ...response.data, token: undefined }
     open.value = true
-    title.value = '修改 GitHub 访问凭据'
+    title.value = '修改 ' + providerLabel(form.value.provider) + ' 访问凭据'
   })
 }
 
 function submitForm() {
   proxy.$refs.credentialRef.validate(valid => {
     if (!valid) return
-    const action = form.value.credentialId ? updateGitCredential(form.value) : addGitCredential(form.value)
+    const payload = { ...form.value }
+    if (!requiresServerUrl(payload.provider)) {
+      payload.serverUrl = null
+    }
+    const action = payload.credentialId ? updateGitCredential(payload) : addGitCredential(payload)
     action.then(() => {
-      proxy.$modal.msgSuccess(form.value.credentialId ? '修改成功' : '新增成功')
+      proxy.$modal.msgSuccess(payload.credentialId ? '修改成功' : '新增成功')
       open.value = false
       getList()
     })

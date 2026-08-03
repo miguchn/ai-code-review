@@ -9,5 +9,6 @@ public interface GitFileContentFetcher
      * 拉取指定 ref 下的文件全文。
      * 返回结构化结果，永不抛异常；文件过大、路径非法、凭据失效、限流等均体现为 success=false。
      */
-    GitFileContentResult fetchFileContent(GitRepositoryCoordinates repository, String token, String path, String ref);
+    GitFileContentResult fetchFileContent(GitRepositoryCoordinates repository, GitAccessContext access,
+                                          String path, String ref);
 }

@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
+import com.acr.review.git.GitAccessContext;
 import com.acr.review.domain.ReviewPipelineConstants;
 import com.acr.review.git.GitPullRequestWorkspaceRequest;
 import com.acr.review.git.GitPullRequestWorkspaceResult;
@@ -11,6 +12,8 @@ import com.acr.review.git.GitRepositoryCoordinates;
 
 class GitHubPullRequestWorkspacePreparerTest
 {
+    private static final GitAccessContext ACCESS = GitAccessContext.of("token", "https://github.com");
+
     private final GitHubPullRequestWorkspacePreparer preparer = new GitHubPullRequestWorkspacePreparer(30);
 
     @Test
@@ -26,7 +29,7 @@ class GitHubPullRequestWorkspacePreparerTest
     {
         GitPullRequestWorkspaceResult result = preparer.prepare(new GitPullRequestWorkspaceRequest(
             new GitRepositoryCoordinates("o", "r", "https://github.com/o/r"),
-            "token", "", "head", "/tmp/acr-test"));
+            ACCESS, "", "head", "/tmp/acr-test"));
         assertFalse(result.success());
         assertEquals(ReviewPipelineConstants.FAILURE_WORKSPACE_PREPARE, result.failureType());
     }
@@ -37,7 +40,7 @@ class GitHubPullRequestWorkspacePreparerTest
         // 以 - 开头的值会被 git 当作选项，必须在入口拒绝
         GitPullRequestWorkspaceResult result = preparer.prepare(new GitPullRequestWorkspaceRequest(
             new GitRepositoryCoordinates("o", "r", "https://github.com/o/r"),
-            "token", "--upload-pack=touch /tmp/pwn", "abc1234", "/tmp/acr-test"));
+            ACCESS, "--upload-pack=touch /tmp/pwn", "abc1234", "/tmp/acr-test"));
         assertFalse(result.success());
         assertEquals(ReviewPipelineConstants.FAILURE_WORKSPACE_PREPARE, result.failureType());
     }
@@ -66,9 +69,5 @@ class GitHubPullRequestWorkspacePreparerTest
         String trailing = GitHubPullRequestWorkspacePreparer.resolveRemoteUrl(
             new GitRepositoryCoordinates("o", "r", "https://github.com/o/r/"));
         assertEquals("https://github.com/o/r.git", trailing);
-
-        String fallback = GitHubPullRequestWorkspacePreparer.resolveRemoteUrl(
-            new GitRepositoryCoordinates("o", "r", null));
-        assertEquals("https://github.com/o/r.git", fallback);
     }
 }

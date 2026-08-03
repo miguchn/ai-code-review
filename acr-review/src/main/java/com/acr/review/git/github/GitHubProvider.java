@@ -15,6 +15,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import com.acr.review.git.GitAccessContext;
 import com.acr.review.git.GitConnectionFailure;
 import com.acr.review.git.GitConnectionResult;
 import com.acr.review.git.GitProvider;
@@ -66,7 +67,7 @@ public class GitHubProvider implements GitProvider
     }
 
     @Override
-    public GitRepositoryCoordinates parseRepository(String repositoryUrl)
+    public GitRepositoryCoordinates parseRepository(String repositoryUrl, GitAccessContext access)
     {
         if (repositoryUrl == null || repositoryUrl.isBlank())
         {
@@ -118,9 +119,9 @@ public class GitHubProvider implements GitProvider
     }
 
     @Override
-    public GitConnectionResult testCredential(String token)
+    public GitConnectionResult testCredential(GitAccessContext access)
     {
-        ApiResponse response = getObject("user", token);
+        ApiResponse response = getObject("user", access.requireToken());
         if (!response.success())
         {
             return response.result();
@@ -131,14 +132,15 @@ public class GitHubProvider implements GitProvider
     }
 
     @Override
-    public GitConnectionResult testRepository(GitRepositoryCoordinates repository, String token)
+    public GitConnectionResult testRepository(GitRepositoryCoordinates repository, GitAccessContext access)
     {
-        GitConnectionResult credentialResult = testCredential(token);
+        GitConnectionResult credentialResult = testCredential(access);
         if (!credentialResult.isSuccess())
         {
             return credentialResult;
         }
 
+        String token = access.requireToken();
         ApiResponse response = getObject("repos/" + repository.owner() + "/" + repository.repository(), token);
         if (!response.success())
         {
@@ -154,14 +156,15 @@ public class GitHubProvider implements GitProvider
     }
 
     @Override
-    public GitRepositoryInfoResult readRepository(GitRepositoryCoordinates repository, String token)
+    public GitRepositoryInfoResult readRepository(GitRepositoryCoordinates repository, GitAccessContext access)
     {
-        GitConnectionResult credentialResult = testCredential(token);
+        GitConnectionResult credentialResult = testCredential(access);
         if (!credentialResult.isSuccess())
         {
             return GitRepositoryInfoResult.failure(credentialResult.getFailure(), credentialResult.getMessage());
         }
 
+        String token = access.requireToken();
         String repositoryPath = "repos/" + repository.owner() + "/" + repository.repository();
         ApiResponse repositoryResponse = getObject(repositoryPath, token);
         if (!repositoryResponse.success())

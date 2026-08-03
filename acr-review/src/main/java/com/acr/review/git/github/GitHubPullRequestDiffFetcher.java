@@ -6,6 +6,7 @@ import java.util.concurrent.TimeUnit;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import com.acr.review.domain.ReviewPipelineConstants;
+import com.acr.review.git.GitAccessContext;
 import com.acr.review.git.GitPullRequestDiffFetcher;
 import com.acr.review.git.GitPullRequestDiffResult;
 import com.acr.review.git.GitRepositoryCoordinates;
@@ -50,13 +51,19 @@ public class GitHubPullRequestDiffFetcher implements GitPullRequestDiffFetcher
     }
 
     @Override
-    public GitPullRequestDiffResult fetchDiff(GitRepositoryCoordinates repository, String token, String baseSha, String headSha)
+    public GitPullRequestDiffResult fetchDiff(GitRepositoryCoordinates repository, GitAccessContext access,
+                                              String baseSha, String headSha)
     {
         if (repository == null)
         {
             return GitPullRequestDiffResult.fail(ReviewPipelineConstants.FAILURE_WORKSPACE_PREPARE, "仓库信息不完整");
         }
-        if (token == null || token.isBlank())
+        String token;
+        try
+        {
+            token = access.requireToken();
+        }
+        catch (IllegalArgumentException ex)
         {
             return GitPullRequestDiffResult.fail(ReviewPipelineConstants.FAILURE_CREDENTIAL_ERROR, "GitHub 凭据不可用");
         }

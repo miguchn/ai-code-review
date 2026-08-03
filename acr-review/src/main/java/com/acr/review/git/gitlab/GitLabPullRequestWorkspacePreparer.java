@@ -1,0 +1,236 @@
+package com.acr.review.git.gitlab;
+
+import java.io.IOException;
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+import com.acr.review.domain.ReviewPipelineConstants;
+import com.acr.review.git.GitPullRequestWorkspacePreparer;
+import com.acr.review.git.GitPullRequestWorkspaceRequest;
+import com.acr.review.git.GitPullRequestWorkspaceResult;
+
+/**
+ * 使用 PAT 按需 fetch base/head SHA，为 OCR --from/--to 准备真实 Git 工作区。
+ * Token 通过 https://oauth2:{token}@host/... 注入远端 URL，不出现在命令行参数中。
+ */
+@Component
+public class GitLabPullRequestWorkspacePreparer implements GitPullRequestWorkspacePreparer
+{
+    private static final java.util.regex.Pattern SHA_PATTERN = java.util.regex.Pattern.compile("^[0-9a-fA-F]{4,64}$");
+    private static final Pattern TOKEN_PATTERN = Pattern.compile("glpat-[A-Za-z0-9_-]{10,}|oauth2:[^@\\s]+");
+
+    private final int prepareTimeoutSeconds;
+
+    public GitLabPullRequestWorkspacePreparer(
+        @Value("${review.gitlab.workspace-prepare-timeout-seconds:180}") int prepareTimeoutSeconds)
+    {
+        this.prepareTimeoutSeconds = Math.max(30, prepareTimeoutSeconds);
+    }
+
+    @Override
+    public String providerCode()
+    {
+        return "GITLAB";
+    }
+
+    @Override
+    public GitPullRequestWorkspaceResult prepare(GitPullRequestWorkspaceRequest request)
+    {
+        if (request == null || request.repository() == null)
+        {
+            return GitPullRequestWorkspaceResult.fail(ReviewPipelineConstants.FAILURE_WORKSPACE_PREPARE, "仓库信息不完整");
+        }
+        String token;
+        try
+        {
+            token = request.access().requireToken();
+        }
+        catch (IllegalArgumentException ex)
+        {
+            return GitPullRequestWorkspaceResult.fail(ReviewPipelineConstants.FAILURE_CREDENTIAL_ERROR, "GitLab 凭据不可用");
+        }
+        if (!isValidSha(request.baseSha()) || !isValidSha(request.headSha()))
+        {
+            return GitPullRequestWorkspaceResult.fail(
+                ReviewPipelineConstants.FAILURE_WORKSPACE_PREPARE, "base/head SHA 格式非法，无法准备审查范围");
+        }
+        if (request.workingDirectory() == null || request.workingDirectory().isBlank())
+        {
+            return GitPullRequestWorkspaceResult.fail(ReviewPipelineConstants.FAILURE_WORKSPACE_PREPARE, "工作目录不能为空");
+        }
+
+        Path workspace = Path.of(request.workingDirectory()).toAbsolutePath().normalize();
+        String remoteUrl = resolveRemoteUrl(request.repository(), token);
+        try
+        {
+            Files.createDirectories(workspace);
+            runGit(workspace, null, "init");
+            runGit(workspace, null, "remote", "add", "origin", remoteUrl);
+            runGit(workspace, null, "config", "core.sparseCheckout", "false");
+            fetchCommit(workspace, token, request.headSha());
+            if (!request.baseSha().equals(request.headSha()))
+            {
+                fetchCommit(workspace, token, request.baseSha());
+            }
+            runGit(workspace, null, "checkout", "--force", request.headSha());
+            ensureCommitExists(workspace, request.baseSha());
+            ensureCommitExists(workspace, request.headSha());
+            return GitPullRequestWorkspaceResult.ok(workspace.toString(), request.baseSha(), request.headSha());
+        }
+        catch (IOException | InterruptedException ex)
+        {
+            if (ex instanceof InterruptedException)
+            {
+                Thread.currentThread().interrupt();
+            }
+            return GitPullRequestWorkspaceResult.fail(
+                ReviewPipelineConstants.FAILURE_WORKSPACE_PREPARE,
+                sanitize("准备 GitLab 审查工作区失败: " + ex.getMessage(), token));
+        }
+        catch (WorkspacePrepareException ex)
+        {
+            return GitPullRequestWorkspaceResult.fail(ex.failureType(), sanitize(ex.getMessage(), token));
+        }
+    }
+
+    private static boolean isValidSha(String sha)
+    {
+        return sha != null && SHA_PATTERN.matcher(sha).matches();
+    }
+
+    static String resolveRemoteUrl(com.acr.review.git.GitRepositoryCoordinates repository, String token)
+    {
+        String canonical = repository.canonicalUrl();
+        if (canonical == null || canonical.isBlank())
+        {
+            throw new IllegalArgumentException("仓库地址不能为空");
+        }
+        String url = canonical.trim();
+        while (url.endsWith("/"))
+        {
+            url = url.substring(0, url.length() - 1);
+        }
+        if (url.endsWith(".git"))
+        {
+            url = url.substring(0, url.length() - 4);
+        }
+        try
+        {
+            URI uri = URI.create(url);
+            String host = uri.getHost();
+            if (host == null || host.isBlank())
+            {
+                throw new IllegalArgumentException("GitLab 仓库地址无效");
+            }
+            int port = uri.getPort();
+            String hostPort = port > 0 ? host + ":" + port : host;
+            String path = uri.getRawPath() == null || uri.getRawPath().isBlank() ? "" : uri.getRawPath();
+            if (path.endsWith(".git"))
+            {
+                path = path.substring(0, path.length() - 4);
+            }
+            String scheme = uri.getScheme() == null ? "https" : uri.getScheme();
+            return scheme + "://oauth2:" + token + "@" + hostPort + path + ".git";
+        }
+        catch (IllegalArgumentException ex)
+        {
+            throw new IllegalArgumentException("GitLab 仓库地址无效", ex);
+        }
+    }
+
+    private void fetchCommit(Path workspace, String token, String sha)
+        throws IOException, InterruptedException, WorkspacePrepareException
+    {
+        try
+        {
+            runGit(workspace, token, "fetch", "--depth", "1", "origin", sha);
+        }
+        catch (WorkspacePrepareException shallowFailure)
+        {
+            runGit(workspace, token, "fetch", "origin", sha);
+        }
+    }
+
+    private void ensureCommitExists(Path workspace, String sha)
+        throws IOException, InterruptedException, WorkspacePrepareException
+    {
+        runGit(workspace, null, "cat-file", "-e", sha + "^{commit}");
+    }
+
+    private void runGit(Path workspace, String token, String... args)
+        throws IOException, InterruptedException, WorkspacePrepareException
+    {
+        List<String> command = new ArrayList<>();
+        command.add("git");
+        command.add("-C");
+        command.add(workspace.toString());
+        for (String arg : args)
+        {
+            command.add(arg);
+        }
+
+        ProcessBuilder builder = new ProcessBuilder(command);
+        builder.redirectErrorStream(true);
+        builder.environment().put("GIT_TERMINAL_PROMPT", "0");
+        if (token != null && !token.isBlank())
+        {
+            builder.environment().put("GIT_CONFIG_COUNT", "1");
+            builder.environment().put("GIT_CONFIG_KEY_0", "http.extraHeader");
+            builder.environment().put("GIT_CONFIG_VALUE_0", "PRIVATE-TOKEN: " + token);
+        }
+        Process process = builder.start();
+        boolean finished = process.waitFor(prepareTimeoutSeconds, TimeUnit.SECONDS);
+        String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
+        if (!finished)
+        {
+            process.destroyForcibly();
+            throw new WorkspacePrepareException(ReviewPipelineConstants.FAILURE_TIMEOUT,
+                "准备审查工作区超时（" + prepareTimeoutSeconds + " 秒）");
+        }
+        if (process.exitValue() != 0)
+        {
+            String detail = output.isBlank() ? "git 命令执行失败" : output.lines().findFirst().orElse(output);
+            throw new WorkspacePrepareException(ReviewPipelineConstants.FAILURE_WORKSPACE_PREPARE,
+                "git " + String.join(" ", args) + " 失败: " + detail);
+        }
+    }
+
+    static String sanitize(String message, String token)
+    {
+        if (message == null)
+        {
+            return "准备审查工作区失败";
+        }
+        String sanitized = message;
+        if (token != null && !token.isBlank())
+        {
+            sanitized = sanitized.replace(token, "***");
+            sanitized = sanitized.replace("oauth2:" + token, "oauth2:***");
+        }
+        sanitized = TOKEN_PATTERN.matcher(sanitized).replaceAll("***");
+        return sanitized.length() > 480 ? sanitized.substring(0, 480) : sanitized;
+    }
+
+    private static final class WorkspacePrepareException extends Exception
+    {
+        private final String failureType;
+
+        private WorkspacePrepareException(String failureType, String message)
+        {
+            super(message);
+            this.failureType = failureType;
+        }
+
+        private String failureType()
+        {
+            return failureType;
+        }
+    }
+}

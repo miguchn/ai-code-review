@@ -6,11 +6,11 @@
           <el-option v-for="item in projectOptions" :key="item.projectId" :label="item.projectName" :value="item.projectId" />
         </el-select>
       </el-form-item>
-      <el-form-item label="PR 编号" prop="prNumber">
-        <el-input v-model="queryParams.prNumber" placeholder="请输入 PR 编号" clearable style="width: 140px" @keyup.enter="handleQuery" />
+      <el-form-item label="合并请求编号" prop="prNumber">
+        <el-input v-model="queryParams.prNumber" placeholder="请输入编号" clearable style="width: 140px" @keyup.enter="handleQuery" />
       </el-form-item>
-      <el-form-item label="PR 发起人" prop="prAuthor">
-        <el-input v-model="queryParams.prAuthor" placeholder="GitHub login" clearable style="width: 150px" @keyup.enter="handleQuery" />
+      <el-form-item label="发起人" prop="prAuthor">
+        <el-input v-model="queryParams.prAuthor" placeholder="Git 账号" clearable style="width: 150px" @keyup.enter="handleQuery" />
       </el-form-item>
       <el-form-item label="审查结论" prop="reviewConclusion">
         <el-select v-model="queryParams.reviewConclusion" clearable placeholder="请选择结论" style="width: 140px">
@@ -40,20 +40,22 @@
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="PR 信息" min-width="220">
+      <el-table-column label="合并请求" min-width="220">
         <template #default="scope">
-          <a v-if="buildGithubPrUrl(scope.row)" class="pr-link" :href="buildGithubPrUrl(scope.row)" target="_blank" rel="noopener noreferrer"
-            :title="'打开 GitHub PR #' + scope.row.prNumber">
+          <a v-if="mergeRequestUrl(scope.row)" class="pr-link" :href="mergeRequestUrl(scope.row)" target="_blank" rel="noopener noreferrer"
+            :title="'打开 ' + mergeRequestLabel(scope.row.provider) + ' #' + scope.row.prNumber">
+            <el-tag size="small" type="info">{{ mergeRequestLabel(scope.row.provider) }}</el-tag>
             <el-tag size="small" type="primary">#{{ scope.row.prNumber }}</el-tag>
             <span class="pr-title">{{ emptyDash(scope.row.prTitle) }}</span>
           </a>
           <div v-else class="pr-cell">
+            <el-tag size="small" type="info">{{ mergeRequestLabel(scope.row.provider) }}</el-tag>
             <el-tag size="small" type="primary">#{{ scope.row.prNumber }}</el-tag>
             <span class="pr-title">{{ emptyDash(scope.row.prTitle) }}</span>
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="PR 发起人" width="120" :show-overflow-tooltip="true">
+      <el-table-column label="发起人" width="120" :show-overflow-tooltip="true">
         <template #default="scope">{{ emptyDash(scope.row.prAuthor) }}</template>
       </el-table-column>
       <el-table-column label="分支" min-width="170">
@@ -90,7 +92,7 @@
         <template #default="scope">
           <el-button link type="primary" v-hasPermi="['review:record:query']" @click="handleDetail(scope.row)">查看详情</el-button>
           <el-button link type="primary" v-hasPermi="['review:record:query']" @click="handleViewIssues(scope.row)">查看问题</el-button>
-          <el-button link type="primary" :disabled="!buildGithubPrUrl(scope.row)" @click="openPr(scope.row)">打开 PR</el-button>
+          <el-button link type="primary" :disabled="!mergeRequestUrl(scope.row)" @click="openMergeRequest(scope.row)">打开 {{ mergeRequestLabel(scope.row.provider) }}</el-button>
           <el-button
             v-if="scope.row.taskStatus === 'FAILED'"
             link type="primary"
@@ -112,7 +114,7 @@ import { listReviewProject } from '@/api/review/project'
 import { retryReviewTask } from '@/api/review/task'
 import {
   emptyDash, formatScore, formatCodeChange, formatFocusIssueCounts,
-  recordConclusionLabel, recordConclusionTagType, buildGithubPrUrl, formatDateTime
+  recordConclusionLabel, recordConclusionTagType, buildMergeRequestUrl, mergeRequestLabel, formatDateTime
 } from '@/utils/reviewDisplay'
 
 const route = useRoute()
@@ -166,10 +168,14 @@ function handleViewIssues(row) {
   proxy.$router.push({ path: '/review/record-detail/index/' + row.taskId, query: { focus: 'issues' } })
 }
 
-function openPr(row) {
-  const url = buildGithubPrUrl(row)
+function mergeRequestUrl(row) {
+  return buildMergeRequestUrl(row)
+}
+
+function openMergeRequest(row) {
+  const url = buildMergeRequestUrl(row)
   if (!url) {
-    proxy.$modal.msgWarning('暂无法生成 GitHub PR 链接')
+    proxy.$modal.msgWarning('暂无法生成合并请求链接')
     return
   }
   window.open(url, '_blank', 'noopener,noreferrer')

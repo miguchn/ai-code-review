@@ -15,6 +15,7 @@ import com.acr.common.ai.LlmCallResult;
 import com.acr.common.ai.LlmCallService;
 import com.acr.common.exception.ServiceException;
 import com.acr.common.utils.StringUtils;
+import com.acr.review.domain.GitCredential;
 import com.acr.review.domain.ReviewPipelineConstants;
 import com.acr.review.domain.ReviewProject;
 import com.acr.review.domain.ReviewTask;
@@ -30,6 +31,8 @@ import com.acr.review.engine.ReviewEngineRequest;
 import com.acr.review.engine.ReviewEngineResult;
 import com.acr.review.engine.ReviewEngineWorkspaceManager;
 import com.acr.review.engine.config.ReviewEngineProperties;
+import com.acr.review.git.GitAccessContext;
+import com.acr.review.git.GitAdapterRegistry;
 import com.acr.review.git.GitFileContentFetcher;
 import com.acr.review.git.GitFileContentResult;
 import com.acr.review.git.GitPullRequestDiffFetcher;
@@ -40,6 +43,7 @@ import com.acr.review.git.GitPullRequestWorkspacePreparer;
 import com.acr.review.git.GitPullRequestWorkspaceRequest;
 import com.acr.review.git.GitPullRequestWorkspaceResult;
 import com.acr.review.git.GitRepositoryCoordinates;
+import com.acr.review.mapper.GitCredentialMapper;
 import com.acr.review.mapper.ReviewProjectMapper;
 import com.acr.review.mapper.ReviewTaskMapper;
 import com.acr.review.mapper.ReviewTaskRunMapper;
@@ -79,7 +83,9 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
     private final ReviewTaskMapper taskMapper;
     private final ReviewTaskRunMapper runMapper;
     private final ReviewProjectMapper projectMapper;
+    private final GitCredentialMapper credentialMapper;
     private final IGitCredentialService credentialService;
+    private final GitAdapterRegistry adapterRegistry;
     private final ISysAiModelConfigService aiModelConfigService;
     private final OcrModelConfigMapper modelConfigMapper;
     private final GitPullRequestWorkspacePreparer workspacePreparer;
@@ -108,7 +114,9 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
     public ReviewTaskExecutionServiceImpl(ReviewTaskMapper taskMapper,
                                           ReviewTaskRunMapper runMapper,
                                           ReviewProjectMapper projectMapper,
+                                          GitCredentialMapper credentialMapper,
                                           IGitCredentialService credentialService,
+                                          GitAdapterRegistry adapterRegistry,
                                           ISysAiModelConfigService aiModelConfigService,
                                           OcrModelConfigMapper modelConfigMapper,
                                           GitPullRequestWorkspacePreparer workspacePreparer,
@@ -135,7 +143,9 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         this.taskMapper = taskMapper;
         this.runMapper = runMapper;
         this.projectMapper = projectMapper;
+        this.credentialMapper = credentialMapper;
         this.credentialService = credentialService;
+        this.adapterRegistry = adapterRegistry;
         this.aiModelConfigService = aiModelConfigService;
         this.modelConfigMapper = modelConfigMapper;
         this.workspacePreparer = workspacePreparer;
@@ -326,9 +336,9 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         boolean acquired = false;
         try
         {
-            GitPullRequestWorkspaceResult workspaceResult = workspacePreparer.prepare(
+            GitPullRequestWorkspaceResult workspaceResult = adapterRegistry.requireWorkspacePreparer(plan.provider()).prepare(
                 new GitPullRequestWorkspaceRequest(
-                    plan.repository(), plan.token(), task.getBaseSha(), task.getHeadSha(), workspace.toString()));
+                    plan.repository(), plan.access(), task.getBaseSha(), task.getHeadSha(), workspace.toString()));
             if (!workspaceResult.success())
             {
                 fail(task, run, beginMs, workspaceResult.failureType(),
@@ -385,8 +395,8 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
     private void executeLlmPath(ReviewTask task, ReviewTaskRun run, ExecutionPlan plan, long beginMs)
     {
         updateStep(task, run, ReviewPipelineConstants.STEP_PREPARE_WORKSPACE);
-        GitPullRequestDiffResult diffResult = diffFetcher.fetchDiff(
-            plan.repository(), plan.token(), task.getBaseSha(), task.getHeadSha());
+        GitPullRequestDiffResult diffResult = adapterRegistry.requireDiffFetcher(plan.provider()).fetchDiff(
+            plan.repository(), plan.access(), task.getBaseSha(), task.getHeadSha());
         if (!diffResult.success())
         {
             fail(task, run, beginMs, diffResult.failureType(),
@@ -467,8 +477,8 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
             Map<String, String> fetchFailures = new java.util.LinkedHashMap<>();
             for (ReviewScopeDecision.ExpandedFile file : scopeAssembler.planFetches(decision))
             {
-                GitFileContentResult content = fileContentFetcher.fetchFileContent(
-                    plan.repository(), plan.token(), file.path(), task.getHeadSha());
+                GitFileContentResult content = adapterRegistry.requireFileContentFetcher(plan.provider()).fetchFileContent(
+                    plan.repository(), plan.access(), file.path(), task.getHeadSha());
                 if (content.success())
                 {
                     fetchedContents.put(file.path(), content.content());
@@ -551,8 +561,8 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
     {
         try
         {
-            GitPullRequestDiffResult diffResult = diffFetcher.fetchDiff(
-                plan.repository(), plan.token(), task.getBaseSha(), task.getHeadSha());
+            GitPullRequestDiffResult diffResult = adapterRegistry.requireDiffFetcher(plan.provider()).fetchDiff(
+                plan.repository(), plan.access(), task.getBaseSha(), task.getHeadSha());
             if (!diffResult.success() || StringUtils.isEmpty(diffResult.diffContent()))
             {
                 Map<String, Object> snapshot = new java.util.LinkedHashMap<>();
@@ -665,9 +675,12 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         {
             throw new ReviewExecutionException(ReviewPipelineConstants.FAILURE_CONFIG_MISSING, "项目不存在或已停用，无法执行审查");
         }
-        if (!"GITHUB".equalsIgnoreCase(project.getProvider()))
+
+        String provider = project.getProvider();
+        GitCredential credential = credentialMapper.selectGitCredentialById(project.getCredentialId());
+        if (credential == null || !"0".equals(credential.getStatus()))
         {
-            throw new ReviewExecutionException(ReviewPipelineConstants.FAILURE_CONFIG_MISSING, "当前仅支持 GitHub 项目审查");
+            throw new ReviewExecutionException(ReviewPipelineConstants.FAILURE_CREDENTIAL_ERROR, "项目绑定的 Git 凭据不存在或已停用");
         }
 
         String reviewMode = ReviewPipelineConstants.normalizeReviewMode(task.getSnapshotReviewMode());
@@ -679,11 +692,17 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         catch (ServiceException ex)
         {
             throw new ReviewExecutionException(ReviewPipelineConstants.FAILURE_CREDENTIAL_ERROR,
-                "GitHub 凭据不可用：" + ex.getMessage());
+                "Git 凭据不可用：" + ex.getMessage());
         }
 
+        GitAccessContext access = GitAccessContext.of(token,
+            GitCredentialServiceImpl.resolveServerUrl(provider, credential.getServerUrl()));
+
+        String fullPath = StringUtils.isNotEmpty(project.getRepositoryFullPath())
+            ? project.getRepositoryFullPath()
+            : project.getRepositoryOwner() + "/" + project.getRepositoryName();
         GitRepositoryCoordinates repository = new GitRepositoryCoordinates(
-            project.getRepositoryOwner(), project.getRepositoryName(), project.getRepositoryUrl());
+            project.getRepositoryOwner(), project.getRepositoryName(), fullPath, project.getRepositoryUrl());
 
         if (ReviewPipelineConstants.isLlmDirectMode(reviewMode))
         {
@@ -713,7 +732,7 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
             run.setSnapshotTimeoutSeconds(llmTimeoutSeconds);
             runMapper.updateReviewTaskRun(run);
 
-            return new ExecutionPlan(reviewMode, repository, token, task.getSnapshotModelId(),
+            return new ExecutionPlan(provider, reviewMode, repository, access, task.getSnapshotModelId(),
                 null, task.getSnapshotPromptContent(), null);
         }
 
@@ -750,7 +769,7 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         run.setSnapshotTimeoutSeconds(engineProperties.getDefaultTimeoutSeconds());
         runMapper.updateReviewTaskRun(run);
 
-        return new ExecutionPlan(reviewMode, repository, token, null, engineCode, null,
+        return new ExecutionPlan(provider, reviewMode, repository, access, null, engineCode, null,
             modelConfigMapper.toEnvironment(runtimeModel));
     }
 
@@ -990,8 +1009,8 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
      */
     private void applyPrMetadata(ReviewTask task, ReviewTaskRun run, ExecutionPlan plan)
     {
-        GitPullRequestMetadata metadata = metadataFetcher.fetch(
-            plan.repository(), plan.token(), task.getPrNumber());
+        GitPullRequestMetadata metadata = adapterRegistry.requireMetadataFetcher(plan.provider()).fetch(
+            plan.repository(), plan.access(), task.getPrNumber());
         if (metadata == null || !metadata.fetched())
         {
             log.info("PR 元数据未获取成功，继续审查。taskId={}, reason={}",
@@ -1119,9 +1138,10 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
     }
 
     private record ExecutionPlan(
+        String provider,
         String reviewMode,
         GitRepositoryCoordinates repository,
-        String token,
+        GitAccessContext access,
         Long modelId,
         String engineCode,
         String promptContent,

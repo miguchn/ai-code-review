@@ -1,0 +1,142 @@
+package com.acr.review.git.gitea;
+
+import java.io.IOException;
+import java.io.InterruptedIOException;
+import java.util.concurrent.TimeUnit;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+import com.acr.review.domain.ReviewPipelineConstants;
+import com.acr.review.git.GitAccessContext;
+import com.acr.review.git.GitFileContentFetcher;
+import com.acr.review.git.GitFileContentResult;
+import com.acr.review.git.GitRepositoryCoordinates;
+import okhttp3.HttpUrl;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
+
+/** 通过 Gitea Contents API 拉取单文件全文（raw）。 */
+@Component
+public class GiteaFileContentFetcher implements GitFileContentFetcher
+{
+    private static final java.util.regex.Pattern SHA_PATTERN = java.util.regex.Pattern.compile("^[0-9a-fA-F]{4,64}$");
+
+    private final OkHttpClient client;
+
+    public GiteaFileContentFetcher(
+        @Value("${review.gitea.connect-timeout-ms:5000}") int connectTimeoutMs,
+        @Value("${review.gitea.read-timeout-ms:30000}") int readTimeoutMs)
+    {
+        this.client = new OkHttpClient.Builder()
+            .connectTimeout(connectTimeoutMs, TimeUnit.MILLISECONDS)
+            .readTimeout(readTimeoutMs, TimeUnit.MILLISECONDS)
+            .callTimeout(readTimeoutMs, TimeUnit.MILLISECONDS)
+            .build();
+    }
+
+    @Override
+    public String providerCode()
+    {
+        return "GITEA";
+    }
+
+    @Override
+    public GitFileContentResult fetchFileContent(GitRepositoryCoordinates repository, GitAccessContext access,
+                                                 String path, String ref)
+    {
+        String token;
+        try
+        {
+            token = access.requireToken();
+        }
+        catch (IllegalArgumentException ex)
+        {
+            return GitFileContentResult.fail("CREDENTIAL");
+        }
+        if (repository == null)
+        {
+            return GitFileContentResult.fail("CREDENTIAL");
+        }
+        if (!isValidPath(path))
+        {
+            return GitFileContentResult.fail("INVALID_PATH");
+        }
+        if (ref == null || !SHA_PATTERN.matcher(ref).matches())
+        {
+            return GitFileContentResult.fail("INVALID_REF");
+        }
+
+        HttpUrl.Builder urlBuilder = GiteaApiSupport.reposBuilder(GiteaApiSupport.apiBaseUrl(access), repository)
+            .addPathSegment("raw");
+        for (String segment : path.split("/"))
+        {
+            urlBuilder.addPathSegment(segment);
+        }
+        HttpUrl url = urlBuilder.addQueryParameter("ref", ref).build();
+        Request request = new Request.Builder()
+            .url(url)
+            .get()
+            .header("Authorization", GiteaApiSupport.authorizationHeader(token))
+            .header("User-Agent", "ai-code-review")
+            .build();
+
+        try (Response response = client.newCall(request).execute())
+        {
+            int status = response.code();
+            if (status == 200)
+            {
+                return readBodyCapped(response);
+            }
+            if (status == 401)
+            {
+                return GitFileContentResult.fail("CREDENTIAL");
+            }
+            if (status == 429)
+            {
+                return GitFileContentResult.fail("RATE_LIMIT");
+            }
+            if (status == 404)
+            {
+                return GitFileContentResult.fail("NOT_FOUND");
+            }
+            return GitFileContentResult.fail("HTTP_" + status);
+        }
+        catch (InterruptedIOException ex)
+        {
+            Thread.currentThread().interrupt();
+            return GitFileContentResult.fail("TIMEOUT");
+        }
+        catch (IOException ex)
+        {
+            return GitFileContentResult.fail("IO");
+        }
+    }
+
+    private static boolean isValidPath(String path)
+    {
+        return path != null && !path.isBlank() && !path.startsWith("/") && !path.contains("..");
+    }
+
+    private static GitFileContentResult readBodyCapped(Response response) throws IOException
+    {
+        okhttp3.ResponseBody body = response.body();
+        if (body == null)
+        {
+            return GitFileContentResult.fail("EMPTY");
+        }
+        if (body.contentLength() > ReviewPipelineConstants.MAX_EXPANDED_FILE_BYTES)
+        {
+            return GitFileContentResult.fail("FILE_TOO_LARGE");
+        }
+        try (okio.BufferedSource source = body.source())
+        {
+            okio.Buffer buffer = new okio.Buffer();
+            long read = source.read(buffer, ReviewPipelineConstants.MAX_EXPANDED_FILE_BYTES + 1L);
+            if (read > ReviewPipelineConstants.MAX_EXPANDED_FILE_BYTES || !source.exhausted())
+            {
+                return GitFileContentResult.fail("FILE_TOO_LARGE");
+            }
+            return GitFileContentResult.ok(buffer.readString(java.nio.charset.StandardCharsets.UTF_8));
+        }
+    }
+}

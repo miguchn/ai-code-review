@@ -5,11 +5,26 @@ public interface GitProvider
 {
     String providerCode();
 
-    GitRepositoryCoordinates parseRepository(String repositoryUrl);
+    /**
+     * 解析仓库地址。自建实例时使用 access.serverUrl 校验 host 一致性。
+     * GitHub/Gitee 可忽略 serverUrl 差异，仅使用官方 host。
+     */
+    GitRepositoryCoordinates parseRepository(String repositoryUrl, GitAccessContext access);
 
-    GitConnectionResult testCredential(String token);
+    /** 兼容仅传 URL 的调用：使用平台默认 serverUrl（无默认则失败）。 */
+    default GitRepositoryCoordinates parseRepository(String repositoryUrl)
+    {
+        String server = GitProviderCodes.defaultServerUrl(providerCode());
+        if (server == null)
+        {
+            throw new IllegalArgumentException(providerCode() + " 解析仓库地址需要服务地址");
+        }
+        return parseRepository(repositoryUrl, GitAccessContext.forParse(server));
+    }
 
-    GitConnectionResult testRepository(GitRepositoryCoordinates repository, String token);
+    GitConnectionResult testCredential(GitAccessContext access);
 
-    GitRepositoryInfoResult readRepository(GitRepositoryCoordinates repository, String token);
+    GitConnectionResult testRepository(GitRepositoryCoordinates repository, GitAccessContext access);
+
+    GitRepositoryInfoResult readRepository(GitRepositoryCoordinates repository, GitAccessContext access);
 }

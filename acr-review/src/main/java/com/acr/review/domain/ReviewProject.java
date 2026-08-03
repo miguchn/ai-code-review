@@ -20,6 +20,7 @@ public class ReviewProject extends BaseEntity
     private String repositoryUrl;
     private String repositoryOwner;
     private String repositoryName;
+    private String repositoryFullPath;
     private String defaultBranch;
     private String prReviewEnabled;
     private String prTargetBranches;
@@ -155,6 +156,17 @@ public class ReviewProject extends BaseEntity
     public void setRepositoryName(String repositoryName)
     {
         this.repositoryName = repositoryName;
+    }
+
+    @Size(max = 255, message = "仓库全路径不能超过255个字符")
+    public String getRepositoryFullPath()
+    {
+        return repositoryFullPath;
+    }
+
+    public void setRepositoryFullPath(String repositoryFullPath)
+    {
+        this.repositoryFullPath = repositoryFullPath;
     }
 
     @Size(max = 255, message = "默认分支不能超过255个字符")

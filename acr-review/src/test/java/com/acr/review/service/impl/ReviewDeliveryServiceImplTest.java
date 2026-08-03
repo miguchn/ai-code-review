@@ -11,6 +11,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -28,6 +29,7 @@ import com.acr.common.exception.ServiceException;
 import com.acr.review.delivery.ReviewDeliveryConstants;
 import com.acr.review.delivery.ReviewSummaryContent;
 import com.acr.review.delivery.ReviewSummaryContentFactory;
+import com.acr.review.domain.GitCredential;
 import com.acr.review.domain.ReviewCommentSyncResult;
 import com.acr.review.domain.ReviewDeliveryRecord;
 import com.acr.review.domain.ReviewNotifyChannel;
@@ -35,9 +37,11 @@ import com.acr.review.domain.ReviewPipelineConstants;
 import com.acr.review.domain.ReviewProject;
 import com.acr.review.domain.ReviewTask;
 import com.acr.review.domain.ReviewTaskRun;
+import com.acr.review.git.GitAdapterRegistry;
 import com.acr.review.git.GitPullRequestComment;
 import com.acr.review.git.GitPullRequestCommentClient;
 import com.acr.review.git.GitPullRequestCommentException;
+import com.acr.review.mapper.GitCredentialMapper;
 import com.acr.review.mapper.ReviewDeliveryRecordMapper;
 import com.acr.review.mapper.ReviewIssueMapper;
 import com.acr.review.mapper.ReviewProjectMapper;
@@ -64,6 +68,8 @@ class ReviewDeliveryServiceImplTest
     @Mock private NotifyRobotClients robotClients;
     @Mock private ReviewSummaryContentFactory contentFactory;
     @Mock private ISysDeptService deptService;
+    @Mock private GitAdapterRegistry adapterRegistry;
+    @Mock private GitCredentialMapper credentialMapper;
     @Mock private GitPullRequestCommentClient commentClient;
 
     private ReviewDeliveryServiceImpl service;
@@ -71,9 +77,11 @@ class ReviewDeliveryServiceImplTest
     @BeforeEach
     void setUp()
     {
+        lenient().when(adapterRegistry.requireCommentClient("GITHUB")).thenReturn(commentClient);
+        lenient().when(credentialMapper.selectGitCredentialById(5L)).thenReturn(credential());
         service = new ReviewDeliveryServiceImpl(deliveryMapper, taskMapper, runMapper, projectMapper,
             issueMapper, credentialService, notifyChannelService, robotClients, contentFactory,
-            deptService, commentClient);
+            deptService, adapterRegistry, credentialMapper);
     }
 
     @Test
@@ -82,20 +90,20 @@ class ReviewDeliveryServiceImplTest
         ReviewTask task = successTask(10L, 3L, 8);
         ReviewTaskRun run = successRun(100L, 1);
         stubProjectAndToken();
-        when(commentClient.findCommentWithMarker(any(), anyString(), anyInt(), anyString()))
+        when(commentClient.findCommentWithMarker(any(), any(), anyInt(), anyString()))
             .thenReturn(Optional.empty());
-        when(commentClient.createIssueComment(any(), anyString(), anyInt(), anyString()))
+        when(commentClient.createIssueComment(any(), any(), anyInt(), anyString()))
             .thenReturn(new GitPullRequestComment("501", "body"));
         when(deliveryMapper.selectByIdempotencyKey(anyString())).thenReturn(null);
 
         service.deliverAfterSuccess(task, run);
 
-        verify(commentClient).createIssueComment(any(), eq("pat"), eq(8), anyString());
+        verify(commentClient).createIssueComment(any(), any(), eq(8), anyString());
         ArgumentCaptor<ReviewDeliveryRecord> captor = ArgumentCaptor.forClass(ReviewDeliveryRecord.class);
         verify(deliveryMapper).insertDelivery(captor.capture());
         assertEquals(ReviewDeliveryConstants.STATUS_SUCCESS, captor.getValue().getDeliveryStatus());
         assertEquals("501", captor.getValue().getExternalId());
-        assertEquals(ReviewDeliveryConstants.idempotencyKey(3L, 8), captor.getValue().getIdempotencyKey());
+        assertEquals(ReviewDeliveryConstants.idempotencyKey("GITHUB", 3L, 8), captor.getValue().getIdempotencyKey());
         assertEquals(ReviewDeliveryConstants.TRIGGER_TASK_SUCCESS, captor.getValue().getTriggerSource());
     }
 
@@ -105,9 +113,9 @@ class ReviewDeliveryServiceImplTest
         ReviewTask task = successTask(11L, 3L, 8);
         ReviewTaskRun run = successRun(101L, 2);
         stubProjectAndToken();
-        when(commentClient.findCommentWithMarker(any(), anyString(), anyInt(), anyString()))
+        when(commentClient.findCommentWithMarker(any(), any(), anyInt(), anyString()))
             .thenReturn(Optional.of(new GitPullRequestComment("77", "old")));
-        when(commentClient.updateIssueComment(any(), anyString(), eq("77"), anyString()))
+        when(commentClient.updateIssueComment(any(), any(), eq("77"), anyString()))
             .thenReturn(new GitPullRequestComment("77", "new"));
         ReviewDeliveryRecord existing = new ReviewDeliveryRecord();
         existing.setExternalId("77");
@@ -116,8 +124,8 @@ class ReviewDeliveryServiceImplTest
 
         service.deliverAfterSuccess(task, run);
 
-        verify(commentClient).updateIssueComment(any(), eq("pat"), eq("77"), anyString());
-        verify(commentClient, never()).createIssueComment(any(), anyString(), anyInt(), anyString());
+        verify(commentClient).updateIssueComment(any(), any(), eq("77"), anyString());
+        verify(commentClient, never()).createIssueComment(any(), any(), anyInt(), anyString());
         verify(deliveryMapper).updateDeliveryResult(any());
     }
 
@@ -127,7 +135,7 @@ class ReviewDeliveryServiceImplTest
         ReviewTask task = successTask(12L, 3L, 8);
         ReviewTaskRun run = successRun(102L, 1);
         stubProjectAndToken();
-        when(commentClient.findCommentWithMarker(any(), anyString(), anyInt(), anyString()))
+        when(commentClient.findCommentWithMarker(any(), any(), anyInt(), anyString()))
             .thenThrow(new GitPullRequestCommentException("GitHub API 超时"));
         when(deliveryMapper.selectByIdempotencyKey(anyString())).thenReturn(null);
 
@@ -148,7 +156,7 @@ class ReviewDeliveryServiceImplTest
 
         service.deliverAfterSuccess(task, successRun(1L, 1));
 
-        verify(commentClient, never()).findCommentWithMarker(any(), anyString(), anyInt(), anyString());
+        verify(commentClient, never()).findCommentWithMarker(any(), any(), anyInt(), anyString());
         verify(deliveryMapper, never()).insertDelivery(any());
     }
 
@@ -177,9 +185,9 @@ class ReviewDeliveryServiceImplTest
                 .totalScore(task.getTotalScore())
                 .build();
         });
-        when(commentClient.findCommentWithMarker(any(), anyString(), anyInt(), anyString()))
+        when(commentClient.findCommentWithMarker(any(), any(), anyInt(), anyString()))
             .thenReturn(Optional.empty());
-        when(commentClient.createIssueComment(any(), anyString(), anyInt(), anyString()))
+        when(commentClient.createIssueComment(any(), any(), anyInt(), anyString()))
             .thenAnswer(inv -> {
                 String body = inv.getArgument(3);
                 assertTrue(body.contains("高风险"));
@@ -191,7 +199,7 @@ class ReviewDeliveryServiceImplTest
         service.retryDelivery(20L);
 
         verify(taskMapper).selectLatestSuccessByProjectAndPr(3L, 8);
-        verify(commentClient).createIssueComment(any(), eq("pat"), eq(8), anyString());
+        verify(commentClient).createIssueComment(any(), any(), eq(8), anyString());
     }
 
     @Test
@@ -200,9 +208,9 @@ class ReviewDeliveryServiceImplTest
         ReviewTask task = successTask(14L, 3L, 8);
         ReviewTaskRun run = successRun(103L, 1);
         stubProjectAndToken();
-        when(commentClient.findCommentWithMarker(any(), anyString(), anyInt(), anyString()))
+        when(commentClient.findCommentWithMarker(any(), any(), anyInt(), anyString()))
             .thenReturn(Optional.empty());
-        when(commentClient.createIssueComment(any(), anyString(), anyInt(), anyString()))
+        when(commentClient.createIssueComment(any(), any(), anyInt(), anyString()))
             .thenReturn(new GitPullRequestComment("601", "body"));
         when(deliveryMapper.selectByIdempotencyKey(anyString())).thenReturn(null);
         when(deliveryMapper.insertDelivery(any()))
@@ -404,16 +412,16 @@ class ReviewDeliveryServiceImplTest
         when(credentialService.getPlainToken(5L, true)).thenReturn("pat");
         when(contentFactory.build(any(), any(), any()))
             .thenReturn(ReviewSummaryContent.builder().conclusionLabel("通过").build());
-        when(commentClient.findCommentWithMarker(any(), anyString(), anyInt(), anyString()))
+        when(commentClient.findCommentWithMarker(any(), any(), anyInt(), anyString()))
             .thenReturn(Optional.empty());
-        when(commentClient.createIssueComment(any(), anyString(), anyInt(), anyString()))
+        when(commentClient.createIssueComment(any(), any(), anyInt(), anyString()))
             .thenReturn(new GitPullRequestComment("55", "body"));
         when(deliveryMapper.selectByIdempotencyKey(anyString())).thenReturn(null);
 
         service.retryDeliveryById(901L);
 
         verify(taskMapper).selectLatestSuccessByProjectAndPr(3L, 8);
-        verify(commentClient).createIssueComment(any(), eq("pat"), eq(8), anyString());
+        verify(commentClient).createIssueComment(any(), any(), eq(8), anyString());
     }
 
     @Test
@@ -425,9 +433,9 @@ class ReviewDeliveryServiceImplTest
 
         assertEquals(ReviewDeliveryConstants.STATUS_SKIPPED, result.getStatus());
         assertNull(result.getDeliveryId());
-        verify(commentClient, never()).findCommentWithMarker(any(), anyString(), anyInt(), anyString());
-        verify(commentClient, never()).createIssueComment(any(), anyString(), anyInt(), anyString());
-        verify(commentClient, never()).updateIssueComment(any(), anyString(), anyString(), anyString());
+        verify(commentClient, never()).findCommentWithMarker(any(), any(), anyInt(), anyString());
+        verify(commentClient, never()).createIssueComment(any(), any(), anyInt(), anyString());
+        verify(commentClient, never()).updateIssueComment(any(), any(), anyString(), anyString());
         verify(deliveryMapper, never()).insertDelivery(any());
         verify(deliveryMapper, never()).updateDeliveryResult(any());
     }
@@ -441,9 +449,9 @@ class ReviewDeliveryServiceImplTest
         stubProjectAndToken();
         when(contentFactory.build(any(), any(), any()))
             .thenReturn(ReviewSummaryContent.builder().conclusionLabel("通过").build());
-        when(commentClient.findCommentWithMarker(any(), anyString(), anyInt(), anyString()))
+        when(commentClient.findCommentWithMarker(any(), any(), anyInt(), anyString()))
             .thenReturn(Optional.empty());
-        when(commentClient.createIssueComment(any(), anyString(), anyInt(), anyString()))
+        when(commentClient.createIssueComment(any(), any(), anyInt(), anyString()))
             .thenReturn(new GitPullRequestComment("88", "body"));
         when(deliveryMapper.selectByIdempotencyKey(anyString())).thenReturn(null);
 
@@ -466,7 +474,7 @@ class ReviewDeliveryServiceImplTest
         stubProjectAndToken();
         when(contentFactory.build(any(), any(), any()))
             .thenReturn(ReviewSummaryContent.builder().conclusionLabel("通过").build());
-        when(commentClient.findCommentWithMarker(any(), anyString(), anyInt(), anyString()))
+        when(commentClient.findCommentWithMarker(any(), any(), anyInt(), anyString()))
             .thenThrow(new GitPullRequestCommentException("GitHub API 超时"));
         when(deliveryMapper.selectByIdempotencyKey(anyString())).thenReturn(null);
 
@@ -488,9 +496,9 @@ class ReviewDeliveryServiceImplTest
         ReviewTask task = successTask(30L, 3L, 8);
         ReviewTaskRun run = successRun(500L, 1);
         stubProjectAndToken();
-        when(commentClient.findCommentWithMarker(any(), anyString(), anyInt(), anyString()))
+        when(commentClient.findCommentWithMarker(any(), any(), anyInt(), anyString()))
             .thenReturn(Optional.empty());
-        when(commentClient.createIssueComment(any(), anyString(), anyInt(), anyString()))
+        when(commentClient.createIssueComment(any(), any(), anyInt(), anyString()))
             .thenReturn(new GitPullRequestComment("9", "body"));
         ReviewDeliveryRecord existing = new ReviewDeliveryRecord();
         existing.setDeliveryId(77L);
@@ -523,9 +531,9 @@ class ReviewDeliveryServiceImplTest
         when(credentialService.getPlainToken(5L, true)).thenReturn("pat");
         when(contentFactory.build(any(), any(), any()))
             .thenReturn(ReviewSummaryContent.builder().conclusionLabel("通过").build());
-        when(commentClient.findCommentWithMarker(any(), anyString(), anyInt(), anyString()))
+        when(commentClient.findCommentWithMarker(any(), any(), anyInt(), anyString()))
             .thenReturn(Optional.empty());
-        when(commentClient.createIssueComment(any(), anyString(), anyInt(), anyString()))
+        when(commentClient.createIssueComment(any(), any(), anyInt(), anyString()))
             .thenReturn(new GitPullRequestComment("12", "body"));
         when(deliveryMapper.selectByIdempotencyKey(anyString())).thenReturn(null);
 
@@ -552,8 +560,18 @@ class ReviewDeliveryServiceImplTest
         project.setDeptId(1L);
         project.setRepositoryOwner("acme");
         project.setRepositoryName("demo");
+        project.setRepositoryFullPath("acme/demo");
         project.setRepositoryUrl("https://github.com/acme/demo");
         return project;
+    }
+
+    private static GitCredential credential()
+    {
+        GitCredential credential = new GitCredential();
+        credential.setCredentialId(5L);
+        credential.setProvider("GITHUB");
+        credential.setStatus("0");
+        return credential;
     }
 
     private static ReviewProject notifyProject(String notifyEnabled, String notifyOnFailure, Long channelId)

@@ -17,6 +17,7 @@ import com.acr.review.delivery.ReviewDeliveryConstants;
 import com.acr.review.delivery.ReviewNotifyMessageRenderer;
 import com.acr.review.delivery.ReviewSummaryContent;
 import com.acr.review.delivery.ReviewSummaryContentFactory;
+import com.acr.review.domain.GitCredential;
 import com.acr.review.domain.ReviewCommentSyncResult;
 import com.acr.review.domain.ReviewDeliveryRecord;
 import com.acr.review.domain.ReviewIssue;
@@ -24,11 +25,14 @@ import com.acr.review.domain.ReviewPipelineConstants;
 import com.acr.review.domain.ReviewProject;
 import com.acr.review.domain.ReviewTask;
 import com.acr.review.domain.ReviewTaskRun;
+import com.acr.review.git.GitAccessContext;
+import com.acr.review.git.GitAdapterRegistry;
 import com.acr.review.git.GitPullRequestComment;
 import com.acr.review.git.GitPullRequestCommentClient;
 import com.acr.review.git.GitPullRequestCommentException;
 import com.acr.review.git.GitRepositoryCoordinates;
 import com.acr.review.git.github.GitHubPullRequestCommentClient;
+import com.acr.review.mapper.GitCredentialMapper;
 import com.acr.review.mapper.ReviewDeliveryRecordMapper;
 import com.acr.review.mapper.ReviewIssueMapper;
 import com.acr.review.mapper.ReviewProjectMapper;
@@ -43,7 +47,7 @@ import com.acr.review.service.ReviewIssueDispositionEnricher;
 import com.acr.review.notify.NotifyRobotClients;
 import com.acr.system.service.ISysDeptService;
 
-/** 审查结果投递：GitHub 总结评论 + IM 群机器人；失败不污染审查结论。 */
+/** 审查结果投递：总结评论 + IM 群机器人；失败不污染审查结论。 */
 @Service
 public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
 {
@@ -59,7 +63,8 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
     private final NotifyRobotClients robotClients;
     private final ReviewSummaryContentFactory contentFactory;
     private final ISysDeptService deptService;
-    private final GitPullRequestCommentClient commentClient;
+    private final GitAdapterRegistry adapterRegistry;
+    private final GitCredentialMapper credentialMapper;
 
     public ReviewDeliveryServiceImpl(ReviewDeliveryRecordMapper deliveryMapper,
                                      ReviewTaskMapper taskMapper,
@@ -71,7 +76,8 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
                                      NotifyRobotClients robotClients,
                                      ReviewSummaryContentFactory contentFactory,
                                      ISysDeptService deptService,
-                                     GitPullRequestCommentClient commentClient)
+                                     GitAdapterRegistry adapterRegistry,
+                                     GitCredentialMapper credentialMapper)
     {
         this.deliveryMapper = deliveryMapper;
         this.taskMapper = taskMapper;
@@ -83,7 +89,8 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
         this.robotClients = robotClients;
         this.contentFactory = contentFactory;
         this.deptService = deptService;
-        this.commentClient = commentClient;
+        this.adapterRegistry = adapterRegistry;
+        this.credentialMapper = credentialMapper;
     }
 
     @Override
@@ -279,7 +286,7 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
         }
         deptService.checkDeptDataScope(project.getDeptId());
 
-        if (ReviewDeliveryConstants.CHANNEL_GITHUB_PR_SUMMARY.equals(record.getChannel()))
+        if (ReviewDeliveryConstants.isSummaryCommentChannel(record.getChannel()))
         {
             retryDelivery(record.getTaskId());
             return;
@@ -347,8 +354,13 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
         {
             return null;
         }
+        ReviewProject project = projectMapper.selectReviewProjectById(projectId);
+        if (project == null)
+        {
+            return null;
+        }
         return deliveryMapper.selectByProjectAndPr(projectId, prNumber,
-            ReviewDeliveryConstants.CHANNEL_GITHUB_PR_SUMMARY);
+            ReviewDeliveryConstants.channelForProvider(project.getProvider()));
     }
 
     @Override
@@ -406,9 +418,12 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
         {
             throw new GitPullRequestCommentException("项目不存在或已停用，无法投递评论");
         }
-        if (!ReviewDeliveryConstants.PROVIDER_GITHUB.equalsIgnoreCase(project.getProvider()))
+        String provider = project.getProvider();
+
+        GitCredential credential = credentialMapper.selectGitCredentialById(project.getCredentialId());
+        if (credential == null || !"0".equals(credential.getStatus()))
         {
-            throw new GitPullRequestCommentException("当前仅支持向 GitHub 回写总结评论");
+            throw new GitPullRequestCommentException("项目绑定的 Git 凭据不存在或已停用");
         }
 
         String token;
@@ -418,24 +433,31 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
         }
         catch (ServiceException ex)
         {
-            throw new GitPullRequestCommentException("GitHub 凭据不可用：" + ex.getMessage());
+            throw new GitPullRequestCommentException("Git 凭据不可用：" + ex.getMessage());
         }
 
+        GitAccessContext access = GitAccessContext.of(token,
+            GitCredentialServiceImpl.resolveServerUrl(provider, credential.getServerUrl()));
+
+        String fullPath = StringUtils.isNotEmpty(project.getRepositoryFullPath())
+            ? project.getRepositoryFullPath()
+            : project.getRepositoryOwner() + "/" + project.getRepositoryName();
         GitRepositoryCoordinates repository = new GitRepositoryCoordinates(
-            project.getRepositoryOwner(), project.getRepositoryName(), project.getRepositoryUrl());
+            project.getRepositoryOwner(), project.getRepositoryName(), fullPath, project.getRepositoryUrl());
         ReviewSummaryContent content = contentFactory.build(task, run, project);
         enrichDisposition(content, task.getProjectId(), task.getPrNumber());
         String body = ReviewCommentBodyRenderer.render(content);
 
+        GitPullRequestCommentClient commentClient = adapterRegistry.requireCommentClient(provider);
         Optional<GitPullRequestComment> existing = commentClient.findCommentWithMarker(
-            repository, token, task.getPrNumber(), ReviewDeliveryConstants.COMMENT_MARKER);
+            repository, access, task.getPrNumber(), ReviewDeliveryConstants.COMMENT_MARKER);
         if (existing.isPresent())
         {
             return commentClient.updateIssueComment(
-                repository, token, existing.get().id(), body).id();
+                repository, access, existing.get().id(), body).id();
         }
         return commentClient.createIssueComment(
-            repository, token, task.getPrNumber(), body).id();
+            repository, access, task.getPrNumber(), body).id();
     }
 
     private void enrichDisposition(ReviewSummaryContent content, Long projectId, Integer prNumber)
@@ -460,9 +482,12 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
     private ReviewDeliveryRecord upsertGithubResult(ReviewTask task, ReviewTaskRun run, String status,
                                                     String externalId, String failureMessage, String triggerSource)
     {
-        String key = ReviewDeliveryConstants.idempotencyKey(task.getProjectId(), task.getPrNumber());
-        return upsertResult(task, run, ReviewDeliveryConstants.PROVIDER_GITHUB,
-            ReviewDeliveryConstants.CHANNEL_GITHUB_PR_SUMMARY, key, externalId, status, failureMessage,
+        ReviewProject project = projectMapper.selectReviewProjectById(task.getProjectId());
+        String provider = project != null && StringUtils.isNotEmpty(project.getProvider())
+            ? project.getProvider() : ReviewDeliveryConstants.PROVIDER_GITHUB;
+        String key = ReviewDeliveryConstants.idempotencyKey(provider, task.getProjectId(), task.getPrNumber());
+        return upsertResult(task, run, provider,
+            ReviewDeliveryConstants.channelForProvider(provider), key, externalId, status, failureMessage,
             triggerSource);
     }
 

@@ -2,7 +2,7 @@
 
 > **语言**：[English](README.en.md) | 简体中文
 >
-> ⚠️ **研发阶段声明**：本项目处于早期研发阶段，暂不可直接用于生产环境。当前已完成 GitHub 项目接入（M1）、PR Webhook 事件可信接入（M2）、真实审查执行主链路（M3）与审查任务/记录体验优化（M3.1）；结果回写、通知和问题整改闭环尚未实现。欢迎关注进展，但请勿在生产中依赖。
+> ⚠️ **研发阶段声明**：本项目处于早期研发阶段，暂不可直接用于生产环境。当前 **GitHub、GitLab、Gitee、Gitea** 四平台均已实现 MVP 闭环（项目与凭据配置 → Webhook 接收 → 审查执行 → 总结评论回写）；自动化测试已通过，各平台真实环境闭环待有实例时人工验收。IM 通知、问题台账、工作台等能力已部分落地，但整体仍处内部试点阶段，请勿在生产中依赖。
 
 ## 项目定位
 
@@ -61,7 +61,7 @@ AI Code Review 是一个面向企业内部研发团队的**代码审查治理平
 ai-code-review/
 ├── acr-common/          # 公共工具层（utils、基类、AI Client 抽象、XSS 过滤）
 ├── acr-system/          # 平台治理（RBAC、组织、字典、业务系统、模型配置）
-├── acr-review/          # 代码审核主业务（项目、Git 凭据、Provider 与连接测试）
+├── acr-review/          # 代码审核主业务（项目、Git 凭据、GitAdapterRegistry、四平台 Provider 适配）
 ├── acr-framework/       # 框架胶水层（Security、JWT、Druid、Redis、AOP、限流）
 ├── acr-admin/           # 启动、配置与 Web 接入
 ├── acr-quartz/          # 通用定时任务管理与触发
@@ -80,7 +80,7 @@ ai-code-review/
 2. [架构与目录骨架](docs/planning/architecture-scaffold.md)：实际技术基线、模块归属和关键流程
 3. [协作入口](AGENTS.md)：规划技能、开发规则和基础验证
 
-当前仓库已具备业务系统归属管理，以及模型配置、启停、默认模型和连接测试的基础能力；P0/M1 已完成 GitHub 项目、加密 PAT 凭据、GitHub Provider、连接检测及对应权限和页面；M2 已完成 GitHub PR Webhook 验签接入、事件幂等落库和 PENDING 审查任务生成；M3 已打通任务异步执行、工作区准备、OCR 审查、结果快照与失败重试；M3.1 已将审查任务收敛为执行队列并新增审查记录历史视图（回写/通知仍未做）。一个业务系统可关联多个代码仓库项目；业务系统的代码和接口仍由 `acr-system` 提供，唯一菜单入口位于「项目接入」。实际完成度以产品路线图的“当前基线”为准。
+当前仓库已具备业务系统归属管理，以及模型配置、启停、默认模型和连接测试的基础能力。**当前能力**：Git 接入支持 **GitHub / GitLab / Gitee / Gitea** 四平台（`GitAccessContext` + `GitAdapterRegistry`，凭据 `server_url`、项目 `repository_full_path`、Webhook `/webhook/{provider}`）；M1–M7 纵向切片（含 PR/MR 审查执行、总结评论回写、IM 通知、问题台账、工作台）已落地主链路。一个业务系统可关联多个代码仓库项目；业务系统的代码和接口仍由 `acr-system` 提供，唯一菜单入口位于「项目接入」。实际完成度以产品路线图的“当前基线”为准。
 
 ## 功能模块
 
@@ -107,8 +107,8 @@ ai-code-review/
 | GitHub 凭据 | PAT 加密存储、响应不回显、编辑留空保留、引用删除保护、连接检测 |
 | GitHub 项目 | 仓库信息自动读取、全部分支分页同步、业务系统/部门/负责人/凭据绑定、启停、连接检测 |
 | PR 审查范围 | 默认启用 PR 审查、从真实分支中多选目标分支、优先推荐 `dev`/`develop`、平台统一事件默认值 |
-| Git Provider | 统一地址解析、凭据校验、仓库授权和仓库信息读取契约；当前只实现 GitHub Provider |
-| GitHub Provider | GitHub API 访问、仓库/默认分支/全部分支获取及地址/凭据/权限/仓库/网络/超时失败分类 |
+| Git Provider | 统一 `GitAccessContext` / `GitAdapterRegistry` 契约；已实现 GitHub、GitLab、Gitee、Gitea 四平台适配（连接检测、Diff/元数据/工作区/总结评论） |
+| 多平台 Webhook | `POST /webhook/{github,gitlab,gitee,gitea}` 验签与去重；按 `repository_full_path` 匹配项目；GitHub 路径与行为保持兼容 |
 | PR Webhook 接入（M2） | HMAC-SHA256 验签、项目匹配、动作白名单与目标分支判断、Delivery 幂等去重、事件全过程落库 |
 | 审查任务（M2/M3/M3.1） | 事件建单后异步执行；任务页作执行队列；失败分类与安全重试；独立详情页展示排障信息 |
 | 审查记录（M3.1） | 已完成审查历史列表与独立详情；评分/摘要/Top3 与执行记录分 Tab；复用任务表不另建结果表 |

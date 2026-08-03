@@ -9,6 +9,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import com.acr.review.git.GitAccessContext;
 import com.acr.review.delivery.ReviewDeliveryConstants;
 import com.acr.review.git.GitPullRequestComment;
 import com.acr.review.git.GitPullRequestCommentException;
@@ -19,6 +20,10 @@ import okhttp3.mockwebserver.RecordedRequest;
 
 class GitHubPullRequestCommentClientTest
 {
+    private static final GitAccessContext ACCESS = GitAccessContext.of("test-token", "https://github.com");
+    private static final GitAccessContext TOK_ACCESS = GitAccessContext.of("tok", "https://github.com");
+    private static final GitAccessContext SECRET_ACCESS = GitAccessContext.of("ghp_secrettokenvalue", "https://github.com");
+
     private MockWebServer server;
     private GitHubPullRequestCommentClient client;
     private GitRepositoryCoordinates repo;
@@ -45,7 +50,7 @@ class GitHubPullRequestCommentClientTest
             + "{\"id\":99,\"body\":\"hello\\n" + ReviewDeliveryConstants.COMMENT_MARKER + "\"}]"));
 
         Optional<GitPullRequestComment> found = client.findCommentWithMarker(
-            repo, "test-token", 7, ReviewDeliveryConstants.COMMENT_MARKER);
+            repo, ACCESS, 7, ReviewDeliveryConstants.COMMENT_MARKER);
 
         assertTrue(found.isPresent());
         assertEquals("99", found.get().id());
@@ -58,14 +63,14 @@ class GitHubPullRequestCommentClientTest
     void createsAndUpdatesComment() throws InterruptedException
     {
         server.enqueue(json(201, "{\"id\":55,\"body\":\"new\"}"));
-        GitPullRequestComment created = client.createIssueComment(repo, "tok", 3, "body-a");
+        GitPullRequestComment created = client.createIssueComment(repo, TOK_ACCESS, 3, "body-a");
         assertEquals("55", created.id());
         RecordedRequest createReq = server.takeRequest();
         assertEquals("POST", createReq.getMethod());
         assertTrue(createReq.getBody().readUtf8().contains("body-a"));
 
         server.enqueue(json(200, "{\"id\":55,\"body\":\"updated\"}"));
-        GitPullRequestComment updated = client.updateIssueComment(repo, "tok", "55", "body-b");
+        GitPullRequestComment updated = client.updateIssueComment(repo, TOK_ACCESS, "55", "body-b");
         assertEquals("55", updated.id());
         RecordedRequest updateReq = server.takeRequest();
         assertEquals("PATCH", updateReq.getMethod());
@@ -77,7 +82,7 @@ class GitHubPullRequestCommentClientTest
     {
         server.enqueue(json(401, "{\"message\":\"bad\"}"));
         GitPullRequestCommentException auth = assertThrows(GitPullRequestCommentException.class,
-            () -> client.createIssueComment(repo, "ghp_secrettokenvalue", 1, "x"));
+            () -> client.createIssueComment(repo, SECRET_ACCESS, 1, "x"));
         assertTrue(auth.getMessage().contains("凭据"));
         assertFalse(auth.getMessage().contains("ghp_secrettokenvalue"));
 
@@ -85,7 +90,7 @@ class GitHubPullRequestCommentClientTest
             .addHeader("X-RateLimit-Remaining", "0")
             .setBody("{\"message\":\"rate\"}"));
         GitPullRequestCommentException rate = assertThrows(GitPullRequestCommentException.class,
-            () -> client.createIssueComment(repo, "tok", 1, "x"));
+            () -> client.createIssueComment(repo, TOK_ACCESS, 1, "x"));
         assertTrue(rate.getMessage().contains("限流"));
     }
 

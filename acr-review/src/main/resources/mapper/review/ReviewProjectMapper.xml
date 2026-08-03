@@ -11,6 +11,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="repositoryUrl" column="repository_url" />
         <result property="repositoryOwner" column="repository_owner" />
         <result property="repositoryName" column="repository_name" />
+        <result property="repositoryFullPath" column="repository_full_path" />
         <result property="defaultBranch" column="default_branch" />
         <result property="prReviewEnabled" column="pr_review_enabled" />
         <result property="prTargetBranches" column="pr_target_branches" />
@@ -56,7 +57,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 
     <sql id="projectSelect">
         select p.project_id, p.project_name, p.provider, p.repository_url,
-               p.repository_owner, p.repository_name, p.default_branch,
+               p.repository_owner, p.repository_name, p.repository_full_path, p.default_branch,
                p.pr_review_enabled, p.pr_target_branches,
                p.business_system_id, bs.system_name as business_system_name,
                p.dept_id, d.dept_name,
@@ -159,7 +160,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     </select>
 
     <select id="selectByRepository" resultMap="ReviewProjectResult">
-        select project_id, project_name, provider, repository_owner, repository_name,
+        select project_id, project_name, provider, repository_owner, repository_name, repository_full_path,
                status, pr_review_enabled, pr_target_branches, webhook_secret_ciphertext, credential_id,
                model_id, primary_stack, template_id, review_mode, engine_code,
                scope_exclude_patterns, scope_include_tests, scope_report_existing, scope_expand_enabled,
@@ -174,9 +175,24 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         limit 1
     </select>
 
+    <select id="selectByFullPath" resultMap="ReviewProjectResult">
+        select project_id, project_name, provider, repository_owner, repository_name, repository_full_path,
+               status, pr_review_enabled, pr_target_branches, webhook_secret_ciphertext, credential_id,
+               model_id, primary_stack, template_id, review_mode, engine_code,
+               scope_exclude_patterns, scope_include_tests, scope_report_existing, scope_expand_enabled,
+               notify_enabled, notify_channel_id, notify_on_failure
+        from review_project
+        where provider = #{provider}
+          and repository_full_path = #{repositoryFullPath}
+        <if test="excludeProjectId != null">
+          and project_id != #{excludeProjectId}
+        </if>
+        limit 1
+    </select>
+
     <insert id="insertReviewProject" parameterType="com.acr.review.domain.ReviewProject" useGeneratedKeys="true" keyProperty="projectId">
         insert into review_project
-        (project_name, provider, repository_url, repository_owner, repository_name,
+        (project_name, provider, repository_url, repository_owner, repository_name, repository_full_path,
          default_branch, pr_review_enabled, pr_target_branches, business_system_id, dept_id, owner_user_id,
          credential_id, model_id, primary_stack, template_id, review_mode, engine_code,
          scope_exclude_patterns, scope_include_tests, scope_report_existing, scope_expand_enabled,
@@ -186,7 +202,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
          webhook_secret_ciphertext,
          remark, create_by, create_time)
         values
-        (#{projectName}, #{provider}, #{repositoryUrl}, #{repositoryOwner}, #{repositoryName},
+        (#{projectName}, #{provider}, #{repositoryUrl}, #{repositoryOwner}, #{repositoryName}, #{repositoryFullPath},
          #{defaultBranch}, #{prReviewEnabled}, #{prTargetBranches}, #{businessSystemId}, #{deptId}, #{ownerUserId},
          #{credentialId}, #{modelId}, #{primaryStack}, #{templateId}, #{reviewMode}, #{engineCode},
          #{scopeExcludePatterns}, #{scopeIncludeTests}, #{scopeReportExisting}, #{scopeExpandEnabled},
@@ -203,6 +219,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             repository_url = #{repositoryUrl},
             repository_owner = #{repositoryOwner},
             repository_name = #{repositoryName},
+            repository_full_path = #{repositoryFullPath},
             default_branch = #{defaultBranch},
             pr_review_enabled = #{prReviewEnabled},
             pr_target_branches = #{prTargetBranches},
@@ -270,6 +287,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="repositoryUrl != null and repositoryUrl != ''">repository_url = #{repositoryUrl},</if>
             <if test="repositoryOwner != null and repositoryOwner != ''">repository_owner = #{repositoryOwner},</if>
             <if test="repositoryName != null and repositoryName != ''">repository_name = #{repositoryName},</if>
+            <if test="repositoryFullPath != null and repositoryFullPath != ''">repository_full_path = #{repositoryFullPath},</if>
             <if test="defaultBranch != null and defaultBranch != ''">default_branch = #{defaultBranch},</if>
             update_by = #{updateBy},
             update_time = sysdate()

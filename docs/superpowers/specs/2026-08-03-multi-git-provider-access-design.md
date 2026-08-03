@@ -1,8 +1,8 @@
 # 多平台 Git Provider 接入设计（GitLab / Gitee / Gitea）
 
-> **状态（2026-08-03）：设计待审。**  
+> **状态（2026-08-03）：已实现（自动测试通过；真实平台闭环待有环境时人工验收）。**  
 > 范围：在现有 GitHub MVP 闭环上扩展 GitLab、Gitee、Gitea 真实接入；不重构审查引擎、任务状态、评分协议、通知、投递记录骨架与问题台账。  
-> 前置：GitHub M1–M4 链路已落地；契约见 `acr-review/.../git/*` 与 `git/github/*`。  
+> 前置：GitHub M1–M6.1 链路已落地（含投递记录、通知渠道与问题台账等复用面）；契约见 `acr-review/.../git/*` 与 `git/github/*`。  
 > 分支：`feature/multi-git-provider-access`。  
 > 决策锁定：方案 1（契约注册表 + 平台适配包）；`GitAccessContext`；按平台拆投递渠道；全平台 `repository_full_path`；凭据仅存 `server_url`。
 
@@ -67,6 +67,7 @@
 4. Webhook 入口与用例名为 GitHub 专属；缺少平台路由。
 5. 投递渠道与 URL 拼装仅识别 GitHub。
 6. 前端无平台动态表单（服务地址、Token 提示、Webhook 说明、PR/MR 标签）。
+7. 前端任务/记录页外部链接 `buildGithubPrUrl`（`acr-ui/src/utils/reviewDisplay.js`，审查记录列表与详情使用）硬编码 `github.com`，非 GitHub 平台与自建实例无法生成 PR/MR 链接。
 
 ## 3. 产品决策（已锁定）
 
@@ -136,7 +137,7 @@ GitAccessContext
 - Gitee 默认 `https://gitee.com`，API 映射官方地址。
 - GitLab：`serverUrl` + `/api/v4`。
 - Gitea：`serverUrl` + `/api/v1`。
-- `serverUrl` 规范化：去尾斜杠、强制 https（本地测试可另议）、拒绝含 userinfo/query/fragment。
+- `serverUrl` 规范化：去尾斜杠；仅允许 http/https 两种 scheme（企业内网自建实例常见 http 部署，不强制 https，生产环境建议 https）；拒绝含 userinfo/query/fragment。
 - Diff / Metadata / Comment / Workspace / FileContent 方法签名由 `String token` 改为 `GitAccessContext access`（或等价重载后删除旧签名，避免双轨）。
 
 ### 4.4 契约演进（最小必要）
@@ -176,7 +177,7 @@ canonicalUrl         # 规范化 Web 仓库地址（基于 serverUrl）
 | `GITEE` | 官方 gitee.com |
 | `GITEA` | 自建或官方兼容实例 |
 
-字典：扩展现有/新增 `review_git_provider`（若尚无）供前端下拉；渠道字典扩展见 §7。
+字典：**新建** `review_git_provider`（当前不存在该字典），值为 GITHUB/GITLAB/GITEE/GITEA，供前端平台下拉；渠道字典扩展见 §7。
 
 ## 5. 数据模型
 
@@ -199,14 +200,15 @@ canonicalUrl         # 规范化 Web 仓库地址（基于 serverUrl）
 |---|---|---|
 | `repository_full_path` | `varchar(255) NOT NULL`（迁移后） | 仓库全路径身份 |
 
-迁移策略（增量脚本，建议序号 `29_*`，不改历史脚本）：
+迁移策略（增量脚本，建议序号 `29_*`，不改历史脚本；脚本含中文注释，按 `sql/README.md` 约定必须以 `--default-character-set=utf8mb4` 执行并登记）：
 
 1. 增加可空列 `repository_full_path`；
 2. 回填：`CONCAT(repository_owner, '/', repository_name)`（当前仅 GitHub 数据）；
 3. 确认无空值后改为 `NOT NULL`；
-4. 删除旧唯一键 `uk_review_project_repository (provider, repository_owner, repository_name)`；
-5. 新建唯一键 `uk_review_project_full_path (provider, repository_full_path)`；
-6. 保留 `repository_owner` / `repository_name` 供展示与兼容查询，由 Provider 解析写入，不信任前端。
+4. 新建唯一键 `uk_review_project_full_path (provider, repository_full_path)`；
+5. 再删除旧唯一键 `uk_review_project_repository (provider, repository_owner, repository_name)`（先建新键后删旧键，避免出现无唯一约束窗口）；
+6. 将 `review_project` 与 `review_webhook_event` 的 `repository_owner` / `repository_name` 放宽至 `varchar(255)`：GitLab 嵌套命名空间的 owner 前缀（full_path 去末段）可能超过现有 100 字符，而 `review_project.repository_owner` 为 NOT NULL，不放宽会导致深层嵌套仓库接入直接失败（varchar 长度放宽为安全的原地变更）；
+7. 保留 `repository_owner` / `repository_name` 供展示与兼容查询，由 Provider 解析写入，不信任前端。
 
 Webhook 事件表：
 
@@ -259,16 +261,16 @@ handleWebhook(providerCode, WebhookHeaders, byte[] payload)
 |---|---|---|---|
 | GitHub | `X-GitHub-Event` | `X-GitHub-Delivery` | `X-Hub-Signature-256` |
 | GitLab | `X-Gitlab-Event` | 优先 `X-Gitlab-Event-UUID`；若缺失则用稳定合成策略（见下） | `X-Gitlab-Token`（Secret Token）及/或官方签名头（适配器兼容） |
-| Gitee | `X-Gitee-Event` / 文档等价头 | 平台投递头；若仅有时间戳+签名则按官方去重键合成并文档化 | Token / 签名按 Gitee 官方协议 |
+| Gitee | `X-Gitee-Event` | 官方无投递头，**恒定使用**下方合成策略 | Token / 签名按 Gitee 官方协议 |
 | Gitea | `X-Gitea-Event` | `X-Gitea-Delivery` | `X-Gitea-Signature`（HMAC-SHA256） |
 
-GitLab 投递 ID 合成（仅当 UUID 头不存在时）：
+投递 ID 合成（GitLab 仅当 UUID 头不存在时；Gitee 恒定使用）：
 
 ```text
-sha256(eventType + "|" + project_path + "|" + mr_iid + "|" + action + "|" + head_sha)
+sha256(eventType + "|" + project_path + "|" + mr_iid/pr_number + "|" + action + "|" + head_sha)
 ```
 
-截断到 `delivery_id` 列长；同一代码推送应稳定；不同 head 不碰撞。合成逻辑只在 `gitlab` 包。
+取 64 位十六进制摘要。`review_webhook_event.delivery_id` 为 `varchar(64)`，64 位十六进制恰好放满，**不得截断**（截断会放大不同事件的碰撞概率）；同一代码推送应稳定；不同 head 不碰撞。合成逻辑只在各自适配包（`gitlab` / `gitee`）。
 
 ### 6.3 验签契约
 
@@ -317,10 +319,10 @@ boolean verify(String secret, byte[] payload, WebhookRequestHeaders headers)
 
 明确不建单：close、merge、approve、unapprove、edit（无代码变更）、assignment、label-only 等。
 
-配置项：
+配置项（均落 `sys_config` 参数管理，与现有 `review.github.prEvents` 同位置，不写入 yml；代码侧提供同名默认白名单兜底）：
 
 - 保留 `review.github.prEvents`；
-- 新增 `review.gitlab.mrEvents`、`review.gitee.prEvents`、`review.gitea.prEvents`，默认均为 `opened,reopened,synchronize`。
+- 新增 `review.gitlab.mrEvents`、`review.gitee.prEvents`、`review.gitea.prEvents`，初始值均为 `opened,reopened,synchronize`，由 SQL 脚本随字典一并插入。
 
 ### 6.5 标准化事件
 
@@ -372,7 +374,7 @@ GitLab 使用 Notes（MR 讨论）实现“总结评论”语义：list/create/u
 
 ### 8.1 访问凭据
 
-- 平台选择：GitHub / GitLab / Gitee / Gitea；
+- 平台选择：GitHub / GitLab / Gitee / Gitea，选项取自 `review_git_provider` 字典，替换当前硬编码单一选项；
 - GitLab、Gitea 显示「服务地址」必填（placeholder 示例 `https://gitlab.example.com`）；
 - GitHub、Gitee 隐藏服务地址；
 - Token 提示按平台变化（PAT / Personal Access Token / Private Token 等文案）；
@@ -381,7 +383,7 @@ GitLab 使用 Notes（MR 讨论）实现“总结评论”语义：list/create/u
 ### 8.2 项目管理
 
 - 平台选择后：过滤同平台凭据；仓库地址校验与解析跟随 Provider；
-- 展示 Webhook URL：`{apiBase}/webhook/{provider}` 与 Secret 配置说明（按平台）；
+- 展示 Webhook URL：复用现有 `review.webhook.callback-base-url` 配置键，将当前拼装的固定后缀 `/webhook/github`（`ReviewProjectServiceImpl`）改为 `/webhook/{provider}`，Secret 配置说明按平台调整；
 - 分支同步、连接测试走对应 Provider；
 - 表单字段「是否启用合并请求审查」「目标分支」等公共文案统一用「合并请求」。
 
@@ -390,12 +392,21 @@ GitLab 使用 Notes（MR 讨论）实现“总结评论”语义：list/create/u
 - 公共文案：合并请求；
 - 行内/详情可根据 `provider` 显示 `PR`（GitHub/Gitee/Gitea）或 `MR`（GitLab）微标签，不改后端字段名。
 
+### 8.4 任务/记录页 PR/MR 外部链接
+
+现有 `buildGithubPrUrl`（`acr-ui/src/utils/reviewDisplay.js`，审查记录列表与详情使用）硬编码 `github.com`，改造为平台感知：
+
+- 入参使用任务/记录 VO 已有的 `provider` + `repositoryUrl` + `prNumber`（自建实例的 `repositoryUrl` 已含自身 host，无需额外字段）；
+- 路径规则与 §7.3 一致：GitHub/Gitee/Gitea `{repositoryUrl}/pull/{n}`，GitLab `{repositoryUrl}/-/merge_requests/{iid}`；
+- 无法生成（字段缺失）时禁用「打开 PR」按钮并提示，提示文案不得出现 GitHub 专属表述；
+- GitHub 行为保持与现实现完全兼容（含 `.git` 后缀与尾斜杠清理、`repositoryOwner/repositoryName` 兜底路径）。
+
 ## 9. 实现切片与验证
 
 | 步骤 | 内容 | 验证 |
 |---|---|---|
 | S0 | 契约：`GitAccessContext`、Registry、coordinates.fullPath、Webhook 头视图；GitHub 全量迁移编译与测试绿 | `mvn test` 中 GitHub 相关全绿 |
-| S1 | SQL `29_*`：`server_url`、`repository_full_path` 回填与唯一键、字典渠道 | 脚本可重复执行；存量项目可查 |
+| S1 | SQL `29_*`：`server_url`、`repository_full_path` 回填与唯一键切换、`repository_owner/name` 放宽、`review_git_provider` 字典、渠道字典新值、三个平台事件白名单参数 | 脚本可重复执行；存量项目可查 |
 | S2 | 用例去 GitHub 硬编码：凭据/项目/Webhook/执行/投递按 registry | 现有 Webhook/Delivery 单测改造后绿 |
 | S3 | GitLab 适配包 + 契约测试 + 前端平台项 | 单测覆盖验签/映射/评论；页面可选 GitLab |
 | S4 | Gitee 适配包 + 契约测试 | 同上 |
@@ -467,12 +478,13 @@ GitLab 使用 Notes（MR 讨论）实现“总结评论”语义：list/create/u
 | Spring 多实现注入冲突 | Registry 收集 `List<接口>`，禁止业务直接注入单实现（测试可用 `@Primary` mock registry） |
 | 存量唯一键迁移 | 脚本分步回填、校验、再切唯一键；可重复执行 |
 | 平台 API 差异导致评论权限不足 | 失败分类 + 投递记录；文档写明 Token 所需最小 scope |
+| MVP 两周试点验收尚未完成（测试仓库 PAT 过期待恢复），与多平台开发并行 | 成功标准 1（GitHub 全量回归）为每个切片合入的硬门槛；试点验收恢复后与多平台并行推进，试点暴露的问题优先处理 |
 
 ## 14. 待实施时核对的平台细节（非开放问题）
 
 以下不阻塞本设计审定，实施对应适配包时对照官方文档钉死到测试：
 
-1. Gitee 签名模式（密码 Token vs 签名）与去重头最终字段名；
+1. Gitee 签名模式（密码 Token vs 签名校验）的最终协议字段，以及 PR Hook 动作词表（open/reopen/代码更新与统一动作的对应关系）；
 2. GitLab 旧版仅 Secret Token、新版签名头并存时的兼容顺序；
 3. 各平台分页头/链路与评论列表上限（对齐现有 `COMMENT_PAGE_SIZE` / `COMMENT_MAX_PAGES`）；
 4. GitLab 仓库 URL 多种 host（含端口）的 `parseRepository` 规则与 `server_url` 一致性校验。

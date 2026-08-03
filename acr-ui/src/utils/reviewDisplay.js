@@ -143,19 +143,51 @@ export function formatFocusIssueCounts(task) {
   return `严重 ${counts.critical} / 高 ${counts.high} / 中 ${counts.medium} / 低 ${counts.low}`
 }
 
-/** 由仓库坐标与 PR 编号生成 GitHub PR 链接。 */
-export function buildGithubPrUrl(task) {
-  if (!task?.prNumber) return ''
-  const owner = task.repositoryOwner
-  const name = task.repositoryName
-  if (owner && name) {
-    return `https://github.com/${owner}/${name}/pull/${task.prNumber}`
-  }
-  const url = (task.repositoryUrl || '').replace(/\.git$/, '').replace(/\/$/, '')
-  if (url.includes('github.com/')) {
-    return `${url}/pull/${task.prNumber}`
+const DEFAULT_REPO_HOSTS = {
+  GITHUB: 'https://github.com',
+  GITEE: 'https://gitee.com'
+}
+
+function cleanRepoUrl(url) {
+  return (url || '').replace(/\.git$/, '').replace(/\/$/, '')
+}
+
+function mergeRequestPathSegment(provider, prNumber) {
+  const code = (provider || 'GITHUB').toUpperCase()
+  if (code === 'GITLAB') return `/-/merge_requests/${prNumber}`
+  return `/pull/${prNumber}`
+}
+
+function resolveRepositoryBase(task) {
+  const provider = (task?.provider || 'GITHUB').toUpperCase()
+  const cleanedUrl = cleanRepoUrl(task?.repositoryUrl)
+  if (cleanedUrl) return cleanedUrl
+
+  const owner = task?.repositoryOwner
+  const name = task?.repositoryName
+  const defaultHost = DEFAULT_REPO_HOSTS[provider]
+  if (owner && name && defaultHost) {
+    return `${defaultHost}/${owner}/${name}`
   }
   return ''
+}
+
+/** 合并请求外链标签：GitLab 为 MR，其余为 PR。 */
+export function mergeRequestLabel(provider) {
+  return (provider || '').toUpperCase() === 'GITLAB' ? 'MR' : 'PR'
+}
+
+/** 由平台、仓库坐标与合并请求编号生成 Web 链接。 */
+export function buildMergeRequestUrl(task) {
+  if (!task?.prNumber) return ''
+  const base = resolveRepositoryBase(task)
+  if (!base) return ''
+  return `${base}${mergeRequestPathSegment(task.provider, task.prNumber)}`
+}
+
+/** @deprecated 兼容别名，请使用 buildMergeRequestUrl。 */
+export function buildGithubPrUrl(task) {
+  return buildMergeRequestUrl(task)
 }
 
 export function normalizeMode(mode) {

@@ -7,6 +7,7 @@ import java.io.IOException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import com.acr.review.git.GitAccessContext;
 import com.acr.review.domain.ReviewPipelineConstants;
 import com.acr.review.git.GitPullRequestDiffResult;
 import com.acr.review.git.GitRepositoryCoordinates;
@@ -15,6 +16,8 @@ import okhttp3.mockwebserver.MockWebServer;
 
 class GitHubPullRequestDiffFetcherTest
 {
+    private static final GitAccessContext ACCESS = GitAccessContext.of("test-token", "https://github.com");
+
     private MockWebServer server;
     private GitHubPullRequestDiffFetcher fetcher;
     private GitRepositoryCoordinates repository;
@@ -39,7 +42,7 @@ class GitHubPullRequestDiffFetcherTest
     {
         server.enqueue(new MockResponse().setResponseCode(200).setBody("diff --git a/A.java b/A.java"));
 
-        GitPullRequestDiffResult result = fetcher.fetchDiff(repository, "test-token", "abc1234", "def5678");
+        GitPullRequestDiffResult result = fetcher.fetchDiff(repository, ACCESS, "abc1234", "def5678");
 
         assertTrue(result.success());
         assertTrue(result.diffContent().contains("diff --git"));
@@ -52,7 +55,7 @@ class GitHubPullRequestDiffFetcherTest
     @Test
     void rejectsMalformedSha()
     {
-        GitPullRequestDiffResult result = fetcher.fetchDiff(repository, "test-token", "--evil", "def5678");
+        GitPullRequestDiffResult result = fetcher.fetchDiff(repository, ACCESS, "--evil", "def5678");
         assertFalse(result.success());
         assertEquals(ReviewPipelineConstants.FAILURE_WORKSPACE_PREPARE, result.failureType());
     }
@@ -61,7 +64,7 @@ class GitHubPullRequestDiffFetcherTest
     void classifiesCredentialErrors()
     {
         server.enqueue(new MockResponse().setResponseCode(401));
-        GitPullRequestDiffResult result = fetcher.fetchDiff(repository, "bad-token", "abc1234", "def5678");
+        GitPullRequestDiffResult result = fetcher.fetchDiff(repository, GitAccessContext.of("bad-token", "https://github.com"), "abc1234", "def5678");
         assertFalse(result.success());
         assertEquals(ReviewPipelineConstants.FAILURE_CREDENTIAL_ERROR, result.failureType());
     }
@@ -70,7 +73,7 @@ class GitHubPullRequestDiffFetcherTest
     void classifiesExplicitRateLimit()
     {
         server.enqueue(new MockResponse().setResponseCode(429));
-        GitPullRequestDiffResult result = fetcher.fetchDiff(repository, "test-token", "abc1234", "def5678");
+        GitPullRequestDiffResult result = fetcher.fetchDiff(repository, ACCESS, "abc1234", "def5678");
         assertFalse(result.success());
         assertEquals(ReviewPipelineConstants.FAILURE_RATE_LIMIT, result.failureType());
     }
@@ -79,7 +82,7 @@ class GitHubPullRequestDiffFetcherTest
     void classifiesForbiddenWithExhaustedRateLimit()
     {
         server.enqueue(new MockResponse().setResponseCode(403).setHeader("X-RateLimit-Remaining", "0"));
-        GitPullRequestDiffResult result = fetcher.fetchDiff(repository, "test-token", "abc1234", "def5678");
+        GitPullRequestDiffResult result = fetcher.fetchDiff(repository, ACCESS, "abc1234", "def5678");
         assertFalse(result.success());
         assertEquals(ReviewPipelineConstants.FAILURE_RATE_LIMIT, result.failureType());
     }
@@ -88,7 +91,7 @@ class GitHubPullRequestDiffFetcherTest
     void forbiddenWithoutRateLimitIsCredentialError()
     {
         server.enqueue(new MockResponse().setResponseCode(403).setHeader("X-RateLimit-Remaining", "120"));
-        GitPullRequestDiffResult result = fetcher.fetchDiff(repository, "test-token", "abc1234", "def5678");
+        GitPullRequestDiffResult result = fetcher.fetchDiff(repository, ACCESS, "abc1234", "def5678");
         assertFalse(result.success());
         assertEquals(ReviewPipelineConstants.FAILURE_CREDENTIAL_ERROR, result.failureType());
     }
@@ -100,7 +103,7 @@ class GitHubPullRequestDiffFetcherTest
         String huge = "x".repeat(ReviewPipelineConstants.MAX_DIFF_CHARS * 3);
         server.enqueue(new MockResponse().setResponseCode(200).setBody(huge));
 
-        GitPullRequestDiffResult result = fetcher.fetchDiff(repository, "test-token", "abc1234", "def5678");
+        GitPullRequestDiffResult result = fetcher.fetchDiff(repository, ACCESS, "abc1234", "def5678");
 
         assertTrue(result.success());
         assertTrue(result.diffContent().length() <= ReviewPipelineConstants.MAX_DIFF_CHARS * 2);

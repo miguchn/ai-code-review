@@ -10,8 +10,8 @@
         </el-select>
       </el-form-item>
       <el-form-item label="Git 平台" prop="provider">
-        <el-select v-model="queryParams.provider" placeholder="请选择平台" clearable style="width: 130px">
-          <el-option label="GitHub" value="GITHUB" />
+        <el-select v-model="queryParams.provider" placeholder="请选择平台" clearable style="width: 150px">
+          <el-option v-for="item in gitProviderOptions" :key="item.value" :label="item.label" :value="item.value" />
         </el-select>
       </el-form-item>
       <el-form-item label="状态" prop="status">
@@ -35,11 +35,17 @@
 
     <el-table v-loading="loading" :data="projectList" empty-text="暂无代码项目">
       <el-table-column label="项目名称" prop="projectName" min-width="150" :show-overflow-tooltip="true" />
-      <el-table-column label="GitHub 仓库" min-width="220" :show-overflow-tooltip="true">
+      <el-table-column label="Git 平台" width="120">
         <template #default="scope">
-          <el-link :href="scope.row.repositoryUrl" target="_blank" type="primary" rel="noopener noreferrer">
-            {{ scope.row.repositoryOwner }}/{{ scope.row.repositoryName }}
+          <dict-tag :options="gitProviderOptions" :value="scope.row.provider" />
+        </template>
+      </el-table-column>
+      <el-table-column label="仓库" min-width="220" :show-overflow-tooltip="true">
+        <template #default="scope">
+          <el-link v-if="scope.row.repositoryUrl" :href="scope.row.repositoryUrl" target="_blank" type="primary" rel="noopener noreferrer">
+            {{ scope.row.repositoryFullPath || (scope.row.repositoryOwner + '/' + scope.row.repositoryName) }}
           </el-link>
+          <span v-else>{{ scope.row.repositoryFullPath || (scope.row.repositoryOwner + '/' + scope.row.repositoryName) }}</span>
         </template>
       </el-table-column>
       <el-table-column label="业务系统" prop="businessSystemName" min-width="130" :show-overflow-tooltip="true" />
@@ -56,7 +62,7 @@
           <dict-tag :options="review_mode" :value="normalizeReviewMode(scope.row.reviewMode)" />
         </template>
       </el-table-column>
-      <el-table-column label="PR 审查" min-width="180">
+      <el-table-column label="合并请求审查" min-width="180">
         <template #default="scope">
           <el-tag :type="scope.row.prReviewEnabled === '0' ? 'success' : 'info'" size="small">
             {{ scope.row.prReviewEnabled === '0' ? '已启用' : '未启用' }}
@@ -117,8 +123,10 @@
                 </el-form-item>
               </el-col>
               <el-col :span="12">
-                <el-form-item label="Git 平台">
-                  <el-input model-value="GitHub" disabled />
+                <el-form-item label="Git 平台" prop="provider">
+                  <el-select v-model="form.provider" placeholder="请选择平台" :disabled="!!form.projectId" @change="handleProviderChange">
+                    <el-option v-for="item in gitProviderOptions" :key="item.value" :label="item.label" :value="item.value" />
+                  </el-select>
                 </el-form-item>
               </el-col>
             </el-row>
@@ -164,12 +172,12 @@
 
           <el-tab-pane label="仓库与分支" name="repository">
             <el-form-item label="仓库地址" prop="repositoryUrl">
-              <el-input v-model="form.repositoryUrl" placeholder="https://github.com/owner/repository" @change="invalidateRepositoryInfo" />
+              <el-input v-model="form.repositoryUrl" :placeholder="repositoryUrlPlaceholder" @change="invalidateRepositoryInfo" />
             </el-form-item>
             <el-form-item label="访问凭据" prop="credentialId">
               <div class="form-control-block">
-                <el-select v-model="form.credentialId" filterable placeholder="请选择已有 GitHub 凭据" @change="invalidateRepositoryInfo">
-                  <el-option v-for="item in options.credentials" :key="item.id" :label="item.label" :value="item.id" />
+                <el-select v-model="form.credentialId" filterable :placeholder="credentialSelectPlaceholder" @change="invalidateRepositoryInfo">
+                  <el-option v-for="item in filteredCredentials" :key="item.id" :label="item.label" :value="item.id" />
                 </el-select>
                 <div class="field-actions">
                   <el-button link type="primary" icon="Plus" @click="openCredentialManagement"
@@ -190,23 +198,24 @@
             </el-form-item>
             <el-form-item v-if="form.repositoryOwner" label="仓库信息">
               <div class="repository-summary">
+                <div v-if="form.repositoryFullPath"><span>完整路径</span><strong :title="form.repositoryFullPath">{{ form.repositoryFullPath }}</strong></div>
                 <div><span>仓库</span><strong>{{ form.repositoryOwner }}/{{ form.repositoryName }}</strong></div>
                 <div><span>默认分支</span><strong>{{ form.defaultBranch || '-' }}</strong></div>
                 <div><span>分支数量</span><strong>{{ branchCount ?? '刷新后显示' }}</strong></div>
                 <div><span>最近同步</span><strong>{{ form.lastBranchSyncTime ? formatDateTime(form.lastBranchSyncTime) : '尚未同步' }}</strong></div>
               </div>
             </el-form-item>
-            <el-form-item label="启用 PR 审查" prop="prReviewEnabled">
+            <el-form-item label="启用合并请求审查" prop="prReviewEnabled">
               <div class="form-control-block">
                 <el-switch v-model="form.prReviewEnabled" active-value="0" inactive-value="1"
                   active-text="启用" inactive-text="停用" @change="handlePrReviewChange" />
-                <div class="inline-tip">仅审查 Pull Request，不启用 Push 审查。</div>
+                <div class="inline-tip">仅审查合并请求，不启用 Push 审查。</div>
               </div>
             </el-form-item>
             <el-form-item v-if="form.prReviewEnabled === '0'" label="目标分支" prop="prTargetBranches">
               <div class="form-control-block">
                 <el-select v-model="form.prTargetBranches" multiple filterable collapse-tags :max-collapse-tags="2"
-                  :placeholder="repositoryInfoLoaded ? '请选择 PR 目标分支' : '请先读取仓库信息'">
+                  :placeholder="repositoryInfoLoaded ? '请选择合并请求目标分支' : '请先读取仓库信息'">
                   <el-option v-for="branch in branchOptions" :key="branch" :label="branch" :value="branch" />
                 </el-select>
                 <div class="field-actions field-actions--split">
@@ -225,7 +234,7 @@
                 <el-form-item label="机器人分支">
                   <el-tag v-for="item in options.robotBranchPrefixes" :key="item" type="info" size="small" class="mr8">{{ item }}</el-tag>
                 </el-form-item>
-                <el-form-item label="PR 触发事件">
+                <el-form-item label="合并请求触发事件">
                   <el-tag v-for="item in options.prEvents" :key="item" type="info" size="small" class="mr8">{{ item }}</el-tag>
                 </el-form-item>
               </el-collapse-item>
@@ -235,7 +244,7 @@
           <el-tab-pane label="Webhook" name="webhook">
             <el-form-item label="说明">
               <div class="inline-tip">
-                Webhook 用于接收 GitHub PR 事件并创建审查任务。Secret 加密保存，页面不回显明文。
+                Webhook 用于接收合并请求事件并创建审查任务。Secret 加密保存，页面不回显明文。
               </div>
             </el-form-item>
             <el-form-item label="回调地址">
@@ -245,15 +254,15 @@
                     <el-button :disabled="!webhookCallbackDisplay" @click="copyWebhookCallback">复制</el-button>
                   </template>
                 </el-input>
-                <div class="inline-tip">在 GitHub 仓库 Settings → Webhooks 中按此地址添加，Content type 选择 application/json。</div>
+                <div class="inline-tip">{{ webhookSetupHint }}</div>
               </div>
             </el-form-item>
             <el-form-item label="Webhook Secret" prop="webhookSecret">
               <div class="form-control-block">
                 <el-input v-model="form.webhookSecret" type="password" show-password clearable
-                  :placeholder="form.projectId ? '留空保持不变，输入则更新' : '与 GitHub Webhook Secret 保持一致'" />
+                  :placeholder="webhookSecretPlaceholder" />
                 <div class="inline-tip">
-                  用于校验 GitHub 事件签名。
+                  {{ webhookSecretHint }}
                   <el-tag :type="form.webhookSecretConfigured ? 'success' : 'info'" size="small">
                     {{ form.webhookSecretConfigured ? '已配置' : '未配置' }}
                   </el-tag>
@@ -307,7 +316,7 @@
           <el-tab-pane label="审查范围" name="scope">
             <el-form-item label="说明">
               <div class="inline-tip">
-                默认仅审查本次 PR 变更内容，不扫描整个文件的历史问题；锁文件、依赖目录与构建产物由平台统一排除。以下配置随任务快照冻结，修改仅影响新建任务。
+                默认仅审查本次合并请求变更内容，不扫描整个文件的历史问题；锁文件、依赖目录与构建产物由平台统一排除。以下配置随任务快照冻结，修改仅影响新建任务。
               </div>
             </el-form-item>
             <el-form-item label="排除路径" prop="scopeExcludePatterns">
@@ -424,7 +433,7 @@
       </template>
     </el-dialog>
 
-    <el-dialog title="GitHub 分支" v-model="branchDialogOpen" width="620px" append-to-body>
+    <el-dialog title="仓库分支" v-model="branchDialogOpen" width="620px" append-to-body>
       <el-input v-model="branchSearch" clearable prefix-icon="Search" placeholder="搜索分支名称" class="mb12" />
       <el-table :data="filteredBranches" height="360" empty-text="未找到匹配分支">
         <el-table-column label="分支名称" prop="name" min-width="280" />
@@ -447,12 +456,25 @@ import {
   listReviewProject, getReviewProject, getReviewProjectOptions, readReviewProjectRepositoryInfo,
   addReviewProject, updateReviewProject, delReviewProject, changeReviewProjectStatus, testReviewProject
 } from '@/api/review/project'
+import { listGitCredential } from '@/api/review/credential'
 import { listNotifyChannel } from '@/api/review/notifyChannel'
 
 const { proxy } = getCurrentInstance()
 const router = useRouter()
-const { review_mode, review_engine_code, review_tech_stack, review_notify_channel_type } =
-  proxy.useDict('review_mode', 'review_engine_code', 'review_tech_stack', 'review_notify_channel_type')
+const { review_mode, review_engine_code, review_tech_stack, review_notify_channel_type, review_git_provider } =
+  proxy.useDict('review_mode', 'review_engine_code', 'review_tech_stack', 'review_notify_channel_type', 'review_git_provider')
+
+const FALLBACK_GIT_PROVIDERS = [
+  { label: 'GitHub', value: 'GITHUB' },
+  { label: 'GitLab', value: 'GITLAB' },
+  { label: 'Gitee（码云）', value: 'GITEE' },
+  { label: 'Gitea', value: 'GITEA' }
+]
+
+const gitProviderOptions = computed(() => {
+  const dictOptions = review_git_provider.value || []
+  return dictOptions.length ? dictOptions : FALLBACK_GIT_PROVIDERS
+})
 const projectList = ref([])
 const loading = ref(true)
 const showSearch = ref(true)
@@ -474,6 +496,7 @@ const advancedSections = ref([])
 const activeTab = ref('basic')
 const tabOrder = ['basic', 'repository', 'webhook', 'notify', 'scope', 'execution']
 const notifyChannelOptions = ref([])
+const credentialOptions = ref([])
 const options = reactive({
   businessSystems: [], departments: [], owners: [], credentials: [], models: [], templates: [],
   longLivedBranches: [], robotBranchPrefixes: [], prEvents: [], webhookCallbackUrl: ''
@@ -481,7 +504,7 @@ const options = reactive({
 
 function validateTargetBranches(rule, value, callback) {
   if (data.form.prReviewEnabled === '0' && (!Array.isArray(value) || value.length === 0)) {
-    callback(new Error('请选择至少一个 PR 目标分支'))
+    callback(new Error('请选择至少一个合并请求目标分支'))
     return
   }
   callback()
@@ -516,7 +539,8 @@ const data = reactive({
   queryParams: { pageNum: 1, pageSize: 10, projectName: undefined, businessSystemId: undefined, provider: undefined, status: undefined },
   rules: {
     projectName: [{ required: true, message: '项目名称不能为空', trigger: 'blur' }],
-    repositoryUrl: [{ required: true, message: 'GitHub 仓库地址不能为空', trigger: 'blur' }],
+    provider: [{ required: true, message: '请选择 Git 平台', trigger: 'change' }],
+    repositoryUrl: [{ required: true, message: '仓库地址不能为空', trigger: 'blur' }],
     prTargetBranches: [{ validator: validateTargetBranches, trigger: 'change' }],
     businessSystemId: [{ required: true, message: '请选择业务系统', trigger: 'change' }],
     deptId: [{ required: true, message: '请选择所属部门', trigger: 'change' }],
@@ -545,7 +569,60 @@ const filteredBranches = computed(() => {
     .map(name => ({ name }))
 })
 const currentRepositorySignature = computed(() => repositorySignature(form.value))
-const webhookCallbackDisplay = computed(() => form.value.webhookCallbackUrl || options.webhookCallbackUrl || '')
+const webhookCallbackBase = computed(() => {
+  const sample = form.value.webhookCallbackUrl || options.webhookCallbackUrl || ''
+  return sample.replace(/\/webhook\/[^/]+$/, '')
+})
+const webhookCallbackDisplay = computed(() => {
+  if (form.value.webhookCallbackUrl) return form.value.webhookCallbackUrl
+  const base = webhookCallbackBase.value
+  if (!base) return ''
+  const code = (form.value.provider || 'GITHUB').toLowerCase()
+  return `${base}/webhook/${code}`
+})
+const filteredCredentials = computed(() => {
+  const provider = form.value.provider || 'GITHUB'
+  return credentialOptions.value.filter(item => item.provider === provider)
+})
+const repositoryUrlPlaceholder = computed(() => {
+  const code = (form.value.provider || 'GITHUB').toUpperCase()
+  if (code === 'GITLAB') return 'https://gitlab.example.com/group/project'
+  if (code === 'GITEE') return 'https://gitee.com/owner/repository'
+  if (code === 'GITEA') return 'https://gitea.example.com/owner/repository'
+  return 'https://github.com/owner/repository'
+})
+const credentialSelectPlaceholder = computed(() => {
+  const label = dictLabel(gitProviderOptions.value, form.value.provider || 'GITHUB')
+  return `请选择 ${label || 'Git'} 访问凭据`
+})
+const webhookSetupHint = computed(() => {
+  const code = (form.value.provider || 'GITHUB').toUpperCase()
+  if (code === 'GITLAB') {
+    return '在 GitLab 项目 Settings → Webhooks 中添加此地址，Secret Token 填写与下方 Webhook Secret 相同的值，勾选 Merge request events。'
+  }
+  if (code === 'GITEE') {
+    return '在 Gitee 仓库「管理 → WebHooks」中添加此地址，密码/Secret 与下方 Webhook Secret 保持一致，勾选 Pull Request 相关事件。'
+  }
+  if (code === 'GITEA') {
+    return '在 Gitea 仓库「设置 → Web 钩子」中添加此地址，Secret 与下方 Webhook Secret 保持一致，勾选 Pull Request 事件。'
+  }
+  return '在 GitHub 仓库 Settings → Webhooks 中按此地址添加，Content type 选择 application/json，勾选 Pull requests。'
+})
+const webhookSecretPlaceholder = computed(() => {
+  if (form.value.projectId) return '留空保持不变，输入则更新'
+  const code = (form.value.provider || 'GITHUB').toUpperCase()
+  if (code === 'GITLAB') return '与 GitLab Webhook Secret Token 保持一致'
+  if (code === 'GITEE') return '与 Gitee Webhook 密码/Secret 保持一致'
+  if (code === 'GITEA') return '与 Gitea Webhook Secret 保持一致'
+  return '与 GitHub Webhook Secret 保持一致'
+})
+const webhookSecretHint = computed(() => {
+  const code = (form.value.provider || 'GITHUB').toUpperCase()
+  if (code === 'GITLAB') return '用于校验 GitLab Secret Token。'
+  if (code === 'GITEE') return '用于校验 Gitee Webhook 签名/密码。'
+  if (code === 'GITEA') return '用于校验 Gitea Webhook 签名。'
+  return '用于校验 GitHub 事件签名。'
+})
 const reviewModeOptions = computed(() => (review_mode.value || []).filter(item =>
   item.value === 'LLM_DIRECT' || item.value === 'OCR_ENGINE'
 ))
@@ -583,7 +660,7 @@ function loadOptions() {
 function reset() {
   form.value = {
     projectId: undefined, projectName: undefined, provider: 'GITHUB', repositoryUrl: undefined,
-    repositoryOwner: undefined, repositoryName: undefined, defaultBranch: undefined,
+    repositoryOwner: undefined, repositoryName: undefined, repositoryFullPath: undefined, defaultBranch: undefined,
     prReviewEnabled: '0', prTargetBranches: [], businessSystemId: undefined, deptId: undefined,
     ownerUserId: undefined, credentialId: undefined, modelId: undefined, templateId: undefined,
     primaryStack: 'FULLSTACK', reviewMode: 'OCR_ENGINE', engineCode: 'OPEN_CODE_REVIEW',
@@ -620,8 +697,9 @@ function scrollProjectFormToTop() {
 function handleAdd() {
   reset()
   loadNotifyChannelOptions()
+  loadCredentialOptions()
   open.value = true
-  title.value = '新增 GitHub 项目'
+  title.value = '新增代码审查项目'
 }
 
 function handleUpdate(row) {
@@ -647,8 +725,9 @@ function handleUpdate(row) {
     availableBranches.value = [...project.prTargetBranches]
     originalRepositorySignature.value = repositorySignature(project)
     loadNotifyChannelOptions()
+    loadCredentialOptions()
     open.value = true
-    title.value = '修改 GitHub 项目'
+    title.value = '修改代码审查项目'
   })
 }
 
@@ -727,6 +806,27 @@ function handleSystemChange(systemId) {
   if (!availableOwners.value.some(item => item.id === form.value.ownerUserId)) form.value.ownerUserId = undefined
 }
 
+function handleProviderChange() {
+  form.value.credentialId = undefined
+  form.value.webhookCallbackUrl = undefined
+  invalidateRepositoryInfo()
+  loadCredentialOptions()
+}
+
+function loadCredentialOptions() {
+  const provider = form.value.provider || 'GITHUB'
+  return listGitCredential({ pageNum: 1, pageSize: 200, status: '0', provider }).then(response => {
+    credentialOptions.value = (response.rows || []).map(item => ({
+      id: item.credentialId,
+      label: item.credentialName,
+      provider: item.provider
+    }))
+    if (form.value.credentialId && !credentialOptions.value.some(item => item.id === form.value.credentialId)) {
+      form.value.credentialId = undefined
+    }
+  })
+}
+
 function invalidateRepositoryInfo() {
   repositoryInfoLoaded.value = false
   loadedRepositorySignature.value = ''
@@ -735,6 +835,7 @@ function invalidateRepositoryInfo() {
   branchCount.value = undefined
   form.value.repositoryOwner = undefined
   form.value.repositoryName = undefined
+  form.value.repositoryFullPath = undefined
   form.value.defaultBranch = undefined
   form.value.prTargetBranches = []
   form.value.lastBranchSyncStatus = 'UNSYNCED'
@@ -744,11 +845,11 @@ function invalidateRepositoryInfo() {
 
 function handleReadRepositoryInfo() {
   if (!form.value.repositoryUrl) {
-    proxy.$modal.msgWarning('请先填写 GitHub 仓库地址')
+    proxy.$modal.msgWarning('请先填写仓库地址')
     return
   }
   if (!form.value.credentialId) {
-    proxy.$modal.msgWarning('请先选择 GitHub 访问凭据')
+    proxy.$modal.msgWarning('请先选择访问凭据')
     return
   }
   repositoryReading.value = true
@@ -816,7 +917,7 @@ function formatNotifyChannelLabel(item) {
 }
 
 function refreshCredentialOptions() {
-  loadOptions().then(() => proxy.$modal.msgSuccess('凭据列表已刷新'))
+  loadCredentialOptions().then(() => proxy.$modal.msgSuccess('凭据列表已刷新'))
 }
 
 function submitForm() {
