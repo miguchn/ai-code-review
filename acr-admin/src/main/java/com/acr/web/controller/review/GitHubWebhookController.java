@@ -76,7 +76,8 @@ public class GitHubWebhookController
                 continue;
             }
             String lower = name.toLowerCase(Locale.ROOT);
-            if (lower.startsWith("x-") || lower.equals("content-type"))
+            // x-* 覆盖 GitHub/Gitee/Gitea；webhook-* 覆盖 GitLab 新版签名头
+            if (lower.startsWith("x-") || lower.startsWith("webhook-") || lower.equals("content-type"))
             {
                 headers.put(name, request.getHeader(name));
             }
