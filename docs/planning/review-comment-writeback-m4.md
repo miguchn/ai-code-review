@@ -218,7 +218,8 @@ POST /review/delivery/{taskId}/retry
 - 状态标签：已投递 / 投递失败 / —（无记录）；
 - 展示最近尝试时间、失败原因（失败时）；
 - `FAILED` 且具备 `review:delivery:retry` 时显示「重试投递」按钮；
-- SUCCESS 任务无 delivery 行时显示「—」（不伪造成功）。
+- SUCCESS 任务无投递记录且具备 `review:delivery:retry` 时显示「补投递」按钮（对应第 9 节补投递策略）；
+- 非 SUCCESS 任务无投递记录时显示「—」（不伪造成功）。
 
 ## 6. 失败分类与安全
 
