@@ -13,6 +13,7 @@ public record ReviewRepositoryInfo(
     String repositoryUrl,
     String repositoryOwner,
     String repositoryName,
+    String repositoryFullPath,
     String defaultBranch,
     List<String> branches,
     List<String> recommendedTargetBranches,

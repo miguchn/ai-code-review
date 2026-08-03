@@ -46,7 +46,12 @@ public class GitHubPullRequestWorkspacePreparer implements GitPullRequestWorkspa
         {
             return GitPullRequestWorkspaceResult.fail(ReviewPipelineConstants.FAILURE_WORKSPACE_PREPARE, "仓库信息不完整");
         }
-        if (request.token() == null || request.token().isBlank())
+        String token;
+        try
+        {
+            token = request.access().requireToken();
+        }
+        catch (IllegalArgumentException ex)
         {
             return GitPullRequestWorkspaceResult.fail(ReviewPipelineConstants.FAILURE_CREDENTIAL_ERROR, "GitHub 凭据不可用");
         }
@@ -67,10 +72,10 @@ public class GitHubPullRequestWorkspacePreparer implements GitPullRequestWorkspa
             runGit(workspace, null, "init");
             runGit(workspace, null, "remote", "add", "origin", remoteUrl);
             runGit(workspace, null, "config", "core.sparseCheckout", "false");
-            fetchCommit(workspace, request.token(), request.headSha());
+            fetchCommit(workspace, token, request.headSha());
             if (!request.baseSha().equals(request.headSha()))
             {
-                fetchCommit(workspace, request.token(), request.baseSha());
+                fetchCommit(workspace, token, request.baseSha());
             }
             runGit(workspace, null, "checkout", "--force", request.headSha());
             ensureCommitExists(workspace, request.baseSha());
@@ -85,11 +90,11 @@ public class GitHubPullRequestWorkspacePreparer implements GitPullRequestWorkspa
             }
             return GitPullRequestWorkspaceResult.fail(
                 ReviewPipelineConstants.FAILURE_WORKSPACE_PREPARE,
-                sanitize("准备 GitHub 审查工作区失败: " + ex.getMessage(), request.token()));
+                sanitize("准备 GitHub 审查工作区失败: " + ex.getMessage(), token));
         }
         catch (WorkspacePrepareException ex)
         {
-            return GitPullRequestWorkspaceResult.fail(ex.failureType(), sanitize(ex.getMessage(), request.token()));
+            return GitPullRequestWorkspaceResult.fail(ex.failureType(), sanitize(ex.getMessage(), token));
         }
     }
 

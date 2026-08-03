@@ -5,6 +5,7 @@ import java.io.InterruptedIOException;
 import java.util.concurrent.TimeUnit;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import com.acr.review.git.GitAccessContext;
 import com.acr.review.git.GitPullRequestMetadata;
 import com.acr.review.git.GitPullRequestMetadataFetcher;
 import com.acr.review.git.GitRepositoryCoordinates;
@@ -48,13 +49,18 @@ public class GitHubPullRequestMetadataFetcher implements GitPullRequestMetadataF
     }
 
     @Override
-    public GitPullRequestMetadata fetch(GitRepositoryCoordinates repository, String token, int prNumber)
+    public GitPullRequestMetadata fetch(GitRepositoryCoordinates repository, GitAccessContext access, int prNumber)
     {
         if (repository == null)
         {
             return GitPullRequestMetadata.unavailable("仓库信息不完整");
         }
-        if (token == null || token.isBlank())
+        String token;
+        try
+        {
+            token = access.requireToken();
+        }
+        catch (IllegalArgumentException ex)
         {
             return GitPullRequestMetadata.unavailable("GitHub 凭据不可用");
         }

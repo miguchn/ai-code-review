@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 import com.acr.review.git.GitPullRequestEvent;
 import com.acr.review.git.GitRepositoryCoordinates;
 import com.acr.review.git.GitWebhookAdapter;
+import com.acr.review.git.WebhookRequestHeaders;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 
@@ -19,6 +20,9 @@ public class GitHubWebhookAdapter implements GitWebhookAdapter
     private static final String SIGNATURE_PREFIX = "sha256=";
     private static final String HMAC_ALGORITHM = "HmacSHA256";
     private static final String PULL_REQUEST_EVENT = "pull_request";
+    private static final String HEADER_SIGNATURE = "X-Hub-Signature-256";
+    private static final String HEADER_DELIVERY = "X-GitHub-Delivery";
+    private static final String HEADER_EVENT = "X-GitHub-Event";
 
     @Override
     public String providerCode()
@@ -27,28 +31,36 @@ public class GitHubWebhookAdapter implements GitWebhookAdapter
     }
 
     @Override
-    public boolean verifySignature(String secret, byte[] payload, String signatureHeader)
+    public String resolveDeliveryId(WebhookRequestHeaders headers, byte[] payload)
     {
-        if (secret == null || secret.isBlank() || payload == null
-            || signatureHeader == null || !signatureHeader.startsWith(SIGNATURE_PREFIX))
+        if (headers != null)
         {
-            return false;
+            String deliveryId = headers.get(HEADER_DELIVERY);
+            if (deliveryId != null && !deliveryId.isBlank())
+            {
+                return deliveryId;
+            }
         }
-        byte[] actual = hexToBytes(signatureHeader.substring(SIGNATURE_PREFIX.length()));
-        if (actual == null)
-        {
-            return false;
-        }
-        try
-        {
-            Mac mac = Mac.getInstance(HMAC_ALGORITHM);
-            mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), HMAC_ALGORITHM));
-            return MessageDigest.isEqual(mac.doFinal(payload), actual);
-        }
-        catch (GeneralSecurityException e)
-        {
-            return false;
-        }
+        return null;
+    }
+
+    @Override
+    public String resolveEventType(WebhookRequestHeaders headers)
+    {
+        return headers == null ? null : headers.get(HEADER_EVENT);
+    }
+
+    @Override
+    public boolean verify(String secret, byte[] payload, WebhookRequestHeaders headers)
+    {
+        String signatureHeader = headers == null ? null : headers.get(HEADER_SIGNATURE);
+        return verifySignature(secret, payload, signatureHeader);
+    }
+
+    @Override
+    public boolean isPullRequestEventType(String eventType)
+    {
+        return PULL_REQUEST_EVENT.equals(eventType);
     }
 
     @Override
@@ -108,9 +120,35 @@ public class GitHubWebhookAdapter implements GitWebhookAdapter
         {
             return null;
         }
+        String repositoryFullPath = ownerLogin + "/" + repoName;
         return new GitPullRequestEvent(deliveryId, root.getString("action"), ownerLogin, repoName,
-            prNumber, pr.getString("title"), headRef, baseRef, baseSha, headSha,
+            repositoryFullPath, prNumber, pr.getString("title"), headRef, baseRef, baseSha, headSha,
             prAuthor, additions, deletions, changedFiles);
+    }
+
+    /** 供 verify 与单测复用：校验 X-Hub-Signature-256 头。 */
+    boolean verifySignature(String secret, byte[] payload, String signatureHeader)
+    {
+        if (secret == null || secret.isBlank() || payload == null
+            || signatureHeader == null || !signatureHeader.startsWith(SIGNATURE_PREFIX))
+        {
+            return false;
+        }
+        byte[] actual = hexToBytes(signatureHeader.substring(SIGNATURE_PREFIX.length()));
+        if (actual == null)
+        {
+            return false;
+        }
+        try
+        {
+            Mac mac = Mac.getInstance(HMAC_ALGORITHM);
+            mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), HMAC_ALGORITHM));
+            return MessageDigest.isEqual(mac.doFinal(payload), actual);
+        }
+        catch (GeneralSecurityException e)
+        {
+            return false;
+        }
     }
 
     private JSONObject parseObject(byte[] payload)

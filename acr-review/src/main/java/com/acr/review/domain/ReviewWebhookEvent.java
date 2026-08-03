@@ -16,6 +16,7 @@ public class ReviewWebhookEvent extends BaseEntity
     private String action;
     private String repositoryOwner;
     private String repositoryName;
+    private String repositoryFullPath;
     private Long projectId;
     private Integer prNumber;
     private String prTitle;
@@ -103,6 +104,16 @@ public class ReviewWebhookEvent extends BaseEntity
     public void setRepositoryName(String repositoryName)
     {
         this.repositoryName = repositoryName;
+    }
+
+    public String getRepositoryFullPath()
+    {
+        return repositoryFullPath;
+    }
+
+    public void setRepositoryFullPath(String repositoryFullPath)
+    {
+        this.repositoryFullPath = repositoryFullPath;
     }
 
     public Long getProjectId()

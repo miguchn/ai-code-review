@@ -53,12 +53,12 @@ class ReviewNotifyMessageRendererTest
         String body = ReviewNotifyMessageRenderer.renderSuccess(content);
 
         assertTrue(body.startsWith("### ⚠️ AI Code Review · 建议修改"));
-        assertTrue(body.contains("总分 72/100 · PR #8 重构用户登录校验"));
+        assertTrue(body.contains("总分 72/100 · 合并请求 #8 重构用户登录校验"));
         assertTrue(body.contains("acme/demo · zhangsan · dev → main · 12 文件 +120/−30"));
         assertTrue(body.contains("Top 3 重点问题"));
         assertTrue(body.contains("[高·新增] 密码明文传输风险 — UserController.java L42-48"));
         assertTrue(body.contains("范围统计：纳入 10 · 排除 2 · 扩展 1 · 新增 2 · 存量 1"));
-        assertTrue(body.contains("PR：https://github.com/acme/demo/pull/8"));
+        assertTrue(body.contains("合并请求：https://github.com/acme/demo/pull/8"));
         assertTrue(body.contains("详情：https://acr.example.com/review/record-detail/index/42"));
         assertFalse(body.contains("```"));
         assertFalse(body.contains("**["));
@@ -82,7 +82,7 @@ class ReviewNotifyMessageRendererTest
         String body = ReviewNotifyMessageRenderer.renderFailed(content);
 
         assertTrue(body.startsWith("### ❌ AI Code Review · 执行失败"));
-        assertTrue(body.contains("PR #8 重构用户登录校验 · acme/demo"));
+        assertTrue(body.contains("合并请求 #8 重构用户登录校验 · acme/demo"));
         assertTrue(body.contains("失败类型：引擎超时 · 任务 #99"));
         assertTrue(body.contains("详情：https://acr.example.com/review/record-detail/index/99"));
         assertFalse(body.contains("Top 3"));

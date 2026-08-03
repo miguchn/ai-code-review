@@ -16,6 +16,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import com.acr.common.ai.LlmCallService;
 import com.acr.common.exception.ServiceException;
 import com.acr.review.domain.ReviewPipelineConstants;
+import com.acr.review.domain.GitCredential;
 import com.acr.review.domain.ReviewProject;
 import com.acr.review.domain.ReviewTask;
 import com.acr.review.domain.ReviewTaskRun;
@@ -24,10 +25,12 @@ import com.acr.review.engine.OpenCodeReviewCliAdapter;
 import com.acr.review.engine.OcrModelConfigMapper;
 import com.acr.review.engine.ReviewEngineWorkspaceManager;
 import com.acr.review.engine.config.ReviewEngineProperties;
+import com.acr.review.git.GitAdapterRegistry;
 import com.acr.review.git.GitPullRequestDiffFetcher;
 import com.acr.review.git.GitPullRequestDiffResult;
 import com.acr.review.git.GitPullRequestMetadataFetcher;
 import com.acr.review.git.GitPullRequestWorkspacePreparer;
+import com.acr.review.mapper.GitCredentialMapper;
 import com.acr.review.mapper.ReviewProjectMapper;
 import com.acr.review.mapper.ReviewTaskMapper;
 import com.acr.review.mapper.ReviewTaskRunMapper;
@@ -47,6 +50,8 @@ class ReviewTaskExecutionServiceImplTest
     private final ReviewTaskMapper taskMapper = mock(ReviewTaskMapper.class);
     private final ReviewTaskRunMapper runMapper = mock(ReviewTaskRunMapper.class);
     private final ReviewProjectMapper projectMapper = mock(ReviewProjectMapper.class);
+    private final GitCredentialMapper credentialMapper = mock(GitCredentialMapper.class);
+    private final GitAdapterRegistry adapterRegistry = mock(GitAdapterRegistry.class);
     private final ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
     private final IGitCredentialService credentialService = mock(IGitCredentialService.class);
     private final ISysAiModelConfigService modelConfigService = mock(ISysAiModelConfigService.class);
@@ -69,14 +74,12 @@ class ReviewTaskExecutionServiceImplTest
     {
         ReviewEngineProperties properties = new ReviewEngineProperties();
         properties.setMaxConcurrency(2);
+        wireGithubAdapters();
         service = new ReviewTaskExecutionServiceImpl(
-            taskMapper, runMapper, projectMapper,
-            credentialService,
+            taskMapper, runMapper, projectMapper, credentialMapper,
+            credentialService, adapterRegistry,
             modelConfigService,
             modelConfigMapper,
-            workspacePreparer,
-            diffFetcher,
-            metadataFetcher,
             reviewEngine,
             workspaceManager,
             properties,
@@ -87,13 +90,25 @@ class ReviewTaskExecutionServiceImplTest
             new com.acr.review.scope.UnifiedDiffParser(),
             new com.acr.review.scope.ReviewScopeDecisionService(),
             new com.acr.review.scope.ReviewScopePromptAssembler(),
-            fileContentFetcher,
             llmCallService,
             eventPublisher,
             new ReviewTaskSnapshotServiceImpl(templateService, modelConfigService, properties),
             deliveryService,
             issueService,
             120);
+    }
+
+    private void wireGithubAdapters()
+    {
+        when(adapterRegistry.requireDiffFetcher("GITHUB")).thenReturn(diffFetcher);
+        when(adapterRegistry.requireMetadataFetcher("GITHUB")).thenReturn(metadataFetcher);
+        when(adapterRegistry.requireFileContentFetcher("GITHUB")).thenReturn(fileContentFetcher);
+        when(adapterRegistry.requireWorkspacePreparer("GITHUB")).thenReturn(workspacePreparer);
+        GitCredential credential = new GitCredential();
+        credential.setCredentialId(5L);
+        credential.setProvider("GITHUB");
+        credential.setStatus("0");
+        when(credentialMapper.selectGitCredentialById(5L)).thenReturn(credential);
     }
 
     @Test
@@ -173,10 +188,7 @@ class ReviewTaskExecutionServiceImplTest
         when(taskMapper.selectReviewTaskById(13L)).thenReturn(task);
         when(runMapper.selectMaxAttemptNo(13L)).thenReturn(null);
 
-        ReviewProject project = new ReviewProject();
-        project.setProjectId(2L);
-        project.setStatus("0");
-        project.setProvider("GITHUB");
+        ReviewProject project = githubProject();
         project.setReviewMode("LLM_DIRECT");
         project.setModelId(3L);
         project.setTemplateId(4L);
@@ -227,10 +239,7 @@ class ReviewTaskExecutionServiceImplTest
         when(taskMapper.selectReviewTaskById(14L)).thenReturn(task);
         when(runMapper.selectMaxAttemptNo(14L)).thenReturn(null);
 
-        ReviewProject project = new ReviewProject();
-        project.setProjectId(2L);
-        project.setStatus("0");
-        project.setProvider("GITHUB");
+        ReviewProject project = githubProject();
         when(projectMapper.selectReviewProjectById(2L)).thenReturn(project);
 
         service.executeTask(14L);
@@ -367,13 +376,10 @@ class ReviewTaskExecutionServiceImplTest
     {
         // 决策服务异常：降级为全量 Diff 并记录降级原因，审查不中断
         ReviewTaskExecutionServiceImpl degradedService = new ReviewTaskExecutionServiceImpl(
-            taskMapper, runMapper, projectMapper,
-            credentialService,
+            taskMapper, runMapper, projectMapper, credentialMapper,
+            credentialService, adapterRegistry,
             modelConfigService,
             mock(OcrModelConfigMapper.class),
-            mock(GitPullRequestWorkspacePreparer.class),
-            diffFetcher,
-            mock(GitPullRequestMetadataFetcher.class),
             mock(OpenCodeReviewCliAdapter.class),
             mock(ReviewEngineWorkspaceManager.class),
             engineProperties(),
@@ -384,7 +390,6 @@ class ReviewTaskExecutionServiceImplTest
             new com.acr.review.scope.UnifiedDiffParser(),
             throwingDecisionService(),
             new com.acr.review.scope.ReviewScopePromptAssembler(),
-            fileContentFetcher,
             llmCallService,
             eventPublisher,
             new ReviewTaskSnapshotServiceImpl(templateService, modelConfigService, engineProperties()),
@@ -634,11 +639,7 @@ class ReviewTaskExecutionServiceImplTest
         when(taskMapper.claimTask(eq(task.getTaskId()), any(), any(Date.class), anyInt())).thenReturn(1);
         when(taskMapper.selectReviewTaskById(task.getTaskId())).thenReturn(task);
         when(runMapper.selectMaxAttemptNo(task.getTaskId())).thenReturn(null);
-        ReviewProject project = new ReviewProject();
-        project.setProjectId(2L);
-        project.setStatus("0");
-        project.setProvider("GITHUB");
-        project.setCredentialId(5L);
+        ReviewProject project = githubProject();
         when(projectMapper.selectReviewProjectById(2L)).thenReturn(project);
         when(credentialService.getPlainToken(5L, true)).thenReturn("token");
 
@@ -663,6 +664,7 @@ class ReviewTaskExecutionServiceImplTest
         }
         when(workspacePreparer.prepare(any())).thenReturn(
             com.acr.review.git.GitPullRequestWorkspaceResult.ok(workspacePath + "/repo", "abc1234", "def5678"));
+        wireGithubAdapters();
     }
 
     private ReviewEngineProperties engineProperties()
@@ -699,13 +701,23 @@ class ReviewTaskExecutionServiceImplTest
         when(taskMapper.claimTask(eq(task.getTaskId()), any(), any(Date.class), anyInt())).thenReturn(1);
         when(taskMapper.selectReviewTaskById(task.getTaskId())).thenReturn(task);
         when(runMapper.selectMaxAttemptNo(task.getTaskId())).thenReturn(null);
+        ReviewProject project = githubProject();
+        when(projectMapper.selectReviewProjectById(2L)).thenReturn(project);
+        when(credentialService.getPlainToken(5L, true)).thenReturn("token");
+    }
+
+    private static ReviewProject githubProject()
+    {
         ReviewProject project = new ReviewProject();
         project.setProjectId(2L);
         project.setStatus("0");
         project.setProvider("GITHUB");
         project.setCredentialId(5L);
-        when(projectMapper.selectReviewProjectById(2L)).thenReturn(project);
-        when(credentialService.getPlainToken(5L, true)).thenReturn("token");
+        project.setRepositoryOwner("acme");
+        project.setRepositoryName("demo");
+        project.setRepositoryFullPath("acme/demo");
+        project.setRepositoryUrl("https://github.com/acme/demo");
+        return project;
     }
 
     /** 覆盖四类文件：锁文件（默认排除）、普通 Java（L0）、依赖清单（扩展+拉取失败）、配置（扩展+拉取成功）。 */

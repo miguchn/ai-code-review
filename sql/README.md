@@ -32,6 +32,7 @@
 26. `26_issue_delivery_trace_m6_1.sql`：M6.1 投递记录追溯（`review_delivery_record.trigger_source` 可空列 + 触发来源字典；须 utf8mb4）。
 27. `27_sidebar_menu_ia.sql`：左侧菜单信息架构调整（审查中心 / 项目接入 / 策略配置；工作台侧栏由前端常量路由控制；须 utf8mb4）。
 28. `28_delivery_menu_route_name.sql`：补齐「投递记录」菜单 `route_name`（缺失时路由名与前端组件名不一致，keep-alive 不缓存导致页面一直加载）。
+29. `29_multi_git_provider_access.sql`：多 Git Provider 数据层（凭据 `server_url`、项目/事件 `repository_full_path`、平台字典、投递渠道扩展、MR/PR 事件参数；须 utf8mb4）。
 
 含中文的增量脚本执行时请显式指定连接字符集，例如：
 
@@ -55,6 +56,7 @@ mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/25_issue_l
 mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/26_issue_delivery_trace_m6_1.sql
 mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/27_sidebar_menu_ia.sql
 mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/28_delivery_menu_route_name.sql
+mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/29_multi_git_provider_access.sql
 ```
 
 ## 命名规则

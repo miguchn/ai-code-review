@@ -45,7 +45,7 @@ acr-ui ──HTTP──> acr-admin
 | 产品域 | 主要对象/能力 | 代码归属 | 边界说明 |
 |---|---|---|---|
 | 平台治理 | 用户、角色、部门、菜单、字典、参数、业务系统、模型服务基础配置 | `acr-system` | 业务系统继续作为通用治理数据和接口；因当前实际消费者是代码仓库项目，其唯一菜单入口位于“代码审查”，不改变代码归属 |
-| 项目接入 | 代码项目、Provider 连接引用、分支/事件范围、连通性 | `acr-review` | 不把 Git 仓库当作业务系统；一个业务系统可关联多个代码项目 |
+| 项目接入 | 代码项目、Provider 连接引用、分支/事件范围、连通性 | `acr-review` | 不把 Git 仓库当作业务系统；一个业务系统可关联多个代码项目。Git 差异收敛在 `git/`：`GitAdapterRegistry` 按 `providerCode` 解析适配器；`GitAccessContext`（token + serverUrl）统一 API 访问；平台包 `git/{github,gitlab,gitee,gitea}`；项目 `repository_full_path` 跨平台唯一匹配；凭据 `server_url` 供 GitLab/Gitea 自建；Webhook 接入 `POST /webhook/{provider}`（`acr-admin`） |
 | 审查闭环 | 事件、审查任务、步骤、问题、整改复核、策略快照 | `acr-review` | “任务”只表示一次执行，“问题”跨任务跟踪整改 |
 | 策略控制 | 审查方案、规则版本、模型选择、阈值、门禁策略 | `acr-review` | 引用 `acr-system` 的模型服务，不复制密钥或供应商配置 |
 | 结果交付 | 评论/状态回写、通知、投递记录、业务预警 | `acr-review` | 每类外部副作用有独立幂等键和状态 |
@@ -112,7 +112,7 @@ ai-code-review/
 │       │   ├── java/com/acr/review/
 │       │   │   ├── domain/        # 凭据、项目、模板、任务、执行记录、评分结果 DTO
 │       │   │   ├── engine/        # OCR CLI 适配与工作区管理
-│       │   │   ├── git/           # Provider / Webhook / PR 工作区、Diff、元数据
+│       │   │   ├── git/           # GitAdapterRegistry、GitAccessContext；git/{github,gitlab,gitee,gitea}
 │       │   │   ├── mapper/        # 审查业务数据访问
 │       │   │   ├── security/      # PAT / Webhook Secret AES-GCM
 │       │   │   └── service/       # 项目、模板、Webhook、任务执行、评分解析/协议组合
@@ -142,10 +142,10 @@ ai-code-review/
 │   └── delivery.md
 └── sql/
     ├── 01_core_schema.sql … 18_review_execution_hardening.sql
-    └── 19_review_record_experience_m3_1.sql … 21_review_record_list_fields.sql
+    └── 19_review_record_experience_m3_1.sql … 29_multi_git_provider_access.sql
 ```
 
-`acr-admin` 承担 REST/Webhook 接入；页面和 API 位于 `acr-ui/src/views/review`、`acr-ui/src/views/system/aimodelconfig` 与 `acr-ui/src/api/review`。审查方式在项目级二选一（大模型审查 / 审查引擎）；审查模板为代码审查下的公共配置；大模型路径的评分与 JSON 协议由平台统一追加，模板页通过 `GET /review/template/platform-rules` 只读展示同一数据源。当前仅实现 GitHub，没有为 GitLab/Gitee/Gitea、通知或回写预建空实现。
+`acr-admin` 承担 REST/Webhook 接入（`/webhook/{github,gitlab,gitee,gitea}`）；页面和 API 位于 `acr-ui/src/views/review`、`acr-ui/src/views/system/aimodelconfig` 与 `acr-ui/src/api/review`。审查方式在项目级二选一（大模型审查 / 审查引擎）；审查模板为代码审查下的公共配置；大模型路径的评分与 JSON 协议由平台统一追加，模板页通过 `GET /review/template/platform-rules` 只读展示同一数据源。Git 接入已实现 GitHub、GitLab、Gitee、Gitea 四平台适配器；OAuth/App、自动 Webhook 与批量导入不在本期范围。
 
 ## 7. 暂不做
 

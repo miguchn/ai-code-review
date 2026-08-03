@@ -4,6 +4,9 @@ package com.acr.review.delivery;
 public final class ReviewDeliveryConstants
 {
     public static final String CHANNEL_GITHUB_PR_SUMMARY = "GITHUB_PR_SUMMARY_COMMENT";
+    public static final String CHANNEL_GITLAB_MR_SUMMARY = "GITLAB_MR_SUMMARY_COMMENT";
+    public static final String CHANNEL_GITEE_PR_SUMMARY = "GITEE_PR_SUMMARY_COMMENT";
+    public static final String CHANNEL_GITEA_PR_SUMMARY = "GITEA_PR_SUMMARY_COMMENT";
     public static final String CHANNEL_DINGTALK_ROBOT = "DINGTALK_ROBOT";
     public static final String CHANNEL_WECOM_ROBOT = "WECOM_ROBOT";
     public static final String CHANNEL_FEISHU_BOT = "FEISHU_BOT";
@@ -51,10 +54,40 @@ public final class ReviewDeliveryConstants
     {
     }
 
-    /** 幂等键：GITHUB:{projectId}:{prNumber}:SUMMARY_COMMENT */
+    /** 幂等键：{provider}:{projectId}:{prNumber}:SUMMARY_COMMENT（GitHub 旧键不变）。 */
+    public static String idempotencyKey(String provider, Long projectId, Integer prNumber)
+    {
+        return normalizeProvider(provider) + ":" + projectId + ":" + prNumber + ":SUMMARY_COMMENT";
+    }
+
+    /** 兼容 GitHub 存量调用。 */
     public static String idempotencyKey(Long projectId, Integer prNumber)
     {
-        return PROVIDER_GITHUB + ":" + projectId + ":" + prNumber + ":SUMMARY_COMMENT";
+        return idempotencyKey(PROVIDER_GITHUB, projectId, prNumber);
+    }
+
+    /** 按平台返回总结评论投递渠道编码。 */
+    public static String channelForProvider(String provider)
+    {
+        if (provider == null)
+        {
+            return CHANNEL_GITHUB_PR_SUMMARY;
+        }
+        return switch (normalizeProvider(provider))
+        {
+            case "GITLAB" -> CHANNEL_GITLAB_MR_SUMMARY;
+            case "GITEE" -> CHANNEL_GITEE_PR_SUMMARY;
+            case "GITEA" -> CHANNEL_GITEA_PR_SUMMARY;
+            default -> CHANNEL_GITHUB_PR_SUMMARY;
+        };
+    }
+
+    public static boolean isSummaryCommentChannel(String channel)
+    {
+        return CHANNEL_GITHUB_PR_SUMMARY.equals(channel)
+            || CHANNEL_GITLAB_MR_SUMMARY.equals(channel)
+            || CHANNEL_GITEE_PR_SUMMARY.equals(channel)
+            || CHANNEL_GITEA_PR_SUMMARY.equals(channel);
     }
 
     /** IM 幂等键：{channelType}:{taskId}:REVIEW_DONE */
@@ -73,5 +106,10 @@ public final class ReviewDeliveryConstants
     public static boolean isSupportedNotifyChannelType(String channelType)
     {
         return isImChannel(channelType);
+    }
+
+    private static String normalizeProvider(String provider)
+    {
+        return provider.trim().toUpperCase(java.util.Locale.ROOT);
     }
 }

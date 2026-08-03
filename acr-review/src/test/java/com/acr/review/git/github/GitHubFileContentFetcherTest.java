@@ -7,6 +7,7 @@ import java.io.IOException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import com.acr.review.git.GitAccessContext;
 import com.acr.review.domain.ReviewPipelineConstants;
 import com.acr.review.git.GitFileContentResult;
 import com.acr.review.git.GitRepositoryCoordinates;
@@ -15,6 +16,9 @@ import okhttp3.mockwebserver.MockWebServer;
 
 class GitHubFileContentFetcherTest
 {
+    private static final GitAccessContext ACCESS = GitAccessContext.of("test-token", "https://github.com");
+    private static final GitAccessContext SHORT_ACCESS = GitAccessContext.of("t", "https://github.com");
+
     private MockWebServer server;
     private GitHubFileContentFetcher fetcher;
     private GitRepositoryCoordinates repository;
@@ -40,7 +44,7 @@ class GitHubFileContentFetcherTest
         server.enqueue(new MockResponse().setResponseCode(200).setBody("server:\n  port: 8080\n"));
 
         GitFileContentResult result = fetcher.fetchFileContent(
-            repository, "test-token", "src/main/resources/application config.yml", "def5678");
+            repository, ACCESS, "src/main/resources/application config.yml", "def5678");
 
         assertTrue(result.success());
         assertEquals("server:\n  port: 8080\n", result.content());
@@ -54,9 +58,9 @@ class GitHubFileContentFetcherTest
     @Test
     void rejectsTraversalAndAbsolutePath()
     {
-        assertEquals("INVALID_PATH", fetcher.fetchFileContent(repository, "t", "../etc/passwd", "def5678").failureReason());
-        assertEquals("INVALID_PATH", fetcher.fetchFileContent(repository, "t", "/etc/passwd", "def5678").failureReason());
-        assertEquals("INVALID_REF", fetcher.fetchFileContent(repository, "t", "a.yml", "--evil").failureReason());
+        assertEquals("INVALID_PATH", fetcher.fetchFileContent(repository, SHORT_ACCESS, "../etc/passwd", "def5678").failureReason());
+        assertEquals("INVALID_PATH", fetcher.fetchFileContent(repository, SHORT_ACCESS, "/etc/passwd", "def5678").failureReason());
+        assertEquals("INVALID_REF", fetcher.fetchFileContent(repository, SHORT_ACCESS, "a.yml", "--evil").failureReason());
     }
 
     @Test
@@ -65,7 +69,7 @@ class GitHubFileContentFetcherTest
         String big = "x".repeat(ReviewPipelineConstants.MAX_EXPANDED_FILE_BYTES + 100);
         server.enqueue(new MockResponse().setResponseCode(200).setBody(big));
 
-        GitFileContentResult result = fetcher.fetchFileContent(repository, "t", "big.sql", "def5678");
+        GitFileContentResult result = fetcher.fetchFileContent(repository, SHORT_ACCESS, "big.sql", "def5678");
 
         assertFalse(result.success());
         assertEquals("FILE_TOO_LARGE", result.failureReason());
@@ -75,12 +79,12 @@ class GitHubFileContentFetcherTest
     void mapsHttpFailures()
     {
         server.enqueue(new MockResponse().setResponseCode(404));
-        assertEquals("NOT_FOUND", fetcher.fetchFileContent(repository, "t", "missing.yml", "def5678").failureReason());
+        assertEquals("NOT_FOUND", fetcher.fetchFileContent(repository, SHORT_ACCESS, "missing.yml", "def5678").failureReason());
 
         server.enqueue(new MockResponse().setResponseCode(401));
-        assertEquals("CREDENTIAL", fetcher.fetchFileContent(repository, "t", "a.yml", "def5678").failureReason());
+        assertEquals("CREDENTIAL", fetcher.fetchFileContent(repository, SHORT_ACCESS, "a.yml", "def5678").failureReason());
 
         server.enqueue(new MockResponse().setResponseCode(403).setHeader("X-RateLimit-Remaining", "0"));
-        assertEquals("RATE_LIMIT", fetcher.fetchFileContent(repository, "t", "a.yml", "def5678").failureReason());
+        assertEquals("RATE_LIMIT", fetcher.fetchFileContent(repository, SHORT_ACCESS, "a.yml", "def5678").failureReason());
     }
 }

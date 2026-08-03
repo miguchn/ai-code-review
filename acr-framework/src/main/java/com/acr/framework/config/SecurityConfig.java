@@ -103,7 +103,7 @@ public class SecurityConfig
                 requests.requestMatchers("/login", "/register", "/captchaImage").permitAll()
                     .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                     // Git 平台 Webhook 回调，安全由签名校验保证
-                    .requestMatchers(HttpMethod.POST, "/webhook/github").permitAll()
+                    .requestMatchers(HttpMethod.POST, "/webhook/**").permitAll()
                     // 静态资源，可匿名访问
                     .requestMatchers(HttpMethod.GET, "/", "/*.html", "/**.html", "/**.css", "/**.js", "/profile/**").permitAll()
                     .requestMatchers("/swagger-ui.html", "/v3/api-docs/**", "/swagger-ui/**", "/druid/**").permitAll()

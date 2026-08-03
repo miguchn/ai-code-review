@@ -23,9 +23,12 @@ import com.acr.review.domain.ReviewProject;
 import com.acr.review.domain.ReviewProjectOptions;
 import com.acr.review.domain.ReviewRepositoryInfo;
 import com.acr.review.domain.ReviewTemplate;
+import com.acr.review.git.GitAccessContext;
+import com.acr.review.git.GitAdapterRegistry;
 import com.acr.review.git.GitConnectionFailure;
 import com.acr.review.git.GitConnectionResult;
 import com.acr.review.git.GitProvider;
+import com.acr.review.git.GitProviderCodes;
 import com.acr.review.git.GitRepositoryCoordinates;
 import com.acr.review.git.GitRepositoryInfoResult;
 import com.acr.review.mapper.GitCredentialMapper;
@@ -43,11 +46,10 @@ import com.acr.system.service.ISysConfigService;
 import com.acr.system.service.ISysDeptService;
 import com.acr.system.service.ISysUserService;
 
-/** GitHub 代码项目管理。 */
+/** 代码项目管理（多平台）。 */
 @Service
 public class ReviewProjectServiceImpl implements IReviewProjectService
 {
-    private static final String PROVIDER = "GITHUB";
     private static final String LONG_LIVED_BRANCHES_KEY = "review.github.longLivedBranches";
     private static final String ROBOT_BRANCH_PREFIXES_KEY = "review.github.robotBranchPrefixes";
     private static final String PR_EVENTS_KEY = "review.github.prEvents";
@@ -59,7 +61,7 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
     private final GitCredentialMapper credentialMapper;
     private final ReviewNotifyChannelMapper notifyChannelMapper;
     private final IGitCredentialService credentialService;
-    private final GitProvider gitProvider;
+    private final GitAdapterRegistry adapterRegistry;
     private final ISysBusinessSystemService businessSystemService;
     private final ISysConfigService configService;
     private final ISysDeptService deptService;
@@ -73,7 +75,7 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
                                     GitCredentialMapper credentialMapper,
                                     ReviewNotifyChannelMapper notifyChannelMapper,
                                     IGitCredentialService credentialService,
-                                    GitProvider gitProvider,
+                                    GitAdapterRegistry adapterRegistry,
                                     ISysBusinessSystemService businessSystemService,
                                     ISysConfigService configService,
                                     ISysDeptService deptService,
@@ -87,7 +89,7 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
         this.credentialMapper = credentialMapper;
         this.notifyChannelMapper = notifyChannelMapper;
         this.credentialService = credentialService;
-        this.gitProvider = gitProvider;
+        this.adapterRegistry = adapterRegistry;
         this.businessSystemService = businessSystemService;
         this.configService = configService;
         this.deptService = deptService;
@@ -111,7 +113,6 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
     @DataScope(deptAlias = "d", userAlias = "owner", permission = "review:project:list")
     public List<ReviewProject> selectReviewProjectList(ReviewProject project)
     {
-        project.setProvider(PROVIDER);
         if (!SecurityUtils.isAdmin())
         {
             project.setAccessUserId(SecurityUtils.getUserId());
@@ -123,7 +124,6 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
     @DataScope(deptAlias = "d", userAlias = "owner", permission = "review:project:list")
     public int countReviewProjectList(ReviewProject project)
     {
-        project.setProvider(PROVIDER);
         if (!SecurityUtils.isAdmin())
         {
             project.setAccessUserId(SecurityUtils.getUserId());
@@ -155,7 +155,6 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
             .toList());
 
         GitCredential credentialQuery = new GitCredential();
-        credentialQuery.setProvider(PROVIDER);
         credentialQuery.setStatus("0");
         options.setCredentials(credentialMapper.selectGitCredentialList(credentialQuery).stream()
             .map(credential -> new ReviewProjectOptions.Option(credential.getCredentialId(), credential.getCredentialName(), null, null, credential.getStatus()))
@@ -189,22 +188,32 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
         options.setLongLivedBranches(configValues(LONG_LIVED_BRANCHES_KEY, DEFAULT_LONG_LIVED_BRANCHES));
         options.setRobotBranchPrefixes(configValues(ROBOT_BRANCH_PREFIXES_KEY, DEFAULT_ROBOT_BRANCH_PREFIXES));
         options.setPrEvents(configValues(PR_EVENTS_KEY, DEFAULT_PR_EVENTS));
-        options.setWebhookCallbackUrl(buildWebhookCallbackUrl());
+        options.setWebhookCallbackUrl(buildWebhookCallbackUrl(null));
         return options;
     }
 
     @Override
     public ReviewRepositoryInfo readRepositoryInfo(GitRepositoryReadRequest request)
     {
+        GitCredential credential = credentialMapper.selectGitCredentialById(request.getCredentialId());
+        if (credential == null || !"0".equals(credential.getStatus()))
+        {
+            return new ReviewRepositoryInfo(false, GitConnectionFailure.INVALID_REPOSITORY_URL, "Git 凭据不存在或已停用",
+                null, null, null, null, null, List.of(), List.of(), new Date());
+        }
+        String provider = credential.getProvider();
+        GitProvider gitProvider = adapterRegistry.requireProvider(provider);
+        GitAccessContext parseAccess = GitAccessContext.forParse(
+            GitCredentialServiceImpl.resolveServerUrl(provider, credential.getServerUrl()));
         GitRepositoryCoordinates repository;
         try
         {
-            repository = gitProvider.parseRepository(request.getRepositoryUrl());
+            repository = gitProvider.parseRepository(request.getRepositoryUrl(), parseAccess);
         }
         catch (IllegalArgumentException e)
         {
             return new ReviewRepositoryInfo(false, GitConnectionFailure.INVALID_REPOSITORY_URL, e.getMessage(),
-                null, null, null, null, List.of(), List.of(), new Date());
+                null, null, null, null, null, List.of(), List.of(), new Date());
         }
 
         ReviewProject existing = null;
@@ -214,7 +223,9 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
         }
 
         String token = credentialService.getPlainToken(request.getCredentialId(), true);
-        GitRepositoryInfoResult result = gitProvider.readRepository(repository, token);
+        GitAccessContext access = GitAccessContext.of(token,
+            GitCredentialServiceImpl.resolveServerUrl(provider, credential.getServerUrl()));
+        GitRepositoryInfoResult result = gitProvider.readRepository(repository, access);
         List<String> recommended = result.success()
             ? recommendTargetBranches(result.branches(), result.defaultBranch()) : List.of();
 
@@ -226,8 +237,8 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
         }
 
         return new ReviewRepositoryInfo(result.success(), result.failure(), result.message(), result.repositoryUrl(),
-            result.repositoryOwner(), result.repositoryName(), result.defaultBranch(), result.branches(), recommended,
-            result.syncedAt());
+            result.repositoryOwner(), result.repositoryName(), repository.fullPath(), result.defaultBranch(),
+            result.branches(), recommended, result.syncedAt());
     }
 
     @Override
@@ -316,9 +327,14 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
     public GitConnectionResult testConnection(Long projectId)
     {
         ReviewProject project = selectReviewProjectById(projectId);
+        GitCredential credential = credentialMapper.selectGitCredentialById(project.getCredentialId());
+        String provider = project.getProvider();
         String token = credentialService.getPlainToken(project.getCredentialId(), true);
-        GitRepositoryCoordinates repository = gitProvider.parseRepository(project.getRepositoryUrl());
-        GitConnectionResult result = gitProvider.testRepository(repository, token);
+        GitAccessContext access = GitAccessContext.of(token,
+            GitCredentialServiceImpl.resolveServerUrl(provider, credential.getServerUrl()));
+        GitProvider gitProvider = adapterRegistry.requireProvider(provider);
+        GitRepositoryCoordinates repository = gitProvider.parseRepository(project.getRepositoryUrl(), access);
+        GitConnectionResult result = gitProvider.testRepository(repository, access);
 
         ReviewProject update = new ReviewProject();
         update.setProjectId(projectId);
@@ -339,11 +355,34 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
             throw new ServiceException("项目主要语言/技术栈不能为空");
         }
         project.setPrimaryStack(project.getPrimaryStack().trim());
-        project.setProvider(PROVIDER);
+        if (StringUtils.isEmpty(project.getProvider()))
+        {
+            throw new ServiceException("Git Provider 不能为空");
+        }
+        String provider = project.getProvider().trim().toUpperCase(java.util.Locale.ROOT);
+        if (!GitProviderCodes.isSupported(provider))
+        {
+            throw new ServiceException("暂不支持的 Git Provider：" + provider);
+        }
+        project.setProvider(provider);
+
+        GitCredential credential = credentialMapper.selectGitCredentialById(project.getCredentialId());
+        if (credential == null || !"0".equals(credential.getStatus()))
+        {
+            throw new ServiceException("Git 凭据不存在或已停用");
+        }
+        if (!provider.equalsIgnoreCase(credential.getProvider()))
+        {
+            throw new ServiceException("项目平台与凭据平台不一致");
+        }
+
+        GitProvider gitProvider = adapterRegistry.requireProvider(provider);
+        GitAccessContext parseAccess = GitAccessContext.forParse(
+            GitCredentialServiceImpl.resolveServerUrl(provider, credential.getServerUrl()));
         GitRepositoryCoordinates repository;
         try
         {
-            repository = gitProvider.parseRepository(project.getRepositoryUrl());
+            repository = gitProvider.parseRepository(project.getRepositoryUrl(), parseAccess);
         }
         catch (IllegalArgumentException e)
         {
@@ -352,15 +391,20 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
         project.setRepositoryUrl(repository.canonicalUrl());
         project.setRepositoryOwner(repository.owner());
         project.setRepositoryName(repository.repository());
+        project.setRepositoryFullPath(repository.fullPath());
         if (!"0".equals(project.getPrReviewEnabled()) && !"1".equals(project.getPrReviewEnabled()))
         {
             project.setPrReviewEnabled("0");
         }
         project.setPrTargetBranches(normalizeTargetBranches(project.getPrTargetBranches()));
 
-        if (projectMapper.selectByRepository(PROVIDER, repository.owner(), repository.repository(), excludeProjectId) != null)
+        if (projectMapper.selectByFullPath(provider, repository.fullPath(), excludeProjectId) != null)
         {
-            throw new ServiceException("该 GitHub 仓库已接入");
+            throw new ServiceException("该仓库已接入");
+        }
+        if (projectMapper.selectByRepository(provider, repository.owner(), repository.repository(), excludeProjectId) != null)
+        {
+            throw new ServiceException("该仓库已接入");
         }
 
         SysBusinessSystem system = businessSystemService.selectSysBusinessSystemById(project.getBusinessSystemId());
@@ -380,12 +424,6 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
             throw new ServiceException("项目负责人不存在或已停用");
         }
         userService.checkUserDataScope(project.getOwnerUserId());
-
-        GitCredential credential = credentialMapper.selectGitCredentialById(project.getCredentialId());
-        if (credential == null || !"0".equals(credential.getStatus()))
-        {
-            throw new ServiceException("GitHub 凭据不存在或已停用");
-        }
 
         validateReviewExecutionConfig(project);
         normalizeScopeConfig(project);
@@ -509,9 +547,14 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
 
     private void readAndApplyRepositoryInfo(ReviewProject project)
     {
+        GitCredential credential = credentialMapper.selectGitCredentialById(project.getCredentialId());
+        String provider = project.getProvider();
         String token = credentialService.getPlainToken(project.getCredentialId(), true);
-        GitRepositoryCoordinates repository = gitProvider.parseRepository(project.getRepositoryUrl());
-        GitRepositoryInfoResult result = gitProvider.readRepository(repository, token);
+        GitAccessContext access = GitAccessContext.of(token,
+            GitCredentialServiceImpl.resolveServerUrl(provider, credential.getServerUrl()));
+        GitProvider gitProvider = adapterRegistry.requireProvider(provider);
+        GitRepositoryCoordinates repository = gitProvider.parseRepository(project.getRepositoryUrl(), access);
+        GitRepositoryInfoResult result = gitProvider.readRepository(repository, access);
         if (!result.success())
         {
             throw new ServiceException(result.message());
@@ -524,20 +567,21 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
         }
         if ("0".equals(project.getPrReviewEnabled()) && selected.isEmpty())
         {
-            throw new ServiceException("未识别到可用的 PR 目标分支，请在读取仓库信息后选择");
+            throw new ServiceException("未识别到可用的合并请求目标分支，请在读取仓库信息后选择");
         }
         if (!result.branches().containsAll(selected))
         {
-            throw new ServiceException("PR 目标分支必须从 GitHub 实际分支中选择");
+            throw new ServiceException("合并请求目标分支必须从实际分支中选择");
         }
 
         project.setRepositoryUrl(result.repositoryUrl());
         project.setRepositoryOwner(result.repositoryOwner());
         project.setRepositoryName(result.repositoryName());
+        project.setRepositoryFullPath(repository.fullPath());
         project.setDefaultBranch(result.defaultBranch());
         project.setPrTargetBranches(selected.isEmpty() ? null : String.join(",", selected));
         project.setLastCheckStatus("SUCCESS");
-        project.setLastCheckMessage("连接成功，可访问 GitHub 仓库");
+        project.setLastCheckMessage("连接成功，可访问仓库");
         project.setLastCheckTime(result.syncedAt());
         project.setLastBranchSyncStatus("SUCCESS");
         project.setLastBranchSyncMessage(result.message() + "，共 " + result.branches().size() + " 个分支");
@@ -549,7 +593,7 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
         ReviewProject update = new ReviewProject();
         update.setProjectId(projectId);
         update.setLastCheckStatus(result.success() ? "SUCCESS" : "FAILED");
-        update.setLastCheckMessage(result.success() ? "连接成功，可访问 GitHub 仓库" : result.message());
+        update.setLastCheckMessage(result.success() ? "连接成功，可访问仓库" : result.message());
         update.setLastCheckTime(result.syncedAt());
         update.setLastBranchSyncStatus(result.success() ? "SUCCESS" : "FAILED");
         update.setLastBranchSyncMessage(result.success()
@@ -590,15 +634,16 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
     private void fillWebhookView(ReviewProject project)
     {
         project.setWebhookSecretConfigured(StringUtils.isNotEmpty(project.getWebhookSecretCiphertext()));
-        project.setWebhookCallbackUrl(buildWebhookCallbackUrl());
+        project.setWebhookCallbackUrl(buildWebhookCallbackUrl(project.getProvider()));
     }
 
-    private String buildWebhookCallbackUrl()
+    private String buildWebhookCallbackUrl(String provider)
     {
         String base = webhookCallbackBaseUrl.endsWith("/")
             ? webhookCallbackBaseUrl.substring(0, webhookCallbackBaseUrl.length() - 1)
             : webhookCallbackBaseUrl;
-        return base + "/webhook/github";
+        String code = StringUtils.isNotEmpty(provider) ? provider.toLowerCase(java.util.Locale.ROOT) : "github";
+        return base + "/webhook/" + code;
     }
 
     private List<String> recommendTargetBranches(List<String> branches, String defaultBranch)

@@ -3,7 +3,7 @@
     <div class="page-toolbar">
       <el-page-header @back="goBack" content="审查记录详情" />
       <div class="toolbar-actions">
-        <el-button v-if="prUrl" @click="openPr">打开 PR</el-button>
+        <el-button v-if="mergeRequestLink" @click="openMergeRequest">打开 {{ mergeRequestLinkLabel }}</el-button>
         <el-button
           v-if="detailTask?.taskStatus === 'FAILED'"
           type="primary"
@@ -23,12 +23,16 @@
               {{ emptyDash(detailTask.projectName) }}
               <span v-if="detailTask.businessSystemName" class="system-inline">（{{ detailTask.businessSystemName }}）</span>
             </el-descriptions-item>
-            <el-descriptions-item label="PR 发起人">{{ emptyDash(detailTask.prAuthor) }}</el-descriptions-item>
-            <el-descriptions-item label="PR">
-              <a v-if="prUrl" :href="prUrl" target="_blank" rel="noopener noreferrer" class="pr-link">
+            <el-descriptions-item label="发起人">{{ emptyDash(detailTask.prAuthor) }}</el-descriptions-item>
+            <el-descriptions-item label="合并请求">
+              <a v-if="mergeRequestLink" :href="mergeRequestLink" target="_blank" rel="noopener noreferrer" class="pr-link">
+                <el-tag size="small" type="info" class="mr-tag">{{ mergeRequestLinkLabel }}</el-tag>
                 #{{ detailTask.prNumber }} {{ emptyDash(detailTask.prTitle) }}
               </a>
-              <span v-else>#{{ detailTask.prNumber }} {{ emptyDash(detailTask.prTitle) }}</span>
+              <span v-else>
+                <el-tag size="small" type="info" class="mr-tag">{{ mergeRequestLinkLabel }}</el-tag>
+                #{{ detailTask.prNumber }} {{ emptyDash(detailTask.prTitle) }}
+              </span>
             </el-descriptions-item>
             <el-descriptions-item label="分支">{{ emptyDash(detailTask.sourceBranch) }} → {{ emptyDash(detailTask.targetBranch) }}</el-descriptions-item>
             <el-descriptions-item label="代码变更">{{ formatCodeChange(detailTask.changedFiles, detailTask.additions, detailTask.deletions) }}</el-descriptions-item>
@@ -207,7 +211,7 @@ import {
   emptyDash, formatCodeChange, formatScore, formatDuration, shortSha,
   showStructuredResult, getScoreDimensions, getReviewSummary, getTopIssues,
   severityLabel, severityTagType, formatIssueLines, pickLatestSuccessRun,
-  engineOrModelLabel, templateLabel, buildGithubPrUrl,
+  engineOrModelLabel, templateLabel, buildMergeRequestUrl, mergeRequestLabel,
   recordConclusionLabel, recordConclusionTagType,
   issueOriginLabel, issueOriginTagType, formatDateTime
 } from '@/utils/reviewDisplay'
@@ -228,7 +232,8 @@ const resultRun = computed(() => pickLatestSuccessRun(detailRuns.value))
 const topIssues = computed(() => getTopIssues(resultRun.value))
 const newIssues = computed(() => topIssues.value.filter(issue => (issue?.origin || '').toUpperCase() !== 'EXISTING'))
 const existingIssues = computed(() => topIssues.value.filter(issue => (issue?.origin || '').toUpperCase() === 'EXISTING'))
-const prUrl = computed(() => buildGithubPrUrl(detailTask.value || {}))
+const mergeRequestLink = computed(() => buildMergeRequestUrl(detailTask.value || {}))
+const mergeRequestLinkLabel = computed(() => mergeRequestLabel(detailTask.value?.provider))
 
 function loadDetail() {
   if (!taskId.value) {
@@ -262,8 +267,8 @@ function goBack() {
   proxy.$router.push('/review/record')
 }
 
-function openPr() {
-  if (prUrl.value) window.open(prUrl.value, '_blank', 'noopener,noreferrer')
+function openMergeRequest() {
+  if (mergeRequestLink.value) window.open(mergeRequestLink.value, '_blank', 'noopener,noreferrer')
 }
 
 function goIssueLedger(issueId) {
@@ -296,6 +301,7 @@ watch(() => route.query.focus, () => focusIssuesIfNeeded())
 .system-inline { color: var(--el-text-color-secondary); font-size: 13px; }
 .pr-link { color: var(--el-color-primary); text-decoration: none; }
 .pr-link:hover { text-decoration: underline; }
+.mr-tag { margin-right: 6px; vertical-align: middle; }
 .mb12 { margin-bottom: 12px; }
 .detail-section { margin-bottom: 20px; }
 .section-hint { margin: 0 0 12px; font-size: 13px; color: var(--el-text-color-secondary); }

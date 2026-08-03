@@ -1,7 +1,7 @@
 <template>
   <section class="delivery-block detail-section">
     <div class="delivery-head">
-      <h4>PR 评论投递</h4>
+      <h4>总结评论投递</h4>
       <el-button
         v-if="canRetry"
         type="warning"
@@ -12,9 +12,9 @@
         @click="onRetry"
       >{{ retryLabel }}</el-button>
     </div>
-    <p class="section-hint">与审查结论独立：投递失败不影响任务成功状态。同一 PR 仅维护一条 ACR 总结评论。</p>
+    <p class="section-hint">与审查结论独立：投递失败不影响任务成功状态。同一合并请求仅维护一条 ACR 总结评论。</p>
     <p v-if="!delivery" class="section-hint">
-      {{ isMissingOnSuccess ? '尚未投递 PR 总结评论，可点击右上角「补投递」。' : '本任务未投递 PR 总结评论。' }}
+      {{ isMissingOnSuccess ? '尚未投递总结评论，可点击右上角「补投递」。' : '本任务未投递总结评论。' }}
     </p>
     <el-descriptions v-else :column="2" border>
       <el-descriptions-item label="投递状态">
@@ -68,8 +68,8 @@ const retryLabel = computed(() => (isMissingOnSuccess.value ? '补投递' : '重
 function onRetry() {
   if (!canRetry.value) return
   const tip = isMissingOnSuccess.value
-    ? '确认补投递 PR 总结评论？将按该 PR 最近一次成功审查结论创建或更新评论。'
-    : '确认重试投递 PR 总结评论？将按该 PR 最近一次成功审查结论更新评论。'
+    ? '确认补投递总结评论？将按该合并请求最近一次成功审查结论创建或更新评论。'
+    : '确认重试投递总结评论？将按该合并请求最近一次成功审查结论更新评论。'
   proxy.$modal.confirm(tip)
     .then(() => {
       retrying.value = true

@@ -5,5 +5,6 @@ public interface GitPullRequestDiffFetcher
 {
     String providerCode();
 
-    GitPullRequestDiffResult fetchDiff(GitRepositoryCoordinates repository, String token, String baseSha, String headSha);
+    GitPullRequestDiffResult fetchDiff(GitRepositoryCoordinates repository, GitAccessContext access,
+                                       String baseSha, String headSha);
 }

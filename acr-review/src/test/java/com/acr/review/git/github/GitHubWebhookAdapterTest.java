@@ -6,11 +6,13 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.junit.jupiter.api.Test;
 import com.acr.review.git.GitPullRequestEvent;
 import com.acr.review.git.GitRepositoryCoordinates;
+import com.acr.review.git.WebhookRequestHeaders;
 
 class GitHubWebhookAdapterTest
 {
@@ -45,7 +47,7 @@ class GitHubWebhookAdapterTest
         byte[] payload = PR_PAYLOAD.getBytes(StandardCharsets.UTF_8);
         String signature = "sha256=" + hmacHex(SECRET, payload);
 
-        assertTrue(adapter.verifySignature(SECRET, payload, signature));
+        assertTrue(adapter.verify(SECRET, payload, headers("X-Hub-Signature-256", signature)));
     }
 
     @Test
@@ -54,7 +56,7 @@ class GitHubWebhookAdapterTest
         byte[] payload = PR_PAYLOAD.getBytes(StandardCharsets.UTF_8);
         String signature = "sha256=" + hmacHex("other-secret", payload);
 
-        assertFalse(adapter.verifySignature(SECRET, payload, signature));
+        assertFalse(adapter.verify(SECRET, payload, headers("X-Hub-Signature-256", signature)));
     }
 
     @Test
@@ -62,11 +64,25 @@ class GitHubWebhookAdapterTest
     {
         byte[] payload = PR_PAYLOAD.getBytes(StandardCharsets.UTF_8);
 
-        assertFalse(adapter.verifySignature(SECRET, payload, "sha256=0000000000000000000000000000000000000000000000000000000000000000"));
-        assertFalse(adapter.verifySignature(SECRET, payload, "sha1=abc"));
-        assertFalse(adapter.verifySignature(SECRET, payload, null));
-        assertFalse(adapter.verifySignature(SECRET, payload, "sha256=not-hex"));
-        assertFalse(adapter.verifySignature(null, payload, "sha256=abc"));
+        assertFalse(adapter.verify(SECRET, payload,
+            headers("X-Hub-Signature-256", "sha256=0000000000000000000000000000000000000000000000000000000000000000")));
+        assertFalse(adapter.verify(SECRET, payload, headers("X-Hub-Signature-256", "sha1=abc")));
+        assertFalse(adapter.verify(SECRET, payload, WebhookRequestHeaders.empty()));
+        assertFalse(adapter.verify(SECRET, payload, headers("X-Hub-Signature-256", "sha256=not-hex")));
+        assertFalse(adapter.verify(null, payload, headers("X-Hub-Signature-256", "sha256=abc")));
+    }
+
+    @Test
+    void resolvesDeliveryIdAndEventTypeFromHeaders()
+    {
+        WebhookRequestHeaders headers = WebhookRequestHeaders.of(Map.of(
+            "X-GitHub-Delivery", "delivery-42",
+            "X-GitHub-Event", "pull_request"));
+
+        assertEquals("delivery-42", adapter.resolveDeliveryId(headers, PR_PAYLOAD.getBytes(StandardCharsets.UTF_8)));
+        assertEquals("pull_request", adapter.resolveEventType(headers));
+        assertTrue(adapter.isPullRequestEventType("pull_request"));
+        assertFalse(adapter.isPullRequestEventType("push"));
     }
 
     @Test
@@ -77,6 +93,7 @@ class GitHubWebhookAdapterTest
         assertNotNull(repository);
         assertEquals("miguchn", repository.owner());
         assertEquals("demo-repo", repository.repository());
+        assertEquals("miguchn/demo-repo", repository.fullPath());
     }
 
     @Test
@@ -98,6 +115,7 @@ class GitHubWebhookAdapterTest
         assertEquals("opened", event.action());
         assertEquals("miguchn", event.repositoryOwner());
         assertEquals("demo-repo", event.repositoryName());
+        assertEquals("miguchn/demo-repo", event.repositoryFullPath());
         assertEquals(12, event.prNumber());
         assertEquals("feat: add login page", event.prTitle());
         assertEquals("feature/login", event.sourceBranch());
@@ -117,6 +135,11 @@ class GitHubWebhookAdapterTest
         assertNull(adapter.parsePullRequestEvent("pull_request", "d-1", "broken".getBytes(StandardCharsets.UTF_8)));
         assertNull(adapter.parsePullRequestEvent("pull_request", "d-1",
             "{\"action\":\"opened\",\"repository\":{\"name\":\"r\",\"owner\":{\"login\":\"o\"}}}".getBytes(StandardCharsets.UTF_8)));
+    }
+
+    private static WebhookRequestHeaders headers(String name, String value)
+    {
+        return WebhookRequestHeaders.of(Map.of(name, value));
     }
 
     private static String hmacHex(String secret, byte[] payload) throws Exception

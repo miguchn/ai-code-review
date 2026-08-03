@@ -9,15 +9,18 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DuplicateKeyException;
 import com.acr.review.domain.ReviewProject;
 import com.acr.review.domain.ReviewWebhookEvent;
 import com.acr.review.domain.WebhookHandleResult;
+import com.acr.review.git.GitAdapterRegistry;
 import com.acr.review.git.GitPullRequestEvent;
 import com.acr.review.git.GitRepositoryCoordinates;
 import com.acr.review.git.GitWebhookAdapter;
+import com.acr.review.git.WebhookRequestHeaders;
 import com.acr.review.mapper.ReviewProjectMapper;
 import com.acr.review.mapper.ReviewWebhookEventMapper;
 import com.acr.review.security.CredentialCryptoService;
@@ -28,7 +31,7 @@ class ReviewWebhookServiceImplTest
 {
     private static final byte[] PAYLOAD = "{}".getBytes(StandardCharsets.UTF_8);
     private static final GitRepositoryCoordinates REPO =
-        new GitRepositoryCoordinates("miguchn", "demo", "https://github.com/miguchn/demo");
+        new GitRepositoryCoordinates("miguchn", "demo", "miguchn/demo", "https://github.com/miguchn/demo");
     private static final GitPullRequestEvent PR_EVENT = new GitPullRequestEvent(
         "d-1", "opened", "miguchn", "demo", 12, "feat: login",
         "feature/login", "dev", "aaaabbbbccccddddeeeeffff0000111122223333", "ffffeeeeddddccccbbbbaaaa3333222211110000");
@@ -36,6 +39,7 @@ class ReviewWebhookServiceImplTest
     private ReviewWebhookEventMapper eventMapper;
     private ReviewProjectMapper projectMapper;
     private GitWebhookAdapter webhookAdapter;
+    private GitAdapterRegistry adapterRegistry;
     private CredentialCryptoService cryptoService;
     private ISysConfigService configService;
     private IReviewTaskCreateService taskCreateService;
@@ -47,12 +51,21 @@ class ReviewWebhookServiceImplTest
         eventMapper = mock(ReviewWebhookEventMapper.class);
         projectMapper = mock(ReviewProjectMapper.class);
         webhookAdapter = mock(GitWebhookAdapter.class);
+        adapterRegistry = mock(GitAdapterRegistry.class);
         cryptoService = mock(CredentialCryptoService.class);
         configService = mock(ISysConfigService.class);
         taskCreateService = mock(IReviewTaskCreateService.class);
-        service = new ReviewWebhookServiceImpl(eventMapper, projectMapper, webhookAdapter,
+        service = new ReviewWebhookServiceImpl(eventMapper, projectMapper, adapterRegistry,
             cryptoService, configService, taskCreateService, 262144);
 
+        when(adapterRegistry.requireWebhookAdapter("GITHUB")).thenReturn(webhookAdapter);
+        when(webhookAdapter.resolveDeliveryId(any(), eq(PAYLOAD))).thenReturn("d-1");
+        when(webhookAdapter.resolveEventType(any())).thenAnswer(inv -> {
+            WebhookRequestHeaders headers = inv.getArgument(0);
+            return headers == null ? null : headers.get("X-GitHub-Event");
+        });
+        when(webhookAdapter.isPullRequestEventType("pull_request")).thenReturn(true);
+        when(webhookAdapter.isPullRequestEventType("ping")).thenReturn(false);
         when(webhookAdapter.parseRepository(PAYLOAD)).thenReturn(REPO);
         when(configService.selectConfigByKey("review.github.prEvents")).thenReturn("opened,reopened,synchronize");
     }
@@ -61,9 +74,9 @@ class ReviewWebhookServiceImplTest
     void acceptsValidPrEventAndCreatesTask()
     {
         ReviewProject project = enabledProject();
-        when(projectMapper.selectByRepository("GITHUB", "miguchn", "demo", null)).thenReturn(project);
+        when(projectMapper.selectByFullPath("GITHUB", "miguchn/demo", null)).thenReturn(project);
         when(cryptoService.decryptWebhookSecret("cipher")).thenReturn("secret");
-        when(webhookAdapter.verifySignature("secret", PAYLOAD, "sig")).thenReturn(true);
+        when(webhookAdapter.verify(eq("secret"), eq(PAYLOAD), any())).thenReturn(true);
         when(webhookAdapter.parsePullRequestEvent("pull_request", "d-1", PAYLOAD)).thenReturn(PR_EVENT);
         when(taskCreateService.createTaskFromEvent(eq(project), any(), eq(PR_EVENT))).thenReturn(100L);
 
@@ -90,7 +103,7 @@ class ReviewWebhookServiceImplTest
     @Test
     void ignoresEventWhenProjectNotMatched()
     {
-        when(projectMapper.selectByRepository("GITHUB", "miguchn", "demo", null)).thenReturn(null);
+        when(projectMapper.selectByFullPath("GITHUB", "miguchn/demo", null)).thenReturn(null);
 
         WebhookHandleResult result = service.handleGitHubWebhook("pull_request", "d-1", "sig", PAYLOAD);
 
@@ -104,13 +117,13 @@ class ReviewWebhookServiceImplTest
     {
         ReviewProject project = enabledProject();
         project.setStatus("1");
-        when(projectMapper.selectByRepository("GITHUB", "miguchn", "demo", null)).thenReturn(project);
+        when(projectMapper.selectByFullPath("GITHUB", "miguchn/demo", null)).thenReturn(project);
 
         WebhookHandleResult result = service.handleGitHubWebhook("pull_request", "d-1", "sig", PAYLOAD);
 
         assertEquals(200, result.httpStatus());
         verify(eventMapper).updateProcessResult(argMatchesStatus("IGNORED"));
-        verify(webhookAdapter, never()).verifySignature(any(), any(), any());
+        verify(webhookAdapter, never()).verify(any(), any(), any());
     }
 
     @Test
@@ -118,7 +131,7 @@ class ReviewWebhookServiceImplTest
     {
         ReviewProject project = enabledProject();
         project.setWebhookSecretCiphertext(null);
-        when(projectMapper.selectByRepository("GITHUB", "miguchn", "demo", null)).thenReturn(project);
+        when(projectMapper.selectByFullPath("GITHUB", "miguchn/demo", null)).thenReturn(project);
 
         WebhookHandleResult result = service.handleGitHubWebhook("pull_request", "d-1", "sig", PAYLOAD);
 
@@ -129,9 +142,9 @@ class ReviewWebhookServiceImplTest
     @Test
     void failsWhenSignatureInvalid()
     {
-        when(projectMapper.selectByRepository("GITHUB", "miguchn", "demo", null)).thenReturn(enabledProject());
+        when(projectMapper.selectByFullPath("GITHUB", "miguchn/demo", null)).thenReturn(enabledProject());
         when(cryptoService.decryptWebhookSecret("cipher")).thenReturn("secret");
-        when(webhookAdapter.verifySignature("secret", PAYLOAD, "bad-sig")).thenReturn(false);
+        when(webhookAdapter.verify(eq("secret"), eq(PAYLOAD), any())).thenReturn(false);
 
         WebhookHandleResult result = service.handleGitHubWebhook("pull_request", "d-1", "bad-sig", PAYLOAD);
 
@@ -143,9 +156,9 @@ class ReviewWebhookServiceImplTest
     @Test
     void ignoresNonPullRequestEvent()
     {
-        when(projectMapper.selectByRepository("GITHUB", "miguchn", "demo", null)).thenReturn(enabledProject());
+        when(projectMapper.selectByFullPath("GITHUB", "miguchn/demo", null)).thenReturn(enabledProject());
         when(cryptoService.decryptWebhookSecret("cipher")).thenReturn("secret");
-        when(webhookAdapter.verifySignature("secret", PAYLOAD, "sig")).thenReturn(true);
+        when(webhookAdapter.verify(eq("secret"), eq(PAYLOAD), any())).thenReturn(true);
 
         WebhookHandleResult result = service.handleGitHubWebhook("ping", "d-1", "sig", PAYLOAD);
 
@@ -156,9 +169,9 @@ class ReviewWebhookServiceImplTest
     @Test
     void ignoresActionOutsideWhitelist()
     {
-        when(projectMapper.selectByRepository("GITHUB", "miguchn", "demo", null)).thenReturn(enabledProject());
+        when(projectMapper.selectByFullPath("GITHUB", "miguchn/demo", null)).thenReturn(enabledProject());
         when(cryptoService.decryptWebhookSecret("cipher")).thenReturn("secret");
-        when(webhookAdapter.verifySignature("secret", PAYLOAD, "sig")).thenReturn(true);
+        when(webhookAdapter.verify(eq("secret"), eq(PAYLOAD), any())).thenReturn(true);
         when(webhookAdapter.parsePullRequestEvent("pull_request", "d-1", PAYLOAD))
             .thenReturn(new GitPullRequestEvent("d-1", "closed", "miguchn", "demo", 12, "t",
                 "feature/login", "dev", PR_EVENT.baseSha(), PR_EVENT.headSha()));
@@ -173,9 +186,9 @@ class ReviewWebhookServiceImplTest
     @Test
     void ignoresWhenTargetBranchNotConfigured()
     {
-        when(projectMapper.selectByRepository("GITHUB", "miguchn", "demo", null)).thenReturn(enabledProject());
+        when(projectMapper.selectByFullPath("GITHUB", "miguchn/demo", null)).thenReturn(enabledProject());
         when(cryptoService.decryptWebhookSecret("cipher")).thenReturn("secret");
-        when(webhookAdapter.verifySignature("secret", PAYLOAD, "sig")).thenReturn(true);
+        when(webhookAdapter.verify(eq("secret"), eq(PAYLOAD), any())).thenReturn(true);
         when(webhookAdapter.parsePullRequestEvent("pull_request", "d-1", PAYLOAD))
             .thenReturn(new GitPullRequestEvent("d-1", "opened", "miguchn", "demo", 12, "t",
                 "feature/login", "main", PR_EVENT.baseSha(), PR_EVENT.headSha()));
@@ -192,9 +205,9 @@ class ReviewWebhookServiceImplTest
     {
         ReviewProject project = enabledProject();
         project.setPrReviewEnabled("1");
-        when(projectMapper.selectByRepository("GITHUB", "miguchn", "demo", null)).thenReturn(project);
+        when(projectMapper.selectByFullPath("GITHUB", "miguchn/demo", null)).thenReturn(project);
         when(cryptoService.decryptWebhookSecret("cipher")).thenReturn("secret");
-        when(webhookAdapter.verifySignature("secret", PAYLOAD, "sig")).thenReturn(true);
+        when(webhookAdapter.verify(eq("secret"), eq(PAYLOAD), any())).thenReturn(true);
         when(webhookAdapter.parsePullRequestEvent("pull_request", "d-1", PAYLOAD)).thenReturn(PR_EVENT);
 
         WebhookHandleResult result = service.handleGitHubWebhook("pull_request", "d-1", "sig", PAYLOAD);
@@ -218,9 +231,32 @@ class ReviewWebhookServiceImplTest
     @Test
     void rejectsMissingDeliveryId()
     {
+        when(webhookAdapter.resolveDeliveryId(any(), eq(PAYLOAD))).thenReturn(null);
+
         WebhookHandleResult result = service.handleGitHubWebhook("pull_request", null, "sig", PAYLOAD);
 
         assertEquals(400, result.httpStatus());
+    }
+
+    @Test
+    void handleWebhookUsesProviderSpecificConfigKey()
+    {
+        when(adapterRegistry.requireWebhookAdapter("GITLAB")).thenReturn(webhookAdapter);
+        when(webhookAdapter.resolveDeliveryId(any(), eq(PAYLOAD))).thenReturn("d-2");
+        when(webhookAdapter.resolveEventType(any())).thenReturn("Merge Request Hook");
+        when(webhookAdapter.isPullRequestEventType("Merge Request Hook")).thenReturn(true);
+        when(projectMapper.selectByFullPath("GITLAB", "miguchn/demo", null)).thenReturn(enabledProject());
+        when(cryptoService.decryptWebhookSecret("cipher")).thenReturn("secret");
+        when(webhookAdapter.verify(eq("secret"), eq(PAYLOAD), any())).thenReturn(true);
+        when(webhookAdapter.parsePullRequestEvent("Merge Request Hook", "d-2", PAYLOAD)).thenReturn(PR_EVENT);
+        when(configService.selectConfigByKey("review.gitlab.mrEvents")).thenReturn("opened,reopened,synchronize");
+        when(taskCreateService.createTaskFromEvent(any(), any(), eq(PR_EVENT))).thenReturn(200L);
+
+        WebhookHandleResult result = service.handleWebhook("GITLAB",
+            WebhookRequestHeaders.of(Map.of("X-Gitlab-Event", "Merge Request Hook")), PAYLOAD);
+
+        assertEquals(200, result.httpStatus());
+        verify(configService).selectConfigByKey("review.gitlab.mrEvents");
     }
 
     private ReviewProject enabledProject()

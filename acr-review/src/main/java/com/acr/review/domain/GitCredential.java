@@ -18,6 +18,9 @@ public class GitCredential extends BaseEntity
     private String provider;
     private String authType;
 
+    /** GitLab/Gitea 必填 Web 根地址；GitHub/Gitee 必须为空。 */
+    private String serverUrl;
+
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private String token;
 
@@ -74,6 +77,17 @@ public class GitCredential extends BaseEntity
     public void setAuthType(String authType)
     {
         this.authType = authType;
+    }
+
+    @Size(max = 500, message = "服务地址不能超过500个字符")
+    public String getServerUrl()
+    {
+        return serverUrl;
+    }
+
+    public void setServerUrl(String serverUrl)
+    {
+        this.serverUrl = serverUrl;
     }
 
     @Size(max = 500, message = "GitHub Token 不能超过500个字符")

@@ -8,6 +8,7 @@ import java.io.IOException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import com.acr.review.git.GitAccessContext;
 import com.acr.review.git.GitConnectionFailure;
 import com.acr.review.git.GitConnectionResult;
 import com.acr.review.git.GitRepositoryCoordinates;
@@ -17,6 +18,8 @@ import okhttp3.mockwebserver.MockWebServer;
 
 class GitHubProviderTest
 {
+    private static final GitAccessContext ACCESS = GitAccessContext.of("test-token", "https://github.com");
+
     private MockWebServer server;
     private GitHubProvider provider;
 
@@ -37,15 +40,16 @@ class GitHubProviderTest
     @Test
     void parsesHttpsAndSshRepositoryUrls()
     {
-        GitRepositoryCoordinates https = provider.parseRepository("https://github.com/openai/codex.git");
-        GitRepositoryCoordinates ssh = provider.parseRepository("git@github.com:openai/codex.git");
+        GitRepositoryCoordinates https = provider.parseRepository("https://github.com/openai/codex.git", ACCESS);
+        GitRepositoryCoordinates ssh = provider.parseRepository("git@github.com:openai/codex.git", ACCESS);
 
         assertEquals("openai", https.owner());
         assertEquals("codex", https.repository());
+        assertEquals("openai/codex", https.fullPath());
         assertEquals("https://github.com/openai/codex", https.canonicalUrl());
         assertEquals(https, ssh);
         assertThrows(IllegalArgumentException.class,
-            () -> provider.parseRepository("https://gitlab.com/openai/codex"));
+            () -> provider.parseRepository("https://gitlab.com/openai/codex", ACCESS));
     }
 
     @Test
@@ -53,7 +57,7 @@ class GitHubProviderTest
     {
         server.enqueue(json(200, "{\"login\":\"octocat\"}"));
 
-        GitConnectionResult result = provider.testCredential("test-token");
+        GitConnectionResult result = provider.testCredential(ACCESS);
 
         assertTrue(result.isSuccess());
         assertEquals("Bearer test-token", server.takeRequest().getHeader("Authorization"));
@@ -67,7 +71,7 @@ class GitHubProviderTest
         server.enqueue(json(200, "{\"default_branch\":\"main\",\"html_url\":\"https://github.com/openai/codex\"}"));
 
         GitConnectionResult result = provider.testRepository(
-            provider.parseRepository("https://github.com/openai/codex"), "test-token");
+            provider.parseRepository("https://github.com/openai/codex", ACCESS), ACCESS);
 
         assertTrue(result.isSuccess());
         assertEquals("main", result.getDefaultBranch());
@@ -79,13 +83,13 @@ class GitHubProviderTest
     void classifiesInvalidCredentialAndMissingRepository()
     {
         server.enqueue(json(401, "{}"));
-        GitConnectionResult invalidCredential = provider.testCredential("test-token");
+        GitConnectionResult invalidCredential = provider.testCredential(ACCESS);
         assertEquals(GitConnectionFailure.INVALID_CREDENTIAL, invalidCredential.getFailure());
 
         server.enqueue(json(200, "{\"login\":\"octocat\"}"));
         server.enqueue(json(404, "{}"));
         GitConnectionResult missingRepository = provider.testRepository(
-            provider.parseRepository("https://github.com/openai/missing"), "test-token");
+            provider.parseRepository("https://github.com/openai/missing", ACCESS), ACCESS);
         assertEquals(GitConnectionFailure.REPOSITORY_NOT_FOUND, missingRepository.getFailure());
     }
 
@@ -98,7 +102,7 @@ class GitHubProviderTest
         server.enqueue(json(200, branches(100, 2)));
 
         GitRepositoryInfoResult result = provider.readRepository(
-            provider.parseRepository("https://github.com/openai/codex"), "test-token");
+            provider.parseRepository("https://github.com/openai/codex", ACCESS), ACCESS);
 
         assertTrue(result.success());
         assertEquals(102, result.branches().size());

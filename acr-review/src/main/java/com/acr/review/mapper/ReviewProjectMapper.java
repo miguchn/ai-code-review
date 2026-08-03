@@ -19,6 +19,10 @@ public interface ReviewProjectMapper
                                      @Param("repositoryName") String repositoryName,
                                      @Param("excludeProjectId") Long excludeProjectId);
 
+    ReviewProject selectByFullPath(@Param("provider") String provider,
+                                   @Param("repositoryFullPath") String repositoryFullPath,
+                                   @Param("excludeProjectId") Long excludeProjectId);
+
     int insertReviewProject(ReviewProject project);
 
     int updateReviewProject(ReviewProject project);

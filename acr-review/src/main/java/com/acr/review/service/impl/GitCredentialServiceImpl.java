@@ -2,36 +2,39 @@ package com.acr.review.service.impl;
 
 import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.acr.common.exception.ServiceException;
 import com.acr.common.utils.SecurityUtils;
 import com.acr.common.utils.StringUtils;
 import com.acr.review.domain.GitCredential;
+import com.acr.review.git.GitAccessContext;
+import com.acr.review.git.GitAdapterRegistry;
 import com.acr.review.git.GitConnectionResult;
 import com.acr.review.git.GitProvider;
+import com.acr.review.git.GitProviderCodes;
 import com.acr.review.mapper.GitCredentialMapper;
 import com.acr.review.security.CredentialCryptoService;
 import com.acr.review.service.IGitCredentialService;
 
-/** GitHub PAT 凭据管理。 */
+/** Git 访问凭据管理（多平台）。 */
 @Service
 public class GitCredentialServiceImpl implements IGitCredentialService
 {
-    private static final String PROVIDER = "GITHUB";
     private static final String AUTH_TYPE = "PAT";
 
     private final GitCredentialMapper credentialMapper;
     private final CredentialCryptoService cryptoService;
-    private final GitProvider gitProvider;
+    private final GitAdapterRegistry adapterRegistry;
 
     public GitCredentialServiceImpl(GitCredentialMapper credentialMapper,
                                     CredentialCryptoService cryptoService,
-                                    GitProvider gitProvider)
+                                    GitAdapterRegistry adapterRegistry)
     {
         this.credentialMapper = credentialMapper;
         this.cryptoService = cryptoService;
-        this.gitProvider = gitProvider;
+        this.adapterRegistry = adapterRegistry;
     }
 
     @Override
@@ -40,7 +43,7 @@ public class GitCredentialServiceImpl implements IGitCredentialService
         GitCredential credential = credentialMapper.selectGitCredentialById(credentialId);
         if (credential == null)
         {
-            throw new ServiceException("GitHub 凭据不存在");
+            throw new ServiceException("Git 凭据不存在");
         }
         return credential;
     }
@@ -48,7 +51,6 @@ public class GitCredentialServiceImpl implements IGitCredentialService
     @Override
     public List<GitCredential> selectGitCredentialList(GitCredential credential)
     {
-        credential.setProvider(PROVIDER);
         return credentialMapper.selectGitCredentialList(credential);
     }
 
@@ -58,7 +60,7 @@ public class GitCredentialServiceImpl implements IGitCredentialService
         normalize(credential);
         if (StringUtils.isEmpty(credential.getToken()))
         {
-            throw new ServiceException("新增 GitHub 凭据时必须输入 Token");
+            throw new ServiceException("新增凭据时必须输入 Token");
         }
         checkNameUnique(credential);
         credential.setTokenCiphertext(cryptoService.encrypt(credential.getToken().trim()));
@@ -110,8 +112,12 @@ public class GitCredentialServiceImpl implements IGitCredentialService
     @Override
     public GitConnectionResult testConnection(Long credentialId)
     {
+        GitCredential credential = selectGitCredentialById(credentialId);
         String token = getPlainToken(credentialId, false);
-        GitConnectionResult result = gitProvider.testCredential(token);
+        String provider = credential.getProvider();
+        GitProvider gitProvider = adapterRegistry.requireProvider(provider);
+        GitConnectionResult result = gitProvider.testCredential(
+            GitAccessContext.of(token, resolveServerUrl(provider, credential.getServerUrl())));
         GitCredential update = new GitCredential();
         update.setCredentialId(credentialId);
         update.setLastCheckStatus(result.isSuccess() ? "SUCCESS" : "FAILED");
@@ -128,11 +134,11 @@ public class GitCredentialServiceImpl implements IGitCredentialService
         GitCredential credential = credentialMapper.selectGitCredentialSecretById(credentialId);
         if (credential == null)
         {
-            throw new ServiceException("GitHub 凭据不存在");
+            throw new ServiceException("Git 凭据不存在");
         }
         if (requireEnabled && !"0".equals(credential.getStatus()))
         {
-            throw new ServiceException("项目绑定的 GitHub 凭据已停用");
+            throw new ServiceException("项目绑定的 Git 凭据已停用");
         }
         return cryptoService.decrypt(credential.getTokenCiphertext());
     }
@@ -140,8 +146,18 @@ public class GitCredentialServiceImpl implements IGitCredentialService
     private void normalize(GitCredential credential)
     {
         credential.setCredentialName(credential.getCredentialName().trim());
-        credential.setProvider(PROVIDER);
+        if (StringUtils.isEmpty(credential.getProvider()))
+        {
+            throw new ServiceException("Git Provider 不能为空");
+        }
+        String provider = credential.getProvider().trim().toUpperCase(Locale.ROOT);
+        if (!GitProviderCodes.isSupported(provider))
+        {
+            throw new ServiceException("暂不支持的 Git Provider：" + provider);
+        }
+        credential.setProvider(provider);
         credential.setAuthType(AUTH_TYPE);
+        credential.setServerUrl(normalizeStoredServerUrl(provider, credential.getServerUrl()));
         if (!"0".equals(credential.getStatus()) && !"1".equals(credential.getStatus()))
         {
             credential.setStatus("0");
@@ -150,9 +166,45 @@ public class GitCredentialServiceImpl implements IGitCredentialService
 
     private void checkNameUnique(GitCredential credential)
     {
-        if (credentialMapper.selectByProviderAndName(PROVIDER, credential.getCredentialName(), credential.getCredentialId()) != null)
+        if (credentialMapper.selectByProviderAndName(credential.getProvider(), credential.getCredentialName(),
+            credential.getCredentialId()) != null)
         {
-            throw new ServiceException("GitHub 凭据名称已存在");
+            throw new ServiceException("同平台下凭据名称已存在");
         }
+    }
+
+    static String normalizeStoredServerUrl(String provider, String serverUrl)
+    {
+        if (GitProviderCodes.requiresServerUrl(provider))
+        {
+            if (StringUtils.isEmpty(serverUrl))
+            {
+                throw new ServiceException("GitLab/Gitea 凭据必须填写服务地址");
+            }
+            return GitAccessContext.normalizeServerUrl(serverUrl.trim());
+        }
+        if (GitProviderCodes.forbidsServerUrl(provider) && StringUtils.isNotEmpty(serverUrl))
+        {
+            throw new ServiceException("GitHub/Gitee 凭据不需要填写服务地址");
+        }
+        return null;
+    }
+
+    static String resolveServerUrl(String provider, String serverUrl)
+    {
+        if (GitProviderCodes.requiresServerUrl(provider))
+        {
+            if (StringUtils.isEmpty(serverUrl))
+            {
+                throw new ServiceException("凭据缺少服务地址，请重新保存");
+            }
+            return GitAccessContext.normalizeServerUrl(serverUrl);
+        }
+        String defaultUrl = GitProviderCodes.defaultServerUrl(provider);
+        if (defaultUrl == null)
+        {
+            throw new ServiceException("无法解析平台默认服务地址：" + provider);
+        }
+        return defaultUrl;
     }
 }
