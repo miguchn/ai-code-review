@@ -71,13 +71,13 @@
       </el-table-column>
       <el-table-column label="操作" width="260" fixed="right" class-name="small-padding fixed-width">
         <template #default="scope">
-          <el-button link type="primary" icon="Promotion" :loading="testingId === scope.row.channelId"
+          <el-button link type="primary" :loading="testingId === scope.row.channelId"
             @click="handleTest(scope.row)" v-hasPermi="['review:notify:test']">测试</el-button>
-          <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-hasPermi="['review:notify:edit']">修改</el-button>
+          <el-button link type="primary" @click="handleUpdate(scope.row)" v-hasPermi="['review:notify:edit']">修改</el-button>
           <el-button link type="primary" @click="handleStatusChange(scope.row)" v-hasPermi="['review:notify:status']">
             {{ scope.row.status === '0' ? '停用' : '启用' }}
           </el-button>
-          <el-button link type="primary" icon="Delete" @click="handleDelete(scope.row)" v-hasPermi="['review:notify:remove']">删除</el-button>
+          <el-button link type="primary" @click="handleDelete(scope.row)" v-hasPermi="['review:notify:remove']">删除</el-button>
         </template>
       </el-table-column>
     </el-table>

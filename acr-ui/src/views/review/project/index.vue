@@ -94,10 +94,10 @@
           <el-button link type="primary" @click="handleStatusChange(scope.row)" v-hasPermi="['review:project:status']">
             {{ scope.row.status === '0' ? '停用' : '启用' }}
           </el-button>
-          <el-button link type="primary" icon="Connection" :loading="testingId === scope.row.projectId"
+          <el-button link type="primary" :loading="testingId === scope.row.projectId"
             @click="handleTest(scope.row)" v-hasPermi="['review:project:test']">检测</el-button>
-          <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-hasPermi="['review:project:edit']">修改</el-button>
-          <el-button link type="primary" icon="Delete" @click="handleDelete(scope.row)" v-hasPermi="['review:project:remove']">删除</el-button>
+          <el-button link type="primary" @click="handleUpdate(scope.row)" v-hasPermi="['review:project:edit']">修改</el-button>
+          <el-button link type="primary" @click="handleDelete(scope.row)" v-hasPermi="['review:project:remove']">删除</el-button>
         </template>
       </el-table-column>
     </el-table>

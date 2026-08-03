@@ -149,9 +149,13 @@ INSERT INTO sys_menu
    is_frame, is_cache, menu_type, visible, status, perms, icon,
    create_by, create_time, update_by, update_time, remark)
 SELECT 129, '通知渠道', 5, 1, 'channel', 'notify/channel/index', '', '',
-       1, 0, 'C', '0', '0', 'review:notify:list', 'guide',
+       1, 0, 'C', '0', '0', 'review:notify:list', 'channel',
        'admin', SYSDATE(), '', NULL, '钉钉/企微/飞书群机器人渠道'
 WHERE NOT EXISTS (SELECT 1 FROM sys_menu WHERE menu_id = 129);
+
+-- 已执行过本脚本的环境：通知渠道菜单图标由 guide（不存在）修正为 channel
+UPDATE sys_menu SET icon = 'channel', update_by = 'admin', update_time = SYSDATE()
+WHERE menu_id = 129 AND icon <> 'channel';
 
 INSERT INTO sys_menu
   (menu_id, menu_name, parent_id, order_num, path, component, query, route_name,

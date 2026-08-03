@@ -1,27 +1,26 @@
 <template>
-  <div v-if="decision" class="scope-decision">
+  <div v-if="decision" class="sd">
     <el-alert
       v-if="decision.degraded"
       type="warning"
       :closable="false"
       show-icon
-      class="scope-alert"
       :title="degradedTitle"
     />
 
-    <template v-else>
-      <div class="scope-summary">
+    <div v-else class="sd-panel">
+      <div class="sd-summary">
         <el-tag v-if="isOcr" size="small" type="info" effect="plain">OCR 引擎路径</el-tag>
-        <span v-if="summaryText" class="scope-summary-text">{{ summaryText }}</span>
-        <span v-if="finalDiffChars" class="scope-summary-meta">注入 Diff {{ finalDiffChars }}</span>
-        <span v-if="decision.appliedExcludeGlobs != null" class="scope-summary-meta">
-          --exclude {{ decision.appliedExcludeGlobs }} 条
+        <span v-if="summaryText" class="sd-summary-text">{{ summaryText }}</span>
+        <span class="sd-summary-meta">
+          <span v-if="finalDiffChars">注入 Diff {{ finalDiffChars }}</span>
+          <span v-if="decision.appliedExcludeGlobs != null">--exclude {{ decision.appliedExcludeGlobs }} 条</span>
         </span>
       </div>
 
-      <div v-if="configItems.length" class="scope-config">
-        <span class="scope-config-label">生效配置</span>
-        <span v-for="item in configItems" :key="item" class="scope-config-item">{{ item }}</span>
+      <div v-if="configItems.length" class="sd-config">
+        <span class="sd-config-label">生效配置</span>
+        <span class="sd-config-text">{{ configItems.join(' · ') }}</span>
       </div>
 
       <el-alert
@@ -29,57 +28,38 @@
         type="info"
         :closable="false"
         show-icon
-        class="scope-alert"
+        class="sd-note"
         :title="decision.note"
       />
 
-      <el-collapse v-if="hasDetails" class="scope-collapse">
-        <el-collapse-item v-if="includedFiles.length" :title="`纳入审查（${includedFiles.length}）`" name="included">
-          <div v-for="path in includedFiles" :key="path" class="scope-path">{{ path }}</div>
-        </el-collapse-item>
-
-        <el-collapse-item v-if="excludedFiles.length" :title="`排除（${excludedFiles.length}）`" name="excluded">
-          <div v-for="file in excludedFiles" :key="file.path" class="scope-row">
-            <span class="scope-path">{{ file.path }}</span>
-            <el-tag size="small" type="info" effect="plain">{{ scopeExcludeReasonLabel(file.reason) }}</el-tag>
+      <div v-if="sections.length" class="sd-sections">
+        <div v-for="sec in sections" :key="sec.key" class="sd-section">
+          <button type="button" class="sd-section-head" :aria-expanded="isOpen(sec.key)" @click="toggle(sec.key)">
+            <el-icon class="sd-chevron" :class="{ open: isOpen(sec.key) }"><ArrowRight /></el-icon>
+            <span class="sd-section-title">{{ sec.title }}</span>
+            <span class="sd-section-count">{{ sec.rows.length }}</span>
+          </button>
+          <div v-show="isOpen(sec.key)" class="sd-section-body">
+            <div v-for="(row, i) in sec.rows" :key="row.path || row.text || i" class="sd-row">
+              <span v-if="row.text != null" class="sd-warn-text">{{ row.text }}</span>
+              <template v-else>
+                <span class="sd-path" :class="{ 'sd-path-warn': row.warn }">{{ row.path }}</span>
+                <span v-if="(row.tags && row.tags.length) || row.reason" class="sd-row-meta">
+                  <el-tag v-for="tag in row.tags" :key="tag.label" size="small" :type="tag.type" effect="plain">
+                    {{ tag.label }}
+                  </el-tag>
+                  <span v-if="row.reason" class="sd-reason">{{ row.reason }}</span>
+                </span>
+              </template>
+            </div>
+            <p v-if="sec.hint" class="sd-hint">{{ sec.hint }}</p>
           </div>
-        </el-collapse-item>
-
-        <el-collapse-item v-if="expandedFiles.length" :title="`高影响扩展（${expandedFiles.length}）`" name="expanded">
-          <div v-for="file in expandedFiles" :key="file.path" class="scope-row">
-            <span class="scope-path">{{ file.path }}</span>
-            <el-tag size="small" effect="plain">{{ scopeExpandRuleLabel(file.rule) }}</el-tag>
-            <el-tag v-if="file.status" size="small" :type="scopeExpandStatusTagType(file.status)" effect="plain">
-              {{ scopeExpandStatusLabel(file.status) }}
-            </el-tag>
-            <span v-if="file.reason" class="scope-reason">{{ file.reason }}</span>
-          </div>
-        </el-collapse-item>
-
-        <el-collapse-item v-if="recordOnlyFiles.length" :title="`记录类变更（${recordOnlyFiles.length}）`" name="record">
-          <div v-for="file in recordOnlyFiles" :key="file.path" class="scope-row">
-            <span class="scope-path">{{ file.path }}</span>
-            <el-tag size="small" type="info" effect="plain">{{ scopeRecordReasonLabel(file.reason) }}</el-tag>
-          </div>
-        </el-collapse-item>
-
-        <el-collapse-item v-if="droppedFiles.length" :title="`预算截断丢弃（${droppedFiles.length}）`" name="dropped">
-          <div v-for="path in droppedFiles" :key="path" class="scope-path scope-dropped">{{ path }}</div>
-        </el-collapse-item>
-
-        <el-collapse-item v-if="parseWarnings.length" :title="`解析警告（${parseWarnings.length}）`" name="warnings">
-          <div v-for="(warning, index) in parseWarnings" :key="index" class="scope-warning">{{ warning }}</div>
-        </el-collapse-item>
-
-        <el-collapse-item v-if="skippedPatterns.length" :title="`未传入的排除规则（${skippedPatterns.length}）`" name="skipped">
-          <div v-for="pattern in skippedPatterns" :key="pattern" class="scope-path">{{ pattern }}</div>
-          <p class="scope-hint">含逗号的 glob 无法经 CLI --exclude 表达，未生效。</p>
-        </el-collapse-item>
-      </el-collapse>
-      <p v-else class="scope-empty">全部文件均纳入审查，无排除/扩展/截断。</p>
-    </template>
+        </div>
+      </div>
+      <p v-else class="sd-empty">全部文件均纳入审查，无排除/扩展/截断。</p>
+    </div>
   </div>
-  <span v-else class="scope-empty">—</span>
+  <span v-else class="sd-empty">—</span>
 </template>
 
 <script setup name="ScopeDecisionView">
@@ -107,18 +87,9 @@ const finalDiffChars = computed(() => {
   return chars ? `${Number(chars).toLocaleString()} 字符` : ''
 })
 
-const includedFiles = computed(() => list(decision.value?.includedFiles))
-const excludedFiles = computed(() => list(decision.value?.excludedFiles))
-const expandedFiles = computed(() => list(decision.value?.expandedFiles))
-const recordOnlyFiles = computed(() => list(decision.value?.recordOnlyFiles))
-const droppedFiles = computed(() => list(decision.value?.droppedFiles))
-const parseWarnings = computed(() => list(decision.value?.parseWarnings))
-const skippedPatterns = computed(() => list(decision.value?.skippedExcludePatterns))
-
-const hasDetails = computed(() =>
-  includedFiles.value.length || excludedFiles.value.length || expandedFiles.value.length
-  || recordOnlyFiles.value.length || droppedFiles.value.length || parseWarnings.value.length
-  || skippedPatterns.value.length)
+function list(value) {
+  return Array.isArray(value) ? value : []
+}
 
 const configItems = computed(() => {
   const config = decision.value?.config
@@ -132,51 +103,169 @@ const configItems = computed(() => {
   return items
 })
 
-function list(value) {
-  return Array.isArray(value) ? value : []
+/** 分组统一归一为 { key, title, hint?, rows: [{ path?, text?, warn?, tags?, reason? }] }，模板一套渲染。 */
+const sections = computed(() => {
+  const d = decision.value
+  if (!d) return []
+  const secs = []
+  const included = list(d.includedFiles)
+  if (included.length) {
+    secs.push({ key: 'included', title: '纳入审查', rows: included.map(path => ({ path })) })
+  }
+  const excluded = list(d.excludedFiles)
+  if (excluded.length) {
+    secs.push({
+      key: 'excluded', title: '排除',
+      rows: excluded.map(f => ({ path: f.path, tags: [{ label: scopeExcludeReasonLabel(f.reason), type: 'info' }] }))
+    })
+  }
+  const expanded = list(d.expandedFiles)
+  if (expanded.length) {
+    secs.push({
+      key: 'expanded', title: '高影响扩展',
+      rows: expanded.map(f => ({
+        path: f.path,
+        tags: [
+          { label: scopeExpandRuleLabel(f.rule), type: 'info' },
+          f.status ? { label: scopeExpandStatusLabel(f.status), type: scopeExpandStatusTagType(f.status) } : null
+        ].filter(Boolean),
+        reason: f.reason
+      }))
+    })
+  }
+  const recordOnly = list(d.recordOnlyFiles)
+  if (recordOnly.length) {
+    secs.push({
+      key: 'record', title: '记录类变更',
+      rows: recordOnly.map(f => ({ path: f.path, tags: [{ label: scopeRecordReasonLabel(f.reason), type: 'info' }] }))
+    })
+  }
+  const dropped = list(d.droppedFiles)
+  if (dropped.length) {
+    secs.push({ key: 'dropped', title: '预算截断丢弃', rows: dropped.map(path => ({ path, warn: true })) })
+  }
+  const warnings = list(d.parseWarnings)
+  if (warnings.length) {
+    secs.push({ key: 'warnings', title: '解析警告', rows: warnings.map(text => ({ text })) })
+  }
+  const skipped = list(d.skippedExcludePatterns)
+  if (skipped.length) {
+    secs.push({
+      key: 'skipped', title: '未传入的排除规则',
+      hint: '含逗号的 glob 无法经 CLI --exclude 表达，未生效。',
+      rows: skipped.map(path => ({ path }))
+    })
+  }
+  return secs
+})
+
+const openKeys = ref(new Set())
+watch(sections, secs => {
+  openKeys.value = new Set(secs.length ? [secs[0].key] : [])
+}, { immediate: true })
+
+function isOpen(key) {
+  return openKeys.value.has(key)
+}
+
+function toggle(key) {
+  const next = new Set(openKeys.value)
+  if (next.has(key)) {
+    next.delete(key)
+  } else {
+    next.add(key)
+  }
+  openKeys.value = next
 }
 </script>
 
 <style scoped>
-.scope-decision { min-width: 320px; }
-.scope-alert { margin-bottom: 8px; }
-.scope-summary {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 6px;
-  font-size: 13px;
+.sd { min-width: 320px; }
+
+.sd-panel {
+  padding: 12px 16px;
+  background: var(--el-fill-color-light);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
 }
-.scope-summary-text { font-weight: 600; }
-.scope-summary-meta { color: var(--el-text-color-secondary); font-size: 12px; }
-.scope-config {
+
+.sd-summary {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   flex-wrap: wrap;
-  gap: 6px 12px;
-  margin-bottom: 8px;
+  gap: 4px 10px;
+}
+.sd-summary-text { font-size: 13px; font-weight: 600; color: var(--el-text-color-primary); }
+.sd-summary-meta {
+  display: inline-flex;
+  gap: 10px;
   font-size: 12px;
   color: var(--el-text-color-secondary);
 }
-.scope-config-label { font-weight: 600; color: var(--el-text-color-regular); }
-.scope-collapse { border-top: 1px solid var(--el-border-color-lighter); }
-.scope-row {
+
+.sd-config {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 12px;
+}
+.sd-config-label { flex: none; font-weight: 600; color: var(--el-text-color-regular); }
+.sd-config-text { color: var(--el-text-color-secondary); }
+
+.sd-note { margin-top: 8px; }
+
+.sd-sections { margin-top: 8px; border-top: 1px solid var(--el-border-color-lighter); }
+.sd-section + .sd-section { border-top: 1px solid var(--el-border-color-extra-light); }
+
+.sd-section-head {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 2px 0;
-  font-size: 12px;
+  gap: 6px;
+  width: 100%;
+  padding: 7px 2px;
+  background: none;
+  border: 0;
+  cursor: pointer;
 }
-.scope-path {
+.sd-section-head:hover .sd-section-title { color: var(--el-text-color-primary); }
+.sd-section-head:focus-visible {
+  outline: 2px solid var(--el-color-primary);
+  outline-offset: 1px;
+  border-radius: 4px;
+}
+.sd-chevron {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  transition: transform 0.16s ease-out;
+}
+.sd-chevron.open { transform: rotate(90deg); }
+.sd-section-title { font-size: 13px; font-weight: 600; color: var(--el-text-color-regular); }
+.sd-section-count { font-size: 12px; color: var(--el-text-color-secondary); }
+
+.sd-section-body {
+  max-height: 168px;
+  padding: 0 2px 10px 20px;
+  overflow-y: auto;
+}
+.sd-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 0;
+}
+.sd-path {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
+  color: var(--el-text-color-regular);
   word-break: break-all;
 }
-.scope-reason { color: var(--el-text-color-secondary); font-size: 12px; }
-.scope-dropped { color: var(--el-color-warning); }
-.scope-warning { color: var(--el-color-warning); font-size: 12px; }
-.scope-hint { margin: 6px 0 0; font-size: 12px; color: var(--el-text-color-secondary); }
-.scope-empty { margin: 0; font-size: 12px; color: var(--el-text-color-secondary); }
+.sd-path-warn { color: var(--el-color-warning); }
+.sd-row-meta { display: inline-flex; align-items: center; flex: none; gap: 6px; }
+.sd-reason { font-size: 12px; color: var(--el-text-color-secondary); }
+.sd-warn-text { font-size: 12px; color: var(--el-color-warning); }
+
+.sd-hint { margin: 6px 0 0; font-size: 12px; color: var(--el-text-color-secondary); }
+.sd-empty { margin: 0; font-size: 12px; color: var(--el-text-color-secondary); }
 </style>
