@@ -1,11 +1,15 @@
 <div align="center">
-    <h1>AI Code Review</h1>
+    <h1>AI Code Review — 企业级代码审查治理平台</h1>
 </div>
 
 <div align="center">
   <a href="https://github.com/miguchn/ai-code-review">
      <img src="docs/images/readme-hero.png" alt="AI Code Review —— AI 机器人审查代码" width="760" />
   </a>
+</div>
+
+<div align="center">
+    <em>你的每行代码，都要经得起 AI 的审视。</em>
 </div>
 
 <p align="center">

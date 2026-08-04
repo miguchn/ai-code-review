@@ -1,11 +1,15 @@
 <div align="center">
-    <h1>AI Code Review</h1>
+    <h1>AI Code Review — Enterprise Code Review Governance Platform</h1>
 </div>
 
 <div align="center">
   <a href="https://github.com/miguchn/ai-code-review">
      <img src="docs/images/readme-hero.png" alt="AI Code Review — AI robot reviewing code" width="760" />
   </a>
+</div>
+
+<div align="center">
+    <em>Every line of your code must withstand AI scrutiny.</em>
 </div>
 
 <p align="center">
