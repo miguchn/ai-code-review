@@ -1,3 +1,8 @@
+<p align="center">
+  <img src="docs/images/readme-hero.png" alt="AI Code Review — AI robot reviewing code" width="760" /><br/>
+  <em>Every line of your code must withstand AI scrutiny.</em>
+</p>
+
 # AI Code Review — Enterprise Code Review Governance Platform
 
 <p align="center">
@@ -25,11 +30,6 @@ AI Code Review is an **enterprise-internal code review governance platform** dep
 The main loop:
 
 **Project & credential setup → webhook event intake → review execution → summary comment writeback → IM notification → issue disposition → workbench**
-
-<p align="center">
-  <img src="docs/images/readme-hero.png" alt="AI Code Review — AI robot reviewing code" width="760" /><br/>
-  <em>Every line of your code must withstand AI scrutiny.</em>
-</p>
 
 It focuses on: **uncontrollable review coverage** (reliable webhooks, idempotent tasks, failure recovery), **results that are hard to reach or act on** (writeback to the code platform, tiered notification, confirm/fix/appeal loops), **ungoverned rules and models** (versioned review policies, encrypted keys, tracked degradation), **unmeasurable quality** (unified coverage/latency/valid-issue metrics), and **weak enterprise security and audit** (org/business-system/project data isolation with audit trails).
 
