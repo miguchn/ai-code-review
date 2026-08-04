@@ -243,7 +243,7 @@ getCookie()
   min-height: 100vh;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(360px, 400px);
-  gap: clamp(24px, 4vw, 48px);
+  gap: clamp(16px, 3vw, 36px);
   align-items: center;
   padding: clamp(28px, 6vh, 72px) clamp(20px, 4vw, 40px) clamp(32px, 7vh, 80px);
   box-sizing: border-box;
@@ -258,8 +258,10 @@ getCookie()
   align-items: flex-start;
   gap: clamp(20px, 3.5vh, 32px);
   max-width: 780px;
+  justify-self: end;
   margin-bottom: 0;
   padding: 0;
+  border: 0;
   border-radius: 0;
   color: inherit;
   background: transparent;
@@ -679,6 +681,7 @@ getCookie()
   .login-hero {
     min-height: auto;
     order: 0;
+    justify-self: center;
     align-items: center;
     text-align: center;
   }
