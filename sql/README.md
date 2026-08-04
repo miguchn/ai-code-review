@@ -1,8 +1,31 @@
 # SQL 文件规范
 
-## 执行顺序
+## 初始化策略
 
-数据库脚本必须按文件名前缀从小到大执行：
+分两条路径，按环境状态二选一：
+
+### 新装环境：一次性初始化（推荐）
+
+执行 `init-full.sql` 一条命令完成全部初始化（库、41 张表结构、菜单/字典/参数/内置审查模板等初始数据），等效于按序号执行完 `01`–`29` 全部增量脚本后的最终状态：
+
+```bash
+mysql --default-character-set=utf8mb4 -u root -p < sql/init-full.sql
+```
+
+- 脚本自带 `CREATE DATABASE IF NOT EXISTS ai_code_review`，无需预先建库；
+- 含 `DROP TABLE`，可重复执行，但重复执行会重建全部表结构与初始数据，**已有业务数据的环境严禁使用**；
+- 仅包含初始化数据，不含项目、凭据、任务、问题、投递等业务数据；
+- 初始管理员 `admin / admin123`，首次登录后立即修改密码。
+
+### 存量 / 升级环境：按序号执行增量脚本
+
+已在共享环境执行过的库，继续按文件名前缀从小到大执行**尚未执行过**的增量脚本，不得使用 `init-full.sql`。含中文的增量脚本必须显式指定连接字符集：
+
+```bash
+mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/NN_xxx.sql
+```
+
+## 增量脚本清单
 
 1. `01_core_schema.sql`：初始化系统核心表和基础数据。
 2. `02_quartz_schema.sql`：初始化 Quartz 调度表。
@@ -34,37 +57,35 @@
 28. `28_delivery_menu_route_name.sql`：补齐「投递记录」菜单 `route_name`（缺失时路由名与前端组件名不一致，keep-alive 不缓存导致页面一直加载）。
 29. `29_multi_git_provider_access.sql`：多 Git Provider 数据层（凭据 `server_url`、项目/事件 `repository_full_path`、平台字典、投递渠道扩展、MR/PR 事件参数；须 utf8mb4）。
 
-含中文的增量脚本执行时请显式指定连接字符集，例如：
+## init-full.sql 维护规则
+
+- `init-full.sql` 是增量脚本执行完成后的最终状态快照（2026-08-04 生成，基线 `main 871a460`，含 01–29 全部增量）。
+- **新增编号增量脚本后必须同步重新生成**，否则新装环境会缺失该脚本的变更。生成方式（在已执行全部增量脚本的本地库上）：
 
 ```bash
-mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/09_llm_custom_provider.sql
-mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/10_llm_menu_charset_fix.sql
-mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/11_llm_column_comment_charset_fix.sql
-mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/13_review_pipeline_m3.sql
-mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/14_review_dual_mode_prompt.sql
-mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/15_review_template_config.sql
-mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/16_review_scoring_result_protocol.sql
-mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/17_review_project_engine_code_nullable.sql
-mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/18_review_execution_hardening.sql
-mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/19_review_record_experience_m3_1.sql
-mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/20_review_record_charset_fix.sql
-mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/21_review_record_list_fields.sql
-mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/22_review_scope_config.sql
-mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/23_review_delivery_record.sql
-mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/24_notification_management_m5.sql
-mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/25_issue_ledger_m6.sql
-mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/26_issue_delivery_trace_m6_1.sql
-mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/27_sidebar_menu_ia.sql
-mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/28_delivery_menu_route_name.sql
-mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/29_multi_git_provider_access.sql
+# 1. 导出表结构最终态（去除 AUTO_INCREMENT 当前值）
+docker exec mysql8 mysqldump -uroot -proot --default-character-set=utf8mb4 --single-transaction \
+  --skip-comments --add-drop-table --no-data ai_code_review \
+  | sed -E 's/ AUTO_INCREMENT=[0-9]+//g' > /tmp/acr_schema.sql
+
+# 2. 导出初始化数据（仅脚本体系内的种子表，勿含业务数据）
+docker exec mysql8 mysqldump -uroot -proot --default-character-set=utf8mb4 --single-transaction \
+  --skip-comments --no-create-info --complete-insert --extended-insert=FALSE \
+  ai_code_review sys_user sys_user_role sys_role sys_role_menu sys_dept sys_menu \
+  sys_dict_type sys_dict_data sys_config review_template > /tmp/acr_seed.sql
+
+# 3. 按 init-full.sql 现有头部注释格式组装：文件头说明 + CREATE DATABASE/USE + 结构 + 数据；
+#    更新头部「生成日期」与「基线」提交号。
 ```
+
+- 重新生成后必须在空库执行一次验证（建临时库导入，与源库对比表清单、结构与种子数据行数），通过后删除临时库。
 
 ## 命名规则
 
 - 文件名统一使用 `NN_purpose.sql` 格式。
 - `NN` 为两位十进制连续序号，从 `01` 开始，表示全局执行顺序。
 - `purpose` 使用小写英文 `snake_case`，准确描述脚本用途，不再附加日期。
-- 新增脚本使用当前最大序号加一，不插号、不复用或调整已有序号。例如，下一个脚本应命名为 `09_xxx.sql`。
+- 新增脚本使用当前最大序号加一，不插号、不复用或调整已有序号。例如，下一个脚本应命名为 `30_xxx.sql`。
 - 文件名中的顺序必须与脚本依赖一致；新增脚本前应先确认所有前置表、字段、菜单或配置已由更小序号的脚本创建。
 - 文件重命名后，必须同步更新 README、部署文档和 SQL 前置说明中的引用。
 
@@ -72,4 +93,5 @@ mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/29_multi_g
 
 - 已在共享环境执行的脚本不得修改执行语句；后续结构或数据变更应新增下一个连续序号脚本。
 - 不得通过复制旧脚本保留无序号或日期命名的兼容副本，避免同一逻辑被重复执行。
+- 新增增量脚本必须同步重新生成 `init-full.sql`（见上节）。
 - SQL 内容、幂等策略和执行方式应遵守 `rules/delivery.md`。

@@ -1,6 +1,15 @@
 # Changelog
 
-## [Unreleased] - 2026-08-03
+## [Unreleased]
+
+### 文档与 SQL 收口（MVP 功能面收口后）
+
+- MVP（V0.1）功能面收口定稿：README（中英文）、部署文档、产品路线图的当前能力、模块清单与初始化指引更新至与实际功能一致；路线图基线更新至 2026-08-04 并补充 MVP 达成状态
+- 新增 `sql/init-full.sql` 一次性初始化脚本（01–29 全部增量执行完成后的最终状态快照，含表结构与初始数据）：新环境一条命令完成初始化，存量环境继续按编号增量脚本升级；`sql/README.md` 补充双轨初始化策略与重新生成规则；`docs/deployment.md` 与本地 `init-local.sh` 同步
+
+## [0.3.0] - 2026-08-04
+
+MVP（V0.1）功能收口版本：M1–M7 纵向切片 + 四平台 Git Provider 全部落地，待真实环境验收。
 
 ### 多平台 Git Provider 接入（GitLab / Gitee / Gitea）
 

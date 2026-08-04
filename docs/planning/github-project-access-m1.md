@@ -1,5 +1,7 @@
 # P0/M1 GitHub 项目接入设计
 
+> **实施状态（2026-08-01）：已落地。** 浏览器验收验证了真实 GitHub API 的无效凭据失败路径（未提供可用测试 PAT），Provider 成功与分页路径由自动测试覆盖；Webhook 由 M2 交付。2026-08-03 起凭据/项目/Webhook 已按统一契约扩展至 GitLab、Gitee、Gitea 四平台（见 `docs/superpowers/specs/2026-08-03-multi-git-provider-access-design.md`），本文保留为 GitHub 切片的设计事实源。
+
 ## 1. 目标与范围
 
 本切片交付可独立验收的 GitHub 项目接入：平台管理员维护 GitHub PAT 凭据，项目负责人维护代码项目并绑定业务系统、部门、负责人和凭据，系统可真实调用 GitHub API 检测凭据或仓库连接。

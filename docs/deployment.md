@@ -16,41 +16,15 @@
 
 ### 1. 数据库初始化
 
-```bash
-# 创建数据库
-mysql -u root -p -e "CREATE DATABASE ai_code_review DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;"
+**新装环境**：执行一次性初始化脚本（库、全部表结构、菜单/字典/参数/内置审查模板等初始数据），等效于按序号执行完 01–29 全部增量脚本的最终状态：
 
-# 导入基础表结构
-mysql -u root -p ai_code_review < sql/01_core_schema.sql
-mysql -u root -p ai_code_review < sql/02_quartz_schema.sql
-mysql -u root -p ai_code_review < sql/03_system_management.sql
-mysql -u root -p ai_code_review < sql/04_github_project_access.sql
-mysql -u root -p ai_code_review < sql/05_github_pr_scope.sql
-mysql -u root -p ai_code_review < sql/06_llm_model_service.sql
-mysql -u root -p ai_code_review < sql/07_review_engine.sql
-mysql -u root -p ai_code_review < sql/08_github_pr_webhook.sql
-mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/09_llm_custom_provider.sql
-mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/10_llm_menu_charset_fix.sql
-mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/11_llm_column_comment_charset_fix.sql
-mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/12_review_engine_button_fix.sql
-mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/13_review_pipeline_m3.sql
-mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/14_review_dual_mode_prompt.sql
-mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/15_review_template_config.sql
-mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/16_review_scoring_result_protocol.sql
-mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/17_review_project_engine_code_nullable.sql
-mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/18_review_execution_hardening.sql
-mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/19_review_record_experience_m3_1.sql
-mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/20_review_record_charset_fix.sql
-mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/21_review_record_list_fields.sql
-mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/22_review_scope_config.sql
-mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/23_review_delivery_record.sql
-mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/24_notification_management_m5.sql
-mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/25_issue_ledger_m6.sql
-mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/26_issue_delivery_trace_m6_1.sql
-mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/27_sidebar_menu_ia.sql
-mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/28_delivery_menu_route_name.sql
-mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/29_multi_git_provider_access.sql
+```bash
+mysql --default-character-set=utf8mb4 -u root -p < sql/init-full.sql
 ```
+
+脚本自带 `CREATE DATABASE IF NOT EXISTS ai_code_review`，无需预先建库。初始管理员 `admin / admin123`，首次登录后立即修改密码。
+
+**存量 / 升级环境**：不得使用 `init-full.sql`（含 `DROP TABLE`，会重建表结构并清空业务数据），请按 `sql/README.md` 说明继续按序号执行尚未执行的增量脚本。
 
 > 含中文的 SQL 必须使用 `--default-character-set=utf8mb4`（或脚本内 `SET NAMES utf8mb4`）执行，避免菜单/字典文案乱码。
 
@@ -170,7 +144,7 @@ services:
 
 ## 多平台 Git Webhook 与凭据配置
 
-升级或新装环境须执行 `sql/29_multi_git_provider_access.sql`（含中文，须 `--default-character-set=utf8mb4`）。该脚本新增凭据 `server_url`、项目/事件 `repository_full_path`、平台字典与分平台投递渠道。
+多平台数据层（凭据 `server_url`、项目/事件 `repository_full_path`、平台字典与分平台投递渠道）已包含在 `sql/init-full.sql` 中；存量环境升级须执行 `sql/29_multi_git_provider_access.sql`（含中文，须 `--default-character-set=utf8mb4`）。
 
 ### Webhook URL（四平台）
 
