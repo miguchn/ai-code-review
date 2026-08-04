@@ -1,21 +1,22 @@
 # AI Code Review — 企业级代码审查治理平台
 
-> **语言**：[English](README.en.md) | 简体中文
-
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/github/license/miguchn/ai-code-review" alt="License" /></a>
   <img src="https://img.shields.io/badge/Java-17-orange.svg" alt="Java 17" />
   <img src="https://img.shields.io/badge/Spring_Boot-4.x-6DB33F.svg" alt="Spring Boot 4" />
-  <img src="https://img.shields.io/badge/Vue-3.x-42b883.svg" alt="Vue 3" /><br/>
+  <img src="https://img.shields.io/badge/Vue-3.x-42b883.svg" alt="Vue 3" />
+</p>
+<p align="center">
   <img src="https://img.shields.io/badge/GitHub-supported-181717.svg" alt="GitHub supported" />
   <img src="https://img.shields.io/badge/GitLab-supported-FC6D26.svg" alt="GitLab supported" />
   <img src="https://img.shields.io/badge/Gitee-supported-C71D23.svg" alt="Gitee supported" />
   <img src="https://img.shields.io/badge/Gitea-supported-609926.svg" alt="Gitea supported" />
 </p>
 <p align="center">
-  <img src="docs/images/readme-hero.png" alt="AI Code Review —— AI 机器人审查代码" width="760" /><br/>
-  <em>你的每行代码，都要经得起 AI 的审视。</em>
+  <a href="README.en.md">English</a> | 简体中文
 </p>
+
+---
 
 ## 什么是 AI Code Review？
 
@@ -24,6 +25,11 @@ AI Code Review 是部署在 Git 代码托管平台旁侧的**企业级代码审�
 主链路为：
 
 **项目与凭据配置 → Webhook 事件接收 → 审查执行 → 总结评论回写 → IM 通知 → 问题处置 → 工作台**
+
+<p align="center">
+  <img src="docs/images/readme-hero.png" alt="AI Code Review —— AI 机器人审查代码" width="760" /><br/>
+  <em>你的每行代码，都要经得起 AI 的审视。</em>
+</p>
 
 产品主要解决：**审查覆盖不可控**（可信 Webhook、幂等任务与失败恢复）、**结果难触达难行动**（结论回写代码平台、分级通知、问题确认/修复/申诉闭环）、**规则与模型不可治理**（版本化审查方案、密钥加密与降级追踪）、**质量不可度量**（统一覆盖率/时延/有效问题口径）、**企业安全与审计不足**（组织/业务系统/项目数据隔离与审计）。
 

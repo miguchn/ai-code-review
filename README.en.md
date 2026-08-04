@@ -1,21 +1,22 @@
 # AI Code Review — Enterprise Code Review Governance Platform
 
-> **Language**: English | [简体中文](README.md)
-
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/github/license/miguchn/ai-code-review" alt="License" /></a>
   <img src="https://img.shields.io/badge/Java-17-orange.svg" alt="Java 17" />
   <img src="https://img.shields.io/badge/Spring_Boot-4.x-6DB33F.svg" alt="Spring Boot 4" />
-  <img src="https://img.shields.io/badge/Vue-3.x-42b883.svg" alt="Vue 3" /><br/>
+  <img src="https://img.shields.io/badge/Vue-3.x-42b883.svg" alt="Vue 3" />
+</p>
+<p align="center">
   <img src="https://img.shields.io/badge/GitHub-supported-181717.svg" alt="GitHub supported" />
   <img src="https://img.shields.io/badge/GitLab-supported-FC6D26.svg" alt="GitLab supported" />
   <img src="https://img.shields.io/badge/Gitee-supported-C71D23.svg" alt="Gitee supported" />
   <img src="https://img.shields.io/badge/Gitea-supported-609926.svg" alt="Gitea supported" />
 </p>
 <p align="center">
-  <img src="docs/images/readme-hero.png" alt="AI Code Review — AI robot reviewing code" width="760" /><br/>
-  <em>Every line of your code must withstand AI scrutiny.</em>
+  English | <a href="README.md">简体中文</a>
 </p>
+
+---
 
 ## What is AI Code Review?
 
@@ -24,6 +25,11 @@ AI Code Review is an **enterprise-internal code review governance platform** dep
 The main loop:
 
 **Project & credential setup → webhook event intake → review execution → summary comment writeback → IM notification → issue disposition → workbench**
+
+<p align="center">
+  <img src="docs/images/readme-hero.png" alt="AI Code Review — AI robot reviewing code" width="760" /><br/>
+  <em>Every line of your code must withstand AI scrutiny.</em>
+</p>
 
 It focuses on: **uncontrollable review coverage** (reliable webhooks, idempotent tasks, failure recovery), **results that are hard to reach or act on** (writeback to the code platform, tiered notification, confirm/fix/appeal loops), **ungoverned rules and models** (versioned review policies, encrypted keys, tracked degradation), **unmeasurable quality** (unified coverage/latency/valid-issue metrics), and **weak enterprise security and audit** (org/business-system/project data isolation with audit trails).
 
