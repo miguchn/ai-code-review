@@ -6,20 +6,14 @@
   <a href="LICENSE"><img src="https://img.shields.io/github/license/miguchn/ai-code-review" alt="License" /></a>
   <img src="https://img.shields.io/badge/Java-17-orange.svg" alt="Java 17" />
   <img src="https://img.shields.io/badge/Spring_Boot-4.x-6DB33F.svg" alt="Spring Boot 4" />
-  <img src="https://img.shields.io/badge/Vue-3.x-42b883.svg" alt="Vue 3" />
-</p>
-<p align="center">
+  <img src="https://img.shields.io/badge/Vue-3.x-42b883.svg" alt="Vue 3" /><br/>
   <img src="https://img.shields.io/badge/GitHub-supported-181717.svg" alt="GitHub supported" />
   <img src="https://img.shields.io/badge/GitLab-supported-FC6D26.svg" alt="GitLab supported" />
   <img src="https://img.shields.io/badge/Gitee-supported-C71D23.svg" alt="Gitee supported" />
   <img src="https://img.shields.io/badge/Gitea-supported-609926.svg" alt="Gitea supported" />
 </p>
-
 <p align="center">
-  <img src="docs/images/readme-hero.png" alt="AI Code Review —— AI 机器人审查代码" width="760" />
-</p>
-
-<p align="center">
+  <img src="docs/images/readme-hero.png" alt="AI Code Review —— AI 机器人审查代码" width="760" /><br/>
   <em>你的每行代码，都要经得起 AI 的审视。</em>
 </p>
 
