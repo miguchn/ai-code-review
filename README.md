@@ -214,3 +214,9 @@ services:
 - 代码提交前必须通过编译和单元测试
 - 每个代码审查业务切片开发前，先按 `skills/plan-review-feature/` 明确范围与验收
 - 新业务遵守 `rules/architecture.md` 和 `rules/delivery.md`
+
+## 开源协议
+
+本项目基于 [MIT License](LICENSE) 开源：可自由使用、修改、分发和商用，保留版权声明与协议文本即可。
+
+本项目依赖的第三方组件（Spring Boot、Vue、Element Plus、alibaba/open-code-review 等）按各自原始协议授权，不因本协议而改变。

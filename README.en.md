@@ -207,3 +207,9 @@ services:
 - Must pass build and unit tests before commit
 - Before slicing a code review feature, use `skills/plan-review-feature/` to scope and define acceptance
 - New business must follow `rules/architecture.md` and `rules/delivery.md`
+
+## License
+
+This project is licensed under the [MIT License](LICENSE): free to use, modify, distribute, and commercialize, provided the copyright notice and license text are retained.
+
+Third-party dependencies (Spring Boot, Vue, Element Plus, alibaba/open-code-review, etc.) remain under their own original licenses.
