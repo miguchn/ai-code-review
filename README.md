@@ -3,13 +3,13 @@
 </div>
 
 <div align="center">
-  <a href="https://github.com/miguchn/ai-code-review">
-     <img src="docs/images/readme-hero.png" alt="AI Code Review —— AI 机器人审查代码" width="760" />
-  </a>
+    <em>你的每行代码，都要经得起 AI 的审视。</em>
 </div>
 
 <div align="center">
-    <em>你的每行代码，都要经得起 AI 的审视。</em>
+  <a href="https://github.com/miguchn/ai-code-review">
+     <img src="docs/images/readme-hero.png" alt="AI Code Review —— AI 机器人审查代码" width="760" />
+  </a>
 </div>
 
 <p align="center">

@@ -3,13 +3,13 @@
 </div>
 
 <div align="center">
-  <a href="https://github.com/miguchn/ai-code-review">
-     <img src="docs/images/readme-hero.png" alt="AI Code Review — AI robot reviewing code" width="760" />
-  </a>
+    <em>Every line of your code must withstand AI scrutiny.</em>
 </div>
 
 <div align="center">
-    <em>Every line of your code must withstand AI scrutiny.</em>
+  <a href="https://github.com/miguchn/ai-code-review">
+     <img src="docs/images/readme-hero.png" alt="AI Code Review — AI robot reviewing code" width="760" />
+  </a>
 </div>
 
 <p align="center">
