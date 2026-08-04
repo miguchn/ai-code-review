@@ -630,10 +630,9 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
         }
     }
 
-    /** 详情视图组装：配置状态与回调地址，Secret 密文不出服务端。 */
+    /** 详情视图组装：回调地址；Secret 是否配置由列表 SQL 布尔列给出，密文不出服务端。 */
     private void fillWebhookView(ReviewProject project)
     {
-        project.setWebhookSecretConfigured(StringUtils.isNotEmpty(project.getWebhookSecretCiphertext()));
         project.setWebhookCallbackUrl(buildWebhookCallbackUrl(project.getProvider()));
     }
 

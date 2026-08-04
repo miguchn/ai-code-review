@@ -46,6 +46,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="lastBranchSyncMessage" column="last_branch_sync_message" />
         <result property="lastBranchSyncTime" column="last_branch_sync_time" />
         <result property="webhookSecretCiphertext" column="webhook_secret_ciphertext" />
+        <result property="webhookSecretConfigured" column="webhook_secret_configured" />
         <result property="lastWebhookTime" column="last_webhook_time" />
         <result property="lastWebhookResult" column="last_webhook_result" />
         <result property="remark" column="remark" />
@@ -68,6 +69,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                p.review_mode, p.engine_code,
                p.scope_exclude_patterns, p.scope_include_tests, p.scope_report_existing, p.scope_expand_enabled,
                p.notify_enabled, p.notify_channel_id, nc.channel_name as notify_channel_name, p.notify_on_failure,
+               (p.webhook_secret_ciphertext is not null and p.webhook_secret_ciphertext != '') as webhook_secret_configured,
                p.status, p.last_check_status, p.last_check_message, p.last_check_time,
                p.last_branch_sync_status, p.last_branch_sync_message, p.last_branch_sync_time,
                p.last_webhook_time, p.last_webhook_result,
