@@ -19,6 +19,10 @@
   <img src="docs/images/readme-hero.png" alt="AI Code Review —— AI 机器人审查代码" width="760" />
 </p>
 
+<p align="center">
+  <em>你的每行代码，都要经得起 AI 的审视。</em>
+</p>
+
 ## 什么是 AI Code Review？
 
 AI Code Review 是部署在 Git 代码托管平台旁侧的**企业级代码审查治理平台**。它把 MR/PR 代码变更转化为可追踪的审查、整改、复核、度量和审计闭环；GitHub、GitLab、Gitee、Gitea 等代码平台仍是代码协作与合并事实源。
