@@ -1,9 +1,13 @@
-<p align="center">
-  <img src="docs/images/readme-hero.png" alt="AI Code Review —— AI 机器人审查代码" width="760" /><br/>
-  <em>你的每行代码，都要经得起 AI 的审视。</em>
-</p>
+<div align="center">
+  <a href="https://github.com/miguchn/ai-code-review">
+     <img src="docs/images/readme-hero.png" alt="AI Code Review —— AI 机器人审查代码" width="760" />
+  </a>
+  <h1>你的每行代码，都要经得起 AI 的审视。</h1>
+</div>
 
-# AI Code Review
+<div align="center">
+    <h1>AI Code Review</h1>
+</div>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/github/license/miguchn/ai-code-review" alt="License" /></a>

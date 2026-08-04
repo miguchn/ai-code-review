@@ -1,9 +1,13 @@
-<p align="center">
-  <img src="docs/images/readme-hero.png" alt="AI Code Review — AI robot reviewing code" width="760" /><br/>
-  <em>Every line of your code must withstand AI scrutiny.</em>
-</p>
+<div align="center">
+  <a href="https://github.com/miguchn/ai-code-review">
+     <img src="docs/images/readme-hero.png" alt="AI Code Review — AI robot reviewing code" width="760" />
+  </a>
+  <h1>Every line of your code must withstand AI scrutiny.</h1>
+</div>
 
-# AI Code Review
+<div align="center">
+    <h1>AI Code Review</h1>
+</div>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/github/license/miguchn/ai-code-review" alt="License" /></a>
