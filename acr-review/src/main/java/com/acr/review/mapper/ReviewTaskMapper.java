@@ -3,6 +3,7 @@ package com.acr.review.mapper;
 import java.util.Date;
 import java.util.List;
 import com.acr.review.domain.ReviewTask;
+import com.acr.review.domain.result.ReviewConclusionDailyStat;
 import org.apache.ibatis.annotations.Param;
 
 /** 审查任务数据访问。 */
@@ -58,4 +59,7 @@ public interface ReviewTaskMapper
 
     /** 最近审查任务（按 task_id 倒序，LIMIT 5）。 */
     List<ReviewTask> selectRecentTasks(ReviewTask task);
+
+    /** 审查结论按天聚合（与 countReviewRecordList 同 join、同 DataScope；时间窗走 params.beginTime/endTime）。 */
+    List<ReviewConclusionDailyStat> selectReviewConclusionTrend(ReviewTask task);
 }

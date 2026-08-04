@@ -9,6 +9,7 @@ import com.acr.review.domain.ReviewProject;
 import com.acr.review.domain.ReviewTask;
 import com.acr.review.domain.ReviewTaskDetail;
 import com.acr.review.domain.ReviewTaskRun;
+import com.acr.review.domain.result.ReviewConclusionDailyStat;
 import com.acr.review.mapper.ReviewProjectMapper;
 import com.acr.review.mapper.ReviewTaskMapper;
 import com.acr.review.mapper.ReviewTaskRunMapper;
@@ -55,6 +56,13 @@ public class ReviewRecordServiceImpl implements IReviewRecordService
     public int countReviewRecordList(ReviewTask query)
     {
         return taskMapper.countReviewRecordList(query);
+    }
+
+    @Override
+    @DataScope(deptAlias = "d", userAlias = "owner", permission = "review:record:list")
+    public List<ReviewConclusionDailyStat> selectReviewConclusionTrend(ReviewTask query)
+    {
+        return taskMapper.selectReviewConclusionTrend(query);
     }
 
     @Override

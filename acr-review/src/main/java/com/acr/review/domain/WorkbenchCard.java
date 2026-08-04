@@ -8,6 +8,7 @@ public class WorkbenchCard
 {
     private String type;
     private String title;
+    private String subtitle;
     private int count;
     private String link;
     private Map<String, String> query = new LinkedHashMap<>();
@@ -18,8 +19,14 @@ public class WorkbenchCard
 
     public WorkbenchCard(String type, String title, int count, String link, Map<String, String> query)
     {
+        this(type, title, null, count, link, query);
+    }
+
+    public WorkbenchCard(String type, String title, String subtitle, int count, String link, Map<String, String> query)
+    {
         this.type = type;
         this.title = title;
+        this.subtitle = subtitle;
         this.count = count;
         this.link = link;
         if (query != null)
@@ -46,6 +53,16 @@ public class WorkbenchCard
     public void setTitle(String title)
     {
         this.title = title;
+    }
+
+    public String getSubtitle()
+    {
+        return subtitle;
+    }
+
+    public void setSubtitle(String subtitle)
+    {
+        this.subtitle = subtitle;
     }
 
     public int getCount()

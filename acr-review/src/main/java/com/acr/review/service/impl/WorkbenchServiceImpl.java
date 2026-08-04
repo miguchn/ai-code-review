@@ -5,10 +5,12 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Service;
+import com.acr.common.enums.LlmProviderCode;
 import com.acr.common.utils.DateUtils;
 import com.acr.common.utils.SecurityUtils;
 import com.acr.common.utils.StringUtils;
@@ -21,16 +23,23 @@ import com.acr.review.domain.ReviewProject;
 import com.acr.review.domain.ReviewTask;
 import com.acr.review.domain.WorkbenchCard;
 import com.acr.review.domain.WorkbenchConstants;
+import com.acr.review.domain.WorkbenchModelItem;
+import com.acr.review.domain.WorkbenchModels;
 import com.acr.review.domain.WorkbenchRecentItem;
 import com.acr.review.domain.WorkbenchScope;
 import com.acr.review.domain.WorkbenchSummary;
 import com.acr.review.domain.WorkbenchToday;
+import com.acr.review.domain.WorkbenchTrend;
+import com.acr.review.domain.WorkbenchTrendPoint;
+import com.acr.review.domain.result.ReviewConclusionDailyStat;
 import com.acr.review.service.IReviewDeliveryService;
 import com.acr.review.service.IReviewIssueService;
 import com.acr.review.service.IReviewProjectService;
 import com.acr.review.service.IReviewRecordService;
 import com.acr.review.service.IReviewTaskService;
 import com.acr.review.service.IWorkbenchService;
+import com.acr.system.domain.SysAiModelConfig;
+import com.acr.system.service.ISysAiModelConfigService;
 
 /**
  * 工作台汇总：按菜单权限裁剪卡片，计数走各列表同款 DataScope。
@@ -40,24 +49,29 @@ public class WorkbenchServiceImpl implements IWorkbenchService
 {
     private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern(DateUtils.YYYY_MM_DD);
     private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
+    /** 与 LlmCallServiceImpl 写入的 lastCheckResult 成功前缀一致。 */
+    private static final String CHECK_SUCCESS_PREFIX = "成功";
 
     private final IReviewProjectService projectService;
     private final IReviewIssueService issueService;
     private final IReviewTaskService taskService;
     private final IReviewRecordService recordService;
     private final IReviewDeliveryService deliveryService;
+    private final ISysAiModelConfigService aiModelConfigService;
 
     public WorkbenchServiceImpl(IReviewProjectService projectService,
                                 IReviewIssueService issueService,
                                 IReviewTaskService taskService,
                                 IReviewRecordService recordService,
-                                IReviewDeliveryService deliveryService)
+                                IReviewDeliveryService deliveryService,
+                                ISysAiModelConfigService aiModelConfigService)
     {
         this.projectService = projectService;
         this.issueService = issueService;
         this.taskService = taskService;
         this.recordService = recordService;
         this.deliveryService = deliveryService;
+        this.aiModelConfigService = aiModelConfigService;
     }
 
     @Override
@@ -69,6 +83,117 @@ public class WorkbenchServiceImpl implements IWorkbenchService
         summary.setToday(buildToday());
         summary.setRecent(buildRecent());
         return summary;
+    }
+
+    @Override
+    public WorkbenchTrend getTrend(int days)
+    {
+        if (!SecurityUtils.hasPermi(WorkbenchConstants.PERM_RECORD_LIST))
+        {
+            return null;
+        }
+        int normalized = Math.min(Math.max(days, 1), WorkbenchConstants.TREND_MAX_DAYS);
+        LocalDate end = LocalDate.now(ZONE);
+        LocalDate begin = end.minusDays(normalized - 1L);
+
+        ReviewTask query = new ReviewTask();
+        query.getParams().put("beginTime", begin.format(DAY));
+        query.getParams().put("endTime", end.format(DAY));
+        List<ReviewConclusionDailyStat> stats = recordService.selectReviewConclusionTrend(query);
+
+        Map<String, ReviewConclusionDailyStat> byDate = new HashMap<>();
+        if (stats != null)
+        {
+            for (ReviewConclusionDailyStat stat : stats)
+            {
+                byDate.put(stat.getStatDate(), stat);
+            }
+        }
+        List<WorkbenchTrendPoint> points = new ArrayList<>();
+        for (int i = 0; i < normalized; i++)
+        {
+            String day = begin.plusDays(i).format(DAY);
+            ReviewConclusionDailyStat stat = byDate.get(day);
+            points.add(stat == null
+                ? new WorkbenchTrendPoint(day, 0, 0, 0, 0)
+                : new WorkbenchTrendPoint(day, stat.getPassCount(), stat.getWarnCount(),
+                    stat.getBlockCount(), stat.getFailedCount()));
+        }
+        return new WorkbenchTrend(normalized, begin.format(DAY), end.format(DAY), points);
+    }
+
+    @Override
+    public WorkbenchModels getModelHealth()
+    {
+        SysAiModelConfig query = new SysAiModelConfig();
+        query.setEnabled("1");
+        List<SysAiModelConfig> enabled = aiModelConfigService.selectSysAiModelConfigList(query);
+
+        WorkbenchModels models = new WorkbenchModels();
+        List<WorkbenchModelItem> items = new ArrayList<>();
+        Date latestCheck = null;
+        int online = 0;
+        if (enabled != null)
+        {
+            for (SysAiModelConfig config : enabled)
+            {
+                WorkbenchModelItem item = new WorkbenchModelItem();
+                item.setModelName(config.getModelName());
+                item.setProvider(config.getProvider());
+                item.setProviderLabel(providerLabel(config));
+                item.setModel(config.getModel());
+                item.setIsDefault("1".equals(config.getIsDefault()));
+                String checkStatus = deriveCheckStatus(config);
+                item.setCheckStatus(checkStatus);
+                item.setLastCheckResult(config.getLastCheckResult());
+                if (config.getLastCheckTime() != null)
+                {
+                    item.setLastCheckTime(DateUtils.parseDateToStr(DateUtils.YYYY_MM_DD_HH_MM, config.getLastCheckTime()));
+                    if (latestCheck == null || config.getLastCheckTime().after(latestCheck))
+                    {
+                        latestCheck = config.getLastCheckTime();
+                    }
+                }
+                if (WorkbenchConstants.CHECK_STATUS_SUCCESS.equals(checkStatus))
+                {
+                    online++;
+                }
+                items.add(item);
+            }
+        }
+        models.setEnabledCount(items.size());
+        models.setOnlineCount(online);
+        if (latestCheck != null)
+        {
+            models.setLastCheckTime(DateUtils.parseDateToStr(DateUtils.YYYY_MM_DD_HH_MM, latestCheck));
+        }
+        models.setItems(items);
+        return models;
+    }
+
+    static String deriveCheckStatus(SysAiModelConfig config)
+    {
+        if (config.getLastCheckTime() == null || StringUtils.isEmpty(config.getLastCheckResult()))
+        {
+            return WorkbenchConstants.CHECK_STATUS_NEVER;
+        }
+        return config.getLastCheckResult().startsWith(CHECK_SUCCESS_PREFIX)
+            ? WorkbenchConstants.CHECK_STATUS_SUCCESS
+            : WorkbenchConstants.CHECK_STATUS_FAILED;
+    }
+
+    private static String providerLabel(SysAiModelConfig config)
+    {
+        LlmProviderCode code = LlmProviderCode.fromCode(config.getProvider());
+        if (code != null && !code.isCustom())
+        {
+            return code.getLabel();
+        }
+        if (StringUtils.isNotEmpty(config.getCustomProviderName()))
+        {
+            return config.getCustomProviderName();
+        }
+        return code != null ? code.getLabel() : "自定义";
     }
 
     private WorkbenchScope buildScope()
@@ -97,11 +222,21 @@ public class WorkbenchServiceImpl implements IWorkbenchService
             cards.add(issueCard(
                 WorkbenchConstants.CARD_ISSUE_AWAITING_CONFIRM,
                 WorkbenchConstants.TITLE_ISSUE_AWAITING_CONFIRM,
-                ReviewIssueConstants.STATUS_AWAITING_CONFIRM));
+                WorkbenchConstants.SUBTITLE_ORIGIN_NEW,
+                ReviewIssueConstants.STATUS_AWAITING_CONFIRM,
+                ReviewIssueConstants.ORIGIN_NEW));
+            cards.add(issueCard(
+                WorkbenchConstants.CARD_ISSUE_EXISTING_CONFIRM,
+                WorkbenchConstants.TITLE_ISSUE_EXISTING_CONFIRM,
+                WorkbenchConstants.SUBTITLE_ORIGIN_EXISTING,
+                ReviewIssueConstants.STATUS_AWAITING_CONFIRM,
+                ReviewIssueConstants.ORIGIN_EXISTING));
             cards.add(issueCard(
                 WorkbenchConstants.CARD_ISSUE_AWAITING_FIX,
                 WorkbenchConstants.TITLE_ISSUE_AWAITING_FIX,
-                ReviewIssueConstants.STATUS_AWAITING_FIX));
+                WorkbenchConstants.SUBTITLE_ALL_ORIGIN,
+                ReviewIssueConstants.STATUS_AWAITING_FIX,
+                null));
         }
         if (SecurityUtils.hasPermi(WorkbenchConstants.PERM_RECORD_LIST))
         {
@@ -136,15 +271,18 @@ public class WorkbenchServiceImpl implements IWorkbenchService
         return cards;
     }
 
-    private WorkbenchCard issueCard(String type, String title, String status)
+    private WorkbenchCard issueCard(String type, String title, String subtitle, String status, String origin)
     {
         ReviewIssue query = new ReviewIssue();
         query.setStatus(status);
-        query.setOrigin(ReviewIssueConstants.ORIGIN_NEW);
         Map<String, String> q = new LinkedHashMap<>();
         q.put("status", status);
-        q.put("origin", ReviewIssueConstants.ORIGIN_NEW);
-        return new WorkbenchCard(type, title, issueService.countIssueList(query), WorkbenchConstants.LINK_ISSUE, q);
+        if (origin != null)
+        {
+            query.setOrigin(origin);
+            q.put("origin", origin);
+        }
+        return new WorkbenchCard(type, title, subtitle, issueService.countIssueList(query), WorkbenchConstants.LINK_ISSUE, q);
     }
 
     private WorkbenchCard highRiskCard()
@@ -166,6 +304,7 @@ public class WorkbenchServiceImpl implements IWorkbenchService
         return new WorkbenchCard(
             WorkbenchConstants.CARD_HIGH_RISK_CONCLUSION,
             WorkbenchConstants.TITLE_HIGH_RISK_CONCLUSION,
+            WorkbenchConstants.SUBTITLE_HIGH_RISK_WINDOW,
             recordService.countReviewRecordList(query),
             WorkbenchConstants.LINK_RECORD,
             q);
@@ -214,9 +353,23 @@ public class WorkbenchServiceImpl implements IWorkbenchService
                 WorkbenchConstants.RECENT_TYPE_TASK,
                 buildRecentTitle(task),
                 time,
-                link));
+                link,
+                deriveRecentConclusion(task)));
         }
         return items;
+    }
+
+    static String deriveRecentConclusion(ReviewTask task)
+    {
+        if (ReviewPipelineConstants.TASK_SUCCESS.equals(task.getTaskStatus()))
+        {
+            return task.getReviewConclusion();
+        }
+        if (ReviewPipelineConstants.TASK_FAILED.equals(task.getTaskStatus()))
+        {
+            return WorkbenchConstants.RECENT_CONCLUSION_FAILED;
+        }
+        return null;
     }
 
     static String buildRecentTitle(ReviewTask task)

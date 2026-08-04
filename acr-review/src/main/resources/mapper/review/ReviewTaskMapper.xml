@@ -378,6 +378,31 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         ${params.dataScope}
     </select>
 
+    <!-- 审查结论按天聚合：join 与 countReviewRecordList 完全一致，保证 DataScope 别名可用；别名驼峰（未开启全局驼峰映射） -->
+    <select id="selectReviewConclusionTrend" parameterType="com.acr.review.domain.ReviewTask"
+            resultType="com.acr.review.domain.result.ReviewConclusionDailyStat">
+        select date_format(ifnull(t.finished_time, t.create_time), '%Y-%m-%d') as statDate,
+               sum(case when t.task_status = 'SUCCESS' and t.review_conclusion = 'PASS' then 1 else 0 end) as passCount,
+               sum(case when t.task_status = 'SUCCESS' and t.review_conclusion = 'WARN' then 1 else 0 end) as warnCount,
+               sum(case when t.task_status = 'SUCCESS' and t.review_conclusion = 'BLOCK' then 1 else 0 end) as blockCount,
+               sum(case when t.task_status = 'FAILED' then 1 else 0 end) as failedCount
+        from review_task t
+        inner join review_project p on p.project_id = t.project_id
+        left join sys_business_system bs on bs.system_id = p.business_system_id
+        inner join sys_dept d on d.dept_id = p.dept_id
+        inner join sys_user owner on owner.user_id = p.owner_user_id
+        where t.task_status in ('SUCCESS', 'FAILED')
+        <if test="params.beginTime != null and params.beginTime != ''">
+            and date_format(ifnull(t.finished_time, t.create_time),'%y%m%d') &gt;= date_format(#{params.beginTime},'%y%m%d')
+        </if>
+        <if test="params.endTime != null and params.endTime != ''">
+            and date_format(ifnull(t.finished_time, t.create_time),'%y%m%d') &lt;= date_format(#{params.endTime},'%y%m%d')
+        </if>
+        ${params.dataScope}
+        group by date_format(ifnull(t.finished_time, t.create_time), '%Y-%m-%d')
+        order by statDate asc
+    </select>
+
     <select id="countTodayNewTasks" parameterType="com.acr.review.domain.ReviewTask" resultType="int">
         select count(1)
         from review_task t

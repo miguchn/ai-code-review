@@ -7,6 +7,8 @@ public class WorkbenchRecentItem
     private String title;
     private String time;
     private String link;
+    /** 审查结论（PASS/WARN/BLOCK）或伪枚举 FAILED；执行中/待执行等为 null。 */
+    private String conclusion;
 
     public WorkbenchRecentItem()
     {
@@ -14,10 +16,16 @@ public class WorkbenchRecentItem
 
     public WorkbenchRecentItem(String type, String title, String time, String link)
     {
+        this(type, title, time, link, null);
+    }
+
+    public WorkbenchRecentItem(String type, String title, String time, String link, String conclusion)
+    {
         this.type = type;
         this.title = title;
         this.time = time;
         this.link = link;
+        this.conclusion = conclusion;
     }
 
     public String getType()
@@ -58,5 +66,15 @@ public class WorkbenchRecentItem
     public void setLink(String link)
     {
         this.link = link;
+    }
+
+    public String getConclusion()
+    {
+        return conclusion;
+    }
+
+    public void setConclusion(String conclusion)
+    {
+        this.conclusion = conclusion;
     }
 }
