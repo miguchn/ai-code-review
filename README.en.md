@@ -2,7 +2,7 @@
 
 > **Language**: English | [简体中文](README.md)
 >
-> ⚠️ **Project Status**: The MVP (V0.1) feature scope is complete: all four platforms — GitHub, GitLab, Gitee, and Gitea — implement the main loop of "project & credential setup → webhook reception → review execution → summary comment writeback → IM notification → issue handling → workbench". Automated tests pass; closed-loop acceptance on real platform instances is still pending. The project remains in an internal pilot stage — do not depend on it in production yet.
+> ⚠️ **Project Status**: The MVP (V0.1) feature scope is complete: all four platforms — GitHub, GitLab, Gitee, and Gitea — implement the main loop of "project & credential setup → webhook reception → review execution → summary comment writeback → IM notification → issue handling → workbench". Automated tests pass, and **GitHub completed full-loop acceptance in a real environment (2026-08-04)**: PRs from a real test repository exercised webhook signature verification, review execution, summary comment writeback, WeCom notification, issue-ledger disposition, and post-fix re-review end to end. GitLab/Gitee/Gitea remain covered by contract tests pending real instances, and the "two weeks of continuous operation" gate is still accumulating. The project remains in an internal pilot stage — do not depend on it in production yet.
 
 ## Project Positioning
 
@@ -121,7 +121,7 @@ Releases advance as real vertical loops; security, authorization, audit, and ope
 
 | Release | Product goal | Core scope |
 |------|------|------|
-| MVP (V0.1 internal pilot) | Minimum trustworthy loop; **feature scope complete (2026-08-04), pending real-environment acceptance** | Four-platform MR/PR, onboarding, webhook, dual review paths, tasks/issues, summary writeback, IM three-channel notification, scoped access, audit, recovery, basic workbench |
+| MVP (V0.1 internal pilot) | Minimum trustworthy loop; **feature scope complete (2026-08-04); GitHub real-environment full-loop acceptance passed**, remaining platforms and continuous-operation gates pending | Four-platform MR/PR, onboarding, webhook, dual review paths, tasks/issues, summary writeback, IM three-channel notification, scoped access, audit, recovery, basic workbench |
 | Core (V0.2 controlled rollout) | Actionable findings and governed policy | Inline comments, remediation and verification, versioned rules/review policies, model strategy, notification policy, shadow gate, and role-based workbench |
 | Enterprise (V1.0 internal GA) | Enterprise-internal commercial readiness | Identity/account lifecycle, quality dashboard, report center, alerts, usage attribution, data lifecycle, backup/recovery, business SLI, and audit export |
 | Scale (V1.1) | Controlled enforcement and platform ecosystem | Enforced gates and bypass, budgets/limits, more channels, full scans, and resource isolation |

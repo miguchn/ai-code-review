@@ -57,6 +57,7 @@ AI Code Review 面向企业内部研发团队，是部署在代码托管平台�
 - 多 Git Provider 已按统一契约扩展至 GitHub、GitLab、Gitee、Gitea 四平台（2026-08-03）：`GitAccessContext` + `GitAdapterRegistry`、`repository_full_path` 跨平台唯一匹配、`/webhook/{provider}` 分平台接入、分平台投递渠道与幂等键；
 - 统一审查评分与结构化结果协议 v1.0/v1.1 已落地：五维评分、Top 3 重点问题、问题归属 `origin` 与范围统计，解析失败单独标记；
 - 左侧菜单已按路线图信息架构调整为「工作台 → 审查中心 → 项目接入 → 策略配置 → 通知管理 → 系统管理 → 系统监控」（2026-08-03）；
+- MVP 收口打磨与真实环境验收（2026-08-04）：修复项目 Webhook Secret 配置状态恒显示「未配置」的缺陷（`projectSelect` 改为输出布尔列 `webhook_secret_configured`，密文不出服务端的边界不变）；GitHub 真实环境全链路验收通过，详见 §7.3；
 - 现有通用 RBAC、部门数据范围和操作日志已用于项目接入与列表隔离；完整审查决策审计、业务 SLI 告警和数据保留策略仍未建设（见 §7.3 验收项与 §7.4、§7.5）。
 
 ### 2.2 原规划的核心问题与处置
@@ -311,7 +312,18 @@ M7「基础工作台」完成状态（2026-08-03）：登录后首页替换为�
 
 多 Git Provider 接入完成状态（2026-08-03）：在 GitHub MVP 上扩展 GitLab、Gitee、Gitea；`GitAccessContext` + `GitAdapterRegistry` 按 `providerCode` 解析适配器；凭据 `server_url`、项目/事件 `repository_full_path`；Webhook `/webhook/{provider}`；分平台投递渠道与幂等键（GitHub 存量不变）；前端平台选择与分平台 Webhook 说明。自动测试通过；**未声称** GitLab/Gitee/Gitea 真实环境闭环验收。不含 OAuth/App、自动 Webhook、批量导入、SARIF。设计详见 `docs/superpowers/specs/2026-08-03-multi-git-provider-access-design.md`；脚本 `sql/29_multi_git_provider_access.sql`。
 
-**MVP 达成状态（2026-08-04）**：上述 M1–M7 与多平台扩展全部落地，MVP 功能面收口；后端测试（365 例）与前端生产构建通过，GitHub 存量链路经真实仓库验证，GitLab/Gitee/Gitea 以契约测试覆盖。尚未完成的是本节「验收」中的真实环境项（依赖可用的平台 Token/实例）：真实测试仓库连续运行两周、LLM/OCR 双方式真实 E2E、GitLab/Gitee/Gitea 真实闭环。下一阶段任务见 §7.4 核心版。
+**MVP 达成状态（2026-08-04）**：上述 M1–M7 与多平台扩展全部落地，MVP 功能面收口；后端测试（365 例）与前端生产构建通过；GitLab/Gitee/Gitea 以契约测试覆盖。
+
+**GitHub 真实环境全链路验收（2026-08-04）**：从干净环境重置（清空业务数据、重建凭据/项目/通知渠道），经隧道接入真实测试仓库 miguchn/webhook-test，以真实 PR 驱动四轮审查，MVP 主链路各环节全部验证：
+
+- Webhook 接收：HMAC-SHA256 验签、`repository_full_path` 项目匹配、幂等去重正常（GitHub test ping 送达落库）；
+- 审查执行：覆盖四类剧本——常规文档变更（PASS 100 分）、漏洞 Java 代码（BLOCK 27 分 → 修复提交 → 复审 WARN 78 分）、漏洞 SQL 脚本（BLOCK 25 分，范围策略按快照命中 DB_SCRIPT 高影响扩展）；
+- 结论回写：PR 总结评论幂等回写/更新，复审覆盖旧评论不刷屏；
+- IM 通知：企微机器人审查结论摘要与失败简讯投递全部 SUCCESS；
+- 问题闭环：Top3 物化、PR 级指纹去重、确认/关闭/忽略/误报四类处置与动作流水全部验证，处置后总结评论重渲染正常；
+- 权限边界：部门维度数据隔离生效；已确认注意事项——持有「全部数据权限」的角色可见全部项目，任务/记录/问题/投递列表不校验业务系统负责人身份（仅项目列表额外校验负责人），配置角色数据范围时须注意。
+
+验收遗留项：真实测试仓库连续运行两周（时限性标准，自 2026-08-04 起累积）、LLM/OCR 双方式真实 E2E（本轮审查均为 LLM 路径）、GitLab/Gitee/Gitea 真实闭环（待实例）。验收中沉淀的五条产品改进点（问题生命周期管理、问题处置效率优化、Secret 随机生成、IM 通知样式重构、投递消息详情）已记录于 CHANGELOG Unreleased，作为核心版迭代候选。下一阶段任务见 §7.4 核心版。
 
 MVP 范围定义（功能面已全部落地，见上）：
 
