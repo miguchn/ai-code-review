@@ -3,7 +3,7 @@
   <em>Every line of your code must withstand AI scrutiny.</em>
 </p>
 
-# AI Code Review — Enterprise Code Review Governance Platform
+# AI Code Review
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/github/license/miguchn/ai-code-review" alt="License" /></a>
