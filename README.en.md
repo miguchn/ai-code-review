@@ -15,6 +15,10 @@
   <img src="https://img.shields.io/badge/Gitea-supported-609926.svg" alt="Gitea supported" />
 </p>
 
+<p align="center">
+  <img src="docs/images/readme-hero.png" alt="AI Code Review — AI robot reviewing code" width="760" />
+</p>
+
 ## What is AI Code Review?
 
 AI Code Review is an **enterprise-internal code review governance platform** deployed alongside your Git hosting platform. It turns MR/PR code changes into a traceable loop of review, remediation, verification, measurement, and audit — while GitHub, GitLab, Gitee, or Gitea remains the system of record for code collaboration and merging.
