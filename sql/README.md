@@ -6,7 +6,7 @@
 
 ### 新装环境：一次性初始化（推荐）
 
-执行 `init-full.sql` 一条命令完成全部初始化（库、41 张表结构、菜单/字典/参数/内置审查模板等初始数据），等效于按序号执行完 `01`–`29` 全部增量脚本后的最终状态：
+执行 `init-full.sql` 一条命令完成全部初始化（库、41 张表结构、菜单/字典/参数/内置审查模板等初始数据），等效于按序号执行完 `01`–`30` 全部增量脚本后的最终状态：
 
 ```bash
 mysql --default-character-set=utf8mb4 -u root -p < sql/init-full.sql
@@ -56,10 +56,11 @@ mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/NN_xxx.sql
 27. `27_sidebar_menu_ia.sql`：左侧菜单信息架构调整（审查中心 / 项目接入 / 策略配置；工作台侧栏由前端常量路由控制；须 utf8mb4）。
 28. `28_delivery_menu_route_name.sql`：补齐「投递记录」菜单 `route_name`（缺失时路由名与前端组件名不一致，keep-alive 不缓存导致页面一直加载）。
 29. `29_multi_git_provider_access.sql`：多 Git Provider 数据层（凭据 `server_url`、项目/事件 `repository_full_path`、平台字典、投递渠道扩展、MR/PR 事件参数；须 utf8mb4）。
+30. `30_delivery_content_snapshot.sql`：投递正文快照（`review_delivery_record` 增 `content_snapshot` mediumtext 可空列，历史不回填；须 utf8mb4）。
 
 ## init-full.sql 维护规则
 
-- `init-full.sql` 是增量脚本执行完成后的最终状态快照（2026-08-04 生成，基线 `main 871a460`，含 01–29 全部增量）。
+- `init-full.sql` 是增量脚本执行完成后的最终状态快照（2026-08-05 生成，基线 `main 0213c64`，含 01–30 全部增量）。
 - **新增编号增量脚本后必须同步重新生成**，否则新装环境会缺失该脚本的变更。生成方式（在已执行全部增量脚本的本地库上）：
 
 ```bash

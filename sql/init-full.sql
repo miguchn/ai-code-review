@@ -1,7 +1,7 @@
 -- ============================================================================
 -- AI Code Review 一次性初始化脚本（仅适用于全新环境）
 --
--- 本脚本是 sql/01_core_schema.sql … sql/29_multi_git_provider_access.sql
+-- 本脚本是 sql/01_core_schema.sql … sql/30_delivery_content_snapshot.sql
 -- 全部执行完成后的最终状态（表结构 + 初始化数据），新环境一条命令即可完成初始化：
 --
 --   mysql --default-character-set=utf8mb4 -u root -p < sql/init-full.sql
@@ -15,14 +15,14 @@
 -- 4. 初始管理员为 admin / admin123，首次登录后请立即修改密码。
 -- 5. 新增编号增量脚本后必须同步重新生成本脚本（生成方式见 sql/README.md）。
 --
--- 生成日期：2026-08-04；基线：main 871a460（已含 01-29 全部增量脚本）
+-- 生成日期：2026-08-05；基线：main 0213c64（已含 01-30 全部增量脚本）
 -- ============================================================================
 
 CREATE DATABASE IF NOT EXISTS `ai_code_review` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
 USE `ai_code_review`;
 
 -- ----------------------------------------------------------------------------
--- 第一部分：表结构最终态（01-29 增量合并后的 41 张表）
+-- 第一部分：表结构最终态（01-30 增量合并后的 41 张表）
 -- ----------------------------------------------------------------------------
 
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
@@ -215,6 +215,7 @@ CREATE TABLE `review_delivery_record` (
   `attempt_count` int NOT NULL DEFAULT '1' COMMENT '投递尝试次数',
   `last_attempt_time` datetime NOT NULL COMMENT '最近尝试时间',
   `trigger_source` varchar(32) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '触发来源(TASK_SUCCESS/ISSUE_DISPOSITION/MANUAL_RETRY)',
+  `content_snapshot` mediumtext COLLATE utf8mb4_general_ci COMMENT '实际发出正文快照(JSON)',
   `create_by` varchar(64) COLLATE utf8mb4_general_ci DEFAULT '',
   `create_time` datetime DEFAULT NULL,
   `update_by` varchar(64) COLLATE utf8mb4_general_ci DEFAULT '',
@@ -953,9 +954,11 @@ CREATE TABLE `sys_user_role` (
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
 
+
 -- ----------------------------------------------------------------------------
 -- 第二部分：初始化数据（管理员、菜单、字典、参数、内置审查模板）
 -- ----------------------------------------------------------------------------
+
 
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
 /*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
@@ -968,12 +971,26 @@ CREATE TABLE `sys_user_role` (
 /*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
 /*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
 
-INSERT INTO `sys_user` (`user_id`, `dept_id`, `user_name`, `nick_name`, `user_type`, `email`, `phonenumber`, `sex`, `avatar`, `password`, `status`, `del_flag`, `login_ip`, `login_date`, `pwd_update_date`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (1,100,'admin','系统管理员','00','','','2','','$2a$10$7JB720yubVSZvUI0rEqK/.VqGOZTH.ulu33dHOiBE8ByOhJIrdAu2','0','0','127.0.0.1','2026-08-03 18:45:58','2026-07-30 17:15:00','admin','2026-07-30 17:15:00','',NULL,'初始管理员');
+LOCK TABLES `sys_user` WRITE;
+/*!40000 ALTER TABLE `sys_user` DISABLE KEYS */;
+INSERT INTO `sys_user` (`user_id`, `dept_id`, `user_name`, `nick_name`, `user_type`, `email`, `phonenumber`, `sex`, `avatar`, `password`, `status`, `del_flag`, `login_ip`, `login_date`, `pwd_update_date`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (1,100,'admin','系统管理员','00','','','2','','$2a$10$7JB720yubVSZvUI0rEqK/.VqGOZTH.ulu33dHOiBE8ByOhJIrdAu2','0','0','127.0.0.1','2026-08-05 10:54:33','2026-07-30 17:15:00','admin','2026-07-30 17:15:00','',NULL,'初始管理员');
+/*!40000 ALTER TABLE `sys_user` ENABLE KEYS */;
+UNLOCK TABLES;
 
+LOCK TABLES `sys_user_role` WRITE;
+/*!40000 ALTER TABLE `sys_user_role` DISABLE KEYS */;
 INSERT INTO `sys_user_role` (`user_id`, `role_id`) VALUES (1,1);
+/*!40000 ALTER TABLE `sys_user_role` ENABLE KEYS */;
+UNLOCK TABLES;
 
+LOCK TABLES `sys_role` WRITE;
+/*!40000 ALTER TABLE `sys_role` DISABLE KEYS */;
 INSERT INTO `sys_role` (`role_id`, `role_name`, `role_key`, `role_sort`, `data_scope`, `menu_check_strictly`, `dept_check_strictly`, `status`, `del_flag`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (1,'超级管理员','admin',1,'1',1,1,'0','0','admin','2026-07-30 17:15:00','',NULL,'超级管理员');
+/*!40000 ALTER TABLE `sys_role` ENABLE KEYS */;
+UNLOCK TABLES;
 
+LOCK TABLES `sys_role_menu` WRITE;
+/*!40000 ALTER TABLE `sys_role_menu` DISABLE KEYS */;
 INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,4);
 INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,5);
 INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,6);
@@ -1023,9 +1040,17 @@ INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,1160);
 INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,1161);
 INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,1162);
 INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,1163);
+/*!40000 ALTER TABLE `sys_role_menu` ENABLE KEYS */;
+UNLOCK TABLES;
 
+LOCK TABLES `sys_dept` WRITE;
+/*!40000 ALTER TABLE `sys_dept` DISABLE KEYS */;
 INSERT INTO `sys_dept` (`dept_id`, `parent_id`, `ancestors`, `dept_name`, `order_num`, `leader`, `phone`, `email`, `status`, `del_flag`, `create_by`, `create_time`, `update_by`, `update_time`) VALUES (100,0,'0','AI Code Review',0,'admin','','','0','0','admin','2026-07-30 17:15:00','',NULL);
+/*!40000 ALTER TABLE `sys_dept` ENABLE KEYS */;
+UNLOCK TABLES;
 
+LOCK TABLES `sys_menu` WRITE;
+/*!40000 ALTER TABLE `sys_menu` DISABLE KEYS */;
 INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (1,'系统管理',0,5,'system',NULL,'','',1,0,'M','0','0','','system','admin','2026-07-30 17:15:00','admin','2026-08-03 10:42:32','系统管理目录');
 INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (2,'系统监控',0,6,'monitor',NULL,'','',1,0,'M','0','0','','monitor','admin','2026-07-30 17:15:00','admin','2026-08-03 10:42:32','系统监控目录');
 INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (3,'审查中心',0,1,'review',NULL,'','',1,0,'M','0','0','','code','admin','2026-08-01 07:29:41','admin','2026-08-03 10:42:32','审查中心：问题台账、审查任务、审查记录');
@@ -1163,7 +1188,11 @@ INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`
 INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (1161,'问题查询',131,2,'#','','','',1,0,'F','0','0','review:issue:query','#','admin','2026-08-03 08:08:26','',NULL,'');
 INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (1162,'问题确认',131,3,'#','','','',1,0,'F','0','0','review:issue:confirm','#','admin','2026-08-03 08:08:26','',NULL,'');
 INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (1163,'问题关闭',131,4,'#','','','',1,0,'F','0','0','review:issue:close','#','admin','2026-08-03 08:08:26','',NULL,'覆盖关闭/忽略/误报');
+/*!40000 ALTER TABLE `sys_menu` ENABLE KEYS */;
+UNLOCK TABLES;
 
+LOCK TABLES `sys_dict_type` WRITE;
+/*!40000 ALTER TABLE `sys_dict_type` DISABLE KEYS */;
 INSERT INTO `sys_dict_type` (`dict_id`, `dict_name`, `dict_type`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (1,'用户性别','sys_user_sex','0','admin','2026-07-30 17:15:00','',NULL,'用户性别列表');
 INSERT INTO `sys_dict_type` (`dict_id`, `dict_name`, `dict_type`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (2,'菜单状态','sys_show_hide','0','admin','2026-07-30 17:15:00','',NULL,'菜单状态列表');
 INSERT INTO `sys_dict_type` (`dict_id`, `dict_name`, `dict_type`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (3,'系统开关','sys_normal_disable','0','admin','2026-07-30 17:15:00','',NULL,'系统开关列表');
@@ -1191,7 +1220,11 @@ INSERT INTO `sys_dict_type` (`dict_id`, `dict_name`, `dict_type`, `status`, `cre
 INSERT INTO `sys_dict_type` (`dict_id`, `dict_name`, `dict_type`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (114,'审查问题归属','review_issue_origin','0','admin','2026-08-03 08:08:26','',NULL,'NEW / EXISTING');
 INSERT INTO `sys_dict_type` (`dict_id`, `dict_name`, `dict_type`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (115,'审查投递触发来源','review_delivery_trigger_source','0','admin','2026-08-03 09:15:27','',NULL,'投递记录最近一次尝试的触发来源');
 INSERT INTO `sys_dict_type` (`dict_id`, `dict_name`, `dict_type`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (116,'Git 平台','review_git_provider','0','admin','2026-08-03 13:30:52','',NULL,'代码审查支持的 Git 托管平台');
+/*!40000 ALTER TABLE `sys_dict_type` ENABLE KEYS */;
+UNLOCK TABLES;
 
+LOCK TABLES `sys_dict_data` WRITE;
+/*!40000 ALTER TABLE `sys_dict_data` DISABLE KEYS */;
 INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (1,1,'男','0','sys_user_sex','','','Y','0','admin','2026-07-30 17:15:00','',NULL,'性别男');
 INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (2,2,'女','1','sys_user_sex','','','N','0','admin','2026-07-30 17:15:00','',NULL,'性别女');
 INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (3,3,'未知','2','sys_user_sex','','','N','0','admin','2026-07-30 17:15:00','',NULL,'性别未知');
@@ -1290,7 +1323,11 @@ INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value
 INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (166,5,'GitLab 总结评论','GITLAB_MR_SUMMARY_COMMENT','review_delivery_channel','','primary','N','0','admin','2026-08-03 13:30:52','',NULL,'');
 INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (167,6,'Gitee 总结评论','GITEE_PR_SUMMARY_COMMENT','review_delivery_channel','','success','N','0','admin','2026-08-03 13:30:52','',NULL,'');
 INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (168,7,'Gitea 总结评论','GITEA_PR_SUMMARY_COMMENT','review_delivery_channel','','warning','N','0','admin','2026-08-03 13:30:52','',NULL,'');
+/*!40000 ALTER TABLE `sys_dict_data` ENABLE KEYS */;
+UNLOCK TABLES;
 
+LOCK TABLES `sys_config` WRITE;
+/*!40000 ALTER TABLE `sys_config` DISABLE KEYS */;
 INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (1,'主框架页-默认皮肤样式名称','sys.index.skinName','skin-blue','Y','admin','2026-07-30 17:15:00','',NULL,'蓝色 skin-blue、绿色 skin-green、紫色 skin-purple、红色 skin-red、黄色 skin-yellow');
 INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (2,'用户管理-账号初始密码','sys.user.initPassword','123456','Y','admin','2026-07-30 17:15:00','',NULL,'初始化密码 123456');
 INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (3,'主框架页-侧边栏主题','sys.index.sideTheme','theme-dark','Y','admin','2026-07-30 17:15:00','',NULL,'深色主题theme-dark，浅色主题theme-light');
@@ -1307,13 +1344,19 @@ INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_valu
 INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (104,'代码审查-GitLab默认MR事件','review.gitlab.mrEvents','opened,reopened,synchronize','Y','admin','2026-08-03 13:30:52','',NULL,'统一启用的 Merge Request 触发事件');
 INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (105,'代码审查-Gitee默认PR事件','review.gitee.prEvents','opened,reopened,synchronize','Y','admin','2026-08-03 13:30:52','',NULL,'统一启用的 Pull Request 触发事件');
 INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (106,'代码审查-Gitea默认PR事件','review.gitea.prEvents','opened,reopened,synchronize','Y','admin','2026-08-03 13:30:52','',NULL,'统一启用的 Pull Request 触发事件');
+/*!40000 ALTER TABLE `sys_config` ENABLE KEYS */;
+UNLOCK TABLES;
 
+LOCK TABLES `review_template` WRITE;
+/*!40000 ALTER TABLE `review_template` DISABLE KEYS */;
 INSERT INTO `review_template` (`template_id`, `template_name`, `template_code`, `tech_stack`, `content`, `version_no`, `builtin_flag`, `status`, `remark`, `create_by`, `create_time`, `update_by`, `update_time`) VALUES (1,'全栈通用','builtin_fullstack','FULLSTACK','你是资深代码审查助手。请基于以下 Pull Request 变更进行审查，关注正确性、安全性、可维护性与明显缺陷，覆盖前后端与配置变更的通用风险。\n\n【PR 信息】\n标题：{{pr_title}}\n描述：{{pr_description}}\nCommit Message：\n{{commit_messages}}\n来源分支：{{source_branch}}\n目标分支：{{target_branch}}\nBase SHA：{{base_sha}}\nHead SHA：{{head_sha}}\n\n【变更 Diff】\n```diff\n{{diff}}\n```\n\n不要编造未在 Diff 中出现的文件或行号。',2,'1','0','系统内置默认提示词，可复制后按项目调整','admin','2026-08-01 13:09:54','admin','2026-08-01 14:34:12');
 INSERT INTO `review_template` (`template_id`, `template_name`, `template_code`, `tech_stack`, `content`, `version_no`, `builtin_flag`, `status`, `remark`, `create_by`, `create_time`, `update_by`, `update_time`) VALUES (2,'Java','builtin_java','JAVA','你是资深 Java 代码审查助手。请基于以下 Pull Request 变更进行审查，重点关注：空指针与异常处理、并发安全、资源关闭、SQL/注入风险、Spring 事务与分层边界、集合与流式 API 误用、明显性能问题。\n\n【PR 信息】\n标题：{{pr_title}}\n描述：{{pr_description}}\nCommit Message：\n{{commit_messages}}\n来源分支：{{source_branch}}\n目标分支：{{target_branch}}\nBase SHA：{{base_sha}}\nHead SHA：{{head_sha}}\n\n【变更 Diff】\n```diff\n{{diff}}\n```\n\n不要编造未在 Diff 中出现的文件或行号。',2,'1','0','系统内置审查模板，请复制后按项目调整','admin','2026-08-01 13:38:08','admin','2026-08-01 14:34:12');
 INSERT INTO `review_template` (`template_id`, `template_name`, `template_code`, `tech_stack`, `content`, `version_no`, `builtin_flag`, `status`, `remark`, `create_by`, `create_time`, `update_by`, `update_time`) VALUES (3,'Python','builtin_python','PYTHON','你是资深 Python 代码审查助手。请基于以下 Pull Request 变更进行审查，重点关注：异常处理与资源管理、类型注解一致性、可变默认参数、并发/异步误用、注入与反序列化风险、测试可维护性、明显性能问题。\n\n【PR 信息】\n标题：{{pr_title}}\n描述：{{pr_description}}\nCommit Message：\n{{commit_messages}}\n来源分支：{{source_branch}}\n目标分支：{{target_branch}}\nBase SHA：{{base_sha}}\nHead SHA：{{head_sha}}\n\n【变更 Diff】\n```diff\n{{diff}}\n```\n\n不要编造未在 Diff 中出现的文件或行号。',2,'1','0','系统内置审查模板，请复制后按项目调整','admin','2026-08-01 13:38:08','admin','2026-08-01 14:34:12');
 INSERT INTO `review_template` (`template_id`, `template_name`, `template_code`, `tech_stack`, `content`, `version_no`, `builtin_flag`, `status`, `remark`, `create_by`, `create_time`, `update_by`, `update_time`) VALUES (4,'Go','builtin_go','GO','你是资深 Go 代码审查助手。请基于以下 Pull Request 变更进行审查，重点关注：error 处理、goroutine/channel 泄漏与竞态、上下文传递、接口边界、资源关闭、SQL 注入、明显性能问题。\n\n【PR 信息】\n标题：{{pr_title}}\n描述：{{pr_description}}\nCommit Message：\n{{commit_messages}}\n来源分支：{{source_branch}}\n目标分支：{{target_branch}}\nBase SHA：{{base_sha}}\nHead SHA：{{head_sha}}\n\n【变更 Diff】\n```diff\n{{diff}}\n```\n\n不要编造未在 Diff 中出现的文件或行号。',2,'1','0','系统内置审查模板，请复制后按项目调整','admin','2026-08-01 13:38:08','admin','2026-08-01 14:34:12');
 INSERT INTO `review_template` (`template_id`, `template_name`, `template_code`, `tech_stack`, `content`, `version_no`, `builtin_flag`, `status`, `remark`, `create_by`, `create_time`, `update_by`, `update_time`) VALUES (5,'Vue','builtin_vue','VUE','你是资深 Vue 前端代码审查助手。请基于以下 Pull Request 变更进行审查，重点关注：响应式误用、组件边界与 props/emit、路由与权限、XSS/危险 HTML、状态管理副作用、可访问性与明显性能问题。\n\n【PR 信息】\n标题：{{pr_title}}\n描述：{{pr_description}}\nCommit Message：\n{{commit_messages}}\n来源分支：{{source_branch}}\n目标分支：{{target_branch}}\nBase SHA：{{base_sha}}\nHead SHA：{{head_sha}}\n\n【变更 Diff】\n```diff\n{{diff}}\n```\n\n不要编造未在 Diff 中出现的文件或行号。',2,'1','0','系统内置审查模板，请复制后按项目调整','admin','2026-08-01 13:38:08','admin','2026-08-01 14:34:12');
 INSERT INTO `review_template` (`template_id`, `template_name`, `template_code`, `tech_stack`, `content`, `version_no`, `builtin_flag`, `status`, `remark`, `create_by`, `create_time`, `update_by`, `update_time`) VALUES (6,'React','builtin_react','REACT','你是资深 React 前端代码审查助手。请基于以下 Pull Request 变更进行审查，重点关注：Hooks 依赖与副作用、状态提升边界、key/列表渲染、XSS/危险 HTML、并发渲染下的竞态、可访问性与明显性能问题。\n\n【PR 信息】\n标题：{{pr_title}}\n描述：{{pr_description}}\nCommit Message：\n{{commit_messages}}\n来源分支：{{source_branch}}\n目标分支：{{target_branch}}\nBase SHA：{{base_sha}}\nHead SHA：{{head_sha}}\n\n【变更 Diff】\n```diff\n{{diff}}\n```\n\n不要编造未在 Diff 中出现的文件或行号。',2,'1','0','系统内置审查模板，请复制后按项目调整','admin','2026-08-01 13:38:08','admin','2026-08-01 14:34:12');
+/*!40000 ALTER TABLE `review_template` ENABLE KEYS */;
+UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
