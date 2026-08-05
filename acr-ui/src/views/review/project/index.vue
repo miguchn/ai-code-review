@@ -268,7 +268,11 @@
             <el-form-item label="Webhook Secret" prop="webhookSecret">
               <div class="form-control-block">
                 <el-input v-model="form.webhookSecret" type="password" show-password clearable
-                  :placeholder="webhookSecretPlaceholder" />
+                  :placeholder="webhookSecretPlaceholder">
+                  <template #append>
+                    <el-button @click="generateWebhookSecret">随机生成</el-button>
+                  </template>
+                </el-input>
                 <div class="inline-tip">
                   {{ webhookSecretHint }}
                   <el-tag :type="form.webhookSecretConfigured ? 'success' : 'info'" size="small">
@@ -620,10 +624,15 @@ const webhookSecretPlaceholder = computed(() => {
 })
 const webhookSecretHint = computed(() => {
   const code = (form.value.provider || 'GITHUB').toUpperCase()
-  if (code === 'GITLAB') return '用于校验 GitLab Secret Token。'
-  if (code === 'GITEE') return '用于校验 Gitee Webhook 签名/密码。'
-  if (code === 'GITEA') return '用于校验 Gitea Webhook 签名。'
-  return '用于校验 GitHub 事件签名。'
+  let hint = '用于校验 GitHub 事件签名。'
+  if (code === 'GITLAB') hint = '用于校验 GitLab Secret Token。'
+  else if (code === 'GITEE') hint = '用于校验 Gitee Webhook 签名/密码。'
+  else if (code === 'GITEA') hint = '用于校验 Gitea Webhook 签名。'
+  // 新建或未配置：补充留空后果；编辑已配置态保留原提示（留空保留原值由 placeholder 表达）
+  if (!form.value.projectId || !form.value.webhookSecretConfigured) {
+    return `${hint} 留空将导致 Webhook 全部验签失败。`
+  }
+  return hint
 })
 const reviewModeOptions = computed(() => (review_mode.value || []).filter(item =>
   item.value === 'LLM_DIRECT' || item.value === 'OCR_ENGINE'
@@ -643,6 +652,13 @@ function copyWebhookCallback() {
   }).catch(() => {
     proxy.$modal.msgError('复制失败，请手动选择复制')
   })
+}
+
+function generateWebhookSecret() {
+  const bytes = new Uint8Array(16)
+  window.crypto.getRandomValues(bytes)
+  form.value.webhookSecret =
+    'acr_' + Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('')
 }
 
 function getList() {
