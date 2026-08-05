@@ -105,6 +105,27 @@ class ReviewDeliveryServiceImplTest
         assertEquals("501", captor.getValue().getExternalId());
         assertEquals(ReviewDeliveryConstants.idempotencyKey("GITHUB", 3L, 8), captor.getValue().getIdempotencyKey());
         assertEquals(ReviewDeliveryConstants.TRIGGER_TASK_SUCCESS, captor.getValue().getTriggerSource());
+        assertTrue(captor.getValue().getContentSnapshot().contains("\"kind\":\"SUMMARY_COMMENT\""));
+    }
+
+    @Test
+    void selectDeliveryContentReturnsParsedSnapshotWithListScope()
+    {
+        ReviewDeliveryRecord record = new ReviewDeliveryRecord();
+        record.setDeliveryId(77L);
+        record.setProjectId(3L);
+        when(deliveryMapper.selectDeliveryById(77L)).thenReturn(record);
+        when(projectMapper.selectReviewProjectById(3L)).thenReturn(project());
+        when(deliveryMapper.selectContentSnapshotById(77L)).thenReturn(
+            "{\"kind\":\"IM\",\"channelType\":\"FEISHU_BOT\",\"title\":\"t\",\"body\":\"b\"}");
+
+        var content = service.selectDeliveryContent(77L);
+
+        assertEquals("IM", content.get("kind"));
+        assertEquals("FEISHU_BOT", content.get("channelType"));
+        assertEquals("t", content.get("title"));
+        assertEquals("b", content.get("body"));
+        verify(deptService).checkDeptDataScope(1L);
     }
 
     @Test
@@ -259,6 +280,8 @@ class ReviewDeliveryServiceImplTest
         assertEquals(ReviewDeliveryConstants.imIdempotencyKey(
             ReviewDeliveryConstants.CHANNEL_DINGTALK_ROBOT, 30L), captor.getValue().getIdempotencyKey());
         assertNull(captor.getValue().getExternalId());
+        assertTrue(captor.getValue().getContentSnapshot().contains("\"kind\":\"IM\""));
+        assertTrue(captor.getValue().getContentSnapshot().contains("DINGTALK_ROBOT"));
     }
 
     @Test
@@ -320,10 +343,6 @@ class ReviewDeliveryServiceImplTest
         when(robotClients.require(ReviewDeliveryConstants.CHANNEL_WECOM_ROBOT)).thenReturn(robot);
         doThrow(new NotifyRobotException("企微机器人发送失败：HTTP 400"))
             .when(robot).send(anyString(), any(), anyString(), anyString());
-        ReviewNotifyChannel channel = new ReviewNotifyChannel();
-        channel.setChannelId(7L);
-        channel.setChannelType(ReviewDeliveryConstants.CHANNEL_WECOM_ROBOT);
-        when(notifyChannelService.selectReviewNotifyChannelById(7L)).thenReturn(channel);
         when(deliveryMapper.selectByIdempotencyKey(anyString())).thenReturn(null);
 
         service.deliverNotifyAfterTerminal(task, successRun(304L, 1));
@@ -333,6 +352,7 @@ class ReviewDeliveryServiceImplTest
         assertEquals(ReviewDeliveryConstants.STATUS_FAILED, captor.getValue().getDeliveryStatus());
         assertEquals(ReviewDeliveryConstants.CHANNEL_WECOM_ROBOT, captor.getValue().getChannel());
         assertTrue(captor.getValue().getFailureMessage().contains("HTTP 400"));
+        assertTrue(captor.getValue().getContentSnapshot().contains("\"kind\":\"IM\""));
     }
 
     @Test

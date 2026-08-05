@@ -9,6 +9,9 @@ public interface ReviewDeliveryRecordMapper
 {
     ReviewDeliveryRecord selectDeliveryById(Long deliveryId);
 
+    /** 仅拉取正文快照（列表/详情主查询不带此大字段）。 */
+    String selectContentSnapshotById(@Param("deliveryId") Long deliveryId);
+
     ReviewDeliveryRecord selectByIdempotencyKey(@Param("idempotencyKey") String idempotencyKey);
 
     ReviewDeliveryRecord selectByProjectAndPr(@Param("projectId") Long projectId,

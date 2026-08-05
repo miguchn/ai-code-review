@@ -1,6 +1,7 @@
 package com.acr.review.service;
 
 import java.util.List;
+import java.util.Map;
 import com.acr.review.domain.ReviewCommentSyncResult;
 import com.acr.review.domain.ReviewDeliveryRecord;
 import com.acr.review.domain.ReviewTask;
@@ -42,6 +43,12 @@ public interface IReviewDeliveryService
     ReviewDeliveryRecord selectLatestImDelivery(Long taskId);
 
     ReviewDeliveryRecord selectDeliveryById(Long deliveryId);
+
+    /**
+     * 查看投递正文快照（kind/channelType/title/body）。
+     * 权限与数据范围与列表一致；无快照时返回空 Map。
+     */
+    Map<String, Object> selectDeliveryContent(Long deliveryId);
 
     List<ReviewDeliveryRecord> selectDeliveryList(ReviewDeliveryRecord query);
 

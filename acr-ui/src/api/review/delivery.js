@@ -23,6 +23,11 @@ export function retryDeliveryById(deliveryId) {
   return request({ url: '/review/delivery/record/' + deliveryId + '/retry', method: 'post' })
 }
 
+/** 查看投递正文快照（kind/channelType/title/body）。 */
+export function getDeliveryContent(deliveryId) {
+  return request({ url: '/review/delivery/record/' + deliveryId + '/content', method: 'get' })
+}
+
 /** @deprecated 使用 retryDelivery */
 export function retryReviewDelivery(taskId) {
   return retryDelivery(taskId)

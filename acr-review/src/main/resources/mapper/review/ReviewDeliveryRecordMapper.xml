@@ -20,6 +20,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="attemptCount" column="attempt_count" />
         <result property="lastAttemptTime" column="last_attempt_time" />
         <result property="triggerSource" column="trigger_source" />
+        <result property="hasContentSnapshot" column="has_content_snapshot" />
         <result property="createBy" column="create_by" />
         <result property="createTime" column="create_time" />
         <result property="updateBy" column="update_by" />
@@ -29,7 +30,9 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     <sql id="selectColumns">
         select rdr.delivery_id, rdr.task_id, rdr.run_id, rdr.project_id, p.project_name, rdr.provider, rdr.channel, rdr.pr_number,
                rdr.idempotency_key, rdr.external_id, rdr.delivery_status, rdr.failure_message,
-               rdr.attempt_count, rdr.last_attempt_time, rdr.trigger_source, rdr.create_by, rdr.create_time, rdr.update_by, rdr.update_time
+               rdr.attempt_count, rdr.last_attempt_time, rdr.trigger_source,
+               (case when rdr.content_snapshot is not null then 1 else 0 end) as has_content_snapshot,
+               rdr.create_by, rdr.create_time, rdr.update_by, rdr.update_time
         from review_delivery_record rdr
         left join review_project p on p.project_id = rdr.project_id
         left join sys_dept d on d.dept_id = p.dept_id
@@ -39,6 +42,13 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     <select id="selectDeliveryById" resultMap="ReviewDeliveryRecordResult">
         <include refid="selectColumns" />
         where rdr.delivery_id = #{deliveryId}
+        limit 1
+    </select>
+
+    <select id="selectContentSnapshotById" resultType="java.lang.String">
+        select content_snapshot
+        from review_delivery_record
+        where delivery_id = #{deliveryId}
         limit 1
     </select>
 
@@ -138,11 +148,11 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         insert into review_delivery_record
         (task_id, run_id, project_id, provider, channel, pr_number, idempotency_key,
          external_id, delivery_status, failure_message, attempt_count, last_attempt_time, trigger_source,
-         create_by, create_time, update_by, update_time)
+         content_snapshot, create_by, create_time, update_by, update_time)
         values
         (#{taskId}, #{runId}, #{projectId}, #{provider}, #{channel}, #{prNumber}, #{idempotencyKey},
          #{externalId}, #{deliveryStatus}, #{failureMessage}, #{attemptCount}, #{lastAttemptTime}, #{triggerSource},
-         #{createBy}, sysdate(), #{updateBy}, sysdate())
+         #{contentSnapshot}, #{createBy}, sysdate(), #{updateBy}, sysdate())
     </insert>
 
     <update id="updateDeliveryResult" parameterType="com.acr.review.domain.ReviewDeliveryRecord">
@@ -155,6 +165,9 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             attempt_count = attempt_count + 1,
             last_attempt_time = #{lastAttemptTime},
             trigger_source = #{triggerSource},
+            <if test="contentSnapshot != null">
+            content_snapshot = #{contentSnapshot},
+            </if>
             update_by = #{updateBy},
             update_time = sysdate()
         where idempotency_key = #{idempotencyKey}

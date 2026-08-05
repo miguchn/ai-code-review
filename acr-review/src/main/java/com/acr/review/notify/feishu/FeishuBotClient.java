@@ -2,6 +2,8 @@ package com.acr.review.notify.feishu;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.springframework.beans.factory.annotation.Value;
@@ -15,11 +17,13 @@ import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 
 /**
- * 飞书自定义机器人：使用 post 富文本保证链接可点击；不使用互动卡片。
+ * 飞书自定义机器人：将简化 Markdown 转为 post 富文本；不使用互动卡片。
  */
 @Component
 public class FeishuBotClient extends AbstractNotifyRobotClient
 {
+    private static final Pattern MD_LINK = Pattern.compile("\\[([^\\]]+)]\\((https?://[^)\\s]+)\\)");
+
     public FeishuBotClient(
         @Value("${review.notify.connect-timeout-ms:5000}") int connectTimeoutMs,
         @Value("${review.notify.read-timeout-ms:15000}") int readTimeoutMs)
@@ -69,7 +73,9 @@ public class FeishuBotClient extends AbstractNotifyRobotClient
     }
 
     /**
-     * 将行式正文转为飞书 post 段落；识别「标签：URL」行中的 http(s) 链接。
+     * 简化 Markdown → 飞书 post 行：
+     * 标题行 → 加粗段落；**标签** → 加粗段落；列表项 → 以点号开头的段落；
+     * [text](link) → 链接元素；其余降级为普通段落。
      */
     static JSONArray toPostLines(String body)
     {
@@ -77,75 +83,82 @@ public class FeishuBotClient extends AbstractNotifyRobotClient
         if (body == null || body.isBlank())
         {
             JSONArray row = new JSONArray();
-            row.add(textElement("（空消息）"));
+            row.add(textElement("（空消息）", false));
             lines.add(row);
             return lines;
         }
-        for (String raw : body.split("\\R"))
+        for (String raw : body.split("\\R", -1))
         {
             JSONArray row = new JSONArray();
-            appendLine(row, raw);
+            appendMarkdownLine(row, raw);
             lines.add(row);
         }
         return lines;
     }
 
-    private static void appendLine(JSONArray row, String line)
+    private static void appendMarkdownLine(JSONArray row, String line)
     {
         if (line.isEmpty())
         {
-            row.add(textElement(" "));
+            row.add(textElement(" ", false));
             return;
         }
-        String rest = line;
-        while (true)
+        String trimmed = line.trim();
+        if (trimmed.startsWith("### "))
         {
-            int http = indexOfUrl(rest);
-            if (http < 0)
+            appendInline(row, trimmed.substring(4), true);
+            return;
+        }
+        if (trimmed.startsWith("**") && trimmed.endsWith("**") && trimmed.length() > 4
+            && trimmed.indexOf("**", 2) == trimmed.length() - 2)
+        {
+            appendInline(row, trimmed.substring(2, trimmed.length() - 2), true);
+            return;
+        }
+        if (trimmed.startsWith("- "))
+        {
+            appendInline(row, "· " + trimmed.substring(2), false);
+            return;
+        }
+        appendInline(row, line, false);
+    }
+
+    private static void appendInline(JSONArray row, String text, boolean bold)
+    {
+        Matcher matcher = MD_LINK.matcher(text);
+        int cursor = 0;
+        while (matcher.find())
+        {
+            if (matcher.start() > cursor)
             {
-                row.add(textElement(rest));
-                return;
+                row.add(textElement(text.substring(cursor, matcher.start()), bold));
             }
-            if (http > 0)
-            {
-                row.add(textElement(rest.substring(0, http)));
-            }
-            String fromUrl = rest.substring(http);
-            int end = fromUrl.indexOf(' ');
-            String url = end < 0 ? fromUrl : fromUrl.substring(0, end);
             JSONObject link = new JSONObject();
             link.put("tag", "a");
-            link.put("text", url);
-            link.put("href", url);
+            link.put("text", matcher.group(1));
+            link.put("href", matcher.group(2));
             row.add(link);
-            if (end < 0)
-            {
-                return;
-            }
-            rest = fromUrl.substring(end);
+            cursor = matcher.end();
+        }
+        if (cursor < text.length())
+        {
+            row.add(textElement(text.substring(cursor), bold));
+        }
+        if (row.isEmpty())
+        {
+            row.add(textElement(" ", bold));
         }
     }
 
-    private static int indexOfUrl(String line)
-    {
-        int https = line.indexOf("https://");
-        int http = line.indexOf("http://");
-        if (https < 0)
-        {
-            return http;
-        }
-        if (http < 0)
-        {
-            return https;
-        }
-        return Math.min(https, http);
-    }
-
-    private static JSONObject textElement(String text)
+    private static JSONObject textElement(String text, boolean bold)
     {
         JSONObject el = new JSONObject();
         el.put("tag", "text");
         el.put("text", text);
+        if (bold)
+        {
+            el.put("style", new String[] { "bold" });
+        }
         return el;
     }
 
@@ -156,7 +169,6 @@ public class FeishuBotClient extends AbstractNotifyRobotClient
             String stringToSign = timestamp + "\n" + secret;
             Mac mac = Mac.getInstance("HmacSHA256");
             mac.init(new SecretKeySpec(stringToSign.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
-            // 飞书：对空消息做 HMAC，密钥为 stringToSign
             byte[] signData = mac.doFinal(new byte[] {});
             return Base64.getEncoder().encodeToString(signData);
         }

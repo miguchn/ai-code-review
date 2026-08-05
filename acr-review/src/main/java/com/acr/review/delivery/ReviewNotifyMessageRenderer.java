@@ -1,14 +1,21 @@
 package com.acr.review.delivery;
 
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
+import com.acr.common.utils.DateUtils;
 import com.acr.common.utils.StringUtils;
 import com.acr.review.domain.result.ReviewScopeStats;
 import com.acr.review.domain.result.ReviewTopIssue;
 
-/** 将审查摘要渲染为 IM 行式文本（纯函数，无 IO）。 */
+/**
+ * 将审查摘要渲染为 IM「迷你报告」Markdown（纯函数，无 IO）。
+ * 仅使用标题 / 加粗 / 列表 / 链接语法，保证钉钉 / 企微 / 飞书交集可渲染。
+ */
 public final class ReviewNotifyMessageRenderer
 {
+    private static final String EMPTY = "—";
+
     private ReviewNotifyMessageRenderer()
     {
     }
@@ -19,41 +26,38 @@ public final class ReviewNotifyMessageRenderer
         {
             return "";
         }
-        String conclusionLabel = StringUtils.defaultIfEmpty(content.getConclusionLabel(), "--");
+        String conclusionLabel = StringUtils.defaultIfEmpty(content.getConclusionLabel(), EMPTY);
         String icon = conclusionIcon(conclusionLabel);
+        String score = content.getTotalScore() == null ? EMPTY : content.getTotalScore() + "/100";
 
         StringBuilder sb = new StringBuilder();
-        sb.append("### ").append(icon).append(" AI Code Review · ").append(conclusionLabel).append('\n');
+        sb.append("### ").append(icon).append(" AI Code Review · ")
+            .append(conclusionLabel).append(" · ").append(score).append("\n\n");
 
-        sb.append("总分 ");
-        sb.append(content.getTotalScore() == null ? "--" : content.getTotalScore() + "/100");
-        sb.append(" · 合并请求 #");
-        sb.append(content.getPrNumber() == null ? "--" : content.getPrNumber());
-        if (StringUtils.isNotEmpty(content.getPrTitle()))
-        {
-            sb.append(' ').append(content.getPrTitle());
-        }
-        sb.append('\n');
+        appendSubmissionInfo(sb, content);
 
-        appendMetaLine(sb, content);
-
-        sb.append("\nTop 3 重点问题\n");
         List<ReviewTopIssue> issues = content.getTopIssues();
+        sb.append("\n**审查结果 (").append(issues.size()).append(")**\n\n");
         if (issues.isEmpty())
         {
-            sb.append("暂无重点问题\n");
+            sb.append("本次审查未发现重点问题\n");
         }
         else
         {
             int index = 1;
             for (ReviewTopIssue issue : issues)
             {
-                appendImIssue(sb, index++, issue);
+                appendIssue(sb, index++, issue);
             }
         }
 
-        sb.append('\n').append(formatImScopeStats(content.getScopeStats())).append('\n');
-        appendLinkLine(sb, content);
+        sb.append("\n**范围统计**\n");
+        appendScopeStats(sb, content.getScopeStats());
+
+        sb.append("\n**总结**\n");
+        sb.append(displayOrEmpty(content.getSummaryText())).append('\n');
+
+        appendActionLinks(sb, content, true);
         return sb.toString().trim();
     }
 
@@ -64,26 +68,12 @@ public final class ReviewNotifyMessageRenderer
             return "";
         }
         StringBuilder sb = new StringBuilder();
-        sb.append("### ❌ AI Code Review · 执行失败\n");
-
-        sb.append("合并请求 #");
-        sb.append(content.getPrNumber() == null ? "--" : content.getPrNumber());
-        if (StringUtils.isNotEmpty(content.getPrTitle()))
-        {
-            sb.append(' ').append(content.getPrTitle());
-        }
-        sb.append(" · ").append(content.repositoryFullName()).append('\n');
-
-        sb.append("失败类型：");
-        sb.append(StringUtils.defaultIfEmpty(content.getFailureTypeLabel(), "未知"));
-        sb.append(" · 任务 #");
-        sb.append(content.getTaskId() == null ? "--" : content.getTaskId());
-        sb.append('\n');
-
-        if (StringUtils.isNotEmpty(content.getDetailUrl()))
-        {
-            sb.append("详情：").append(content.getDetailUrl());
-        }
+        sb.append("### ❌ AI Code Review · 执行失败\n\n");
+        appendSubmissionInfo(sb, content);
+        sb.append("\n失败类型: ")
+            .append(StringUtils.defaultIfEmpty(content.getFailureTypeLabel(), "未知"))
+            .append('\n');
+        appendActionLinks(sb, content, false);
         return sb.toString().trim();
     }
 
@@ -104,108 +94,87 @@ public final class ReviewNotifyMessageRenderer
         return "ℹ️";
     }
 
-    static String formatImScopeStats(ReviewScopeStats stats)
+    static String severityIcon(String severity)
     {
-        if (stats == null)
+        if (severity == null)
         {
-            return "范围统计：—";
+            return "ℹ️";
         }
-        List<String> parts = new ArrayList<>();
-        if (stats.getIncludedFiles() != null)
+        return switch (severity.trim().toUpperCase())
         {
-            parts.add("纳入 " + stats.getIncludedFiles());
-        }
-        if (stats.getExcludedFiles() != null)
-        {
-            parts.add("排除 " + stats.getExcludedFiles());
-        }
-        if (stats.getExpandedFiles() != null)
-        {
-            parts.add("扩展 " + stats.getExpandedFiles());
-        }
-        if (stats.getNewCount() != null)
-        {
-            parts.add("新增 " + stats.getNewCount());
-        }
-        if (stats.getExistingCount() != null)
-        {
-            parts.add("存量 " + stats.getExistingCount());
-        }
-        if (parts.isEmpty())
-        {
-            return "范围统计：—";
-        }
-        return "范围统计：" + String.join(" · ", parts);
+            case "CRITICAL" -> "🚨";
+            case "HIGH" -> "⚠️";
+            case "MEDIUM" -> "⚡";
+            case "LOW" -> "💡";
+            default -> "ℹ️";
+        };
     }
 
-    private static void appendMetaLine(StringBuilder sb, ReviewSummaryContent content)
+    private static void appendSubmissionInfo(StringBuilder sb, ReviewSummaryContent content)
     {
-        List<String> parts = new ArrayList<>();
-        parts.add(content.repositoryFullName());
-        if (StringUtils.isNotEmpty(content.getPrAuthor()))
-        {
-            parts.add(content.getPrAuthor());
-        }
-        if (StringUtils.isNotEmpty(content.getSourceBranch()) || StringUtils.isNotEmpty(content.getTargetBranch()))
-        {
-            parts.add(StringUtils.defaultIfEmpty(content.getSourceBranch(), "--")
-                + " → " + StringUtils.defaultIfEmpty(content.getTargetBranch(), "--"));
-        }
-        String changeScale = formatChangeScale(content);
-        if (StringUtils.isNotEmpty(changeScale))
-        {
-            parts.add(changeScale);
-        }
-        sb.append(String.join(" · ", parts));
+        sb.append("**提交信息**\n");
+        sb.append("- 提交人: ").append(displayOrEmpty(content.getPrAuthor())).append('\n');
+        sb.append("- 源分支: ").append(displayOrEmpty(content.getSourceBranch()))
+            .append(" → 目标分支: ").append(displayOrEmpty(content.getTargetBranch())).append('\n');
+        sb.append("- Commit 信息: ").append(displayOrEmpty(content.getCommitMessage())).append('\n');
+        sb.append("- 审查时间: ").append(formatReviewTime(content.getReviewTime())).append('\n');
+        sb.append("- 合并请求: ").append(formatMergeRequest(content)).append('\n');
     }
 
-    private static String formatChangeScale(ReviewSummaryContent content)
+    private static String formatMergeRequest(ReviewSummaryContent content)
     {
-        if (content.getChangedFiles() == null && content.getAdditions() == null && content.getDeletions() == null)
+        Integer prNumber = content.getPrNumber();
+        String title = content.getPrTitle();
+        String url = content.getPrUrl();
+        if (prNumber == null && StringUtils.isEmpty(title) && StringUtils.isEmpty(url))
         {
-            return "";
+            return EMPTY;
         }
-        StringBuilder scale = new StringBuilder();
-        if (content.getChangedFiles() != null)
+        String label = "#";
+        label += prNumber == null ? EMPTY : prNumber;
+        if (StringUtils.isNotEmpty(title))
         {
-            scale.append(content.getChangedFiles()).append(" 文件");
+            label += " " + title;
         }
-        if (content.getAdditions() != null || content.getDeletions() != null)
+        if (StringUtils.isNotEmpty(url))
         {
-            if (scale.length() > 0)
-            {
-                scale.append(' ');
-            }
-            scale.append('+').append(content.getAdditions() == null ? 0 : content.getAdditions());
-            scale.append('/').append('−');
-            scale.append(content.getDeletions() == null ? 0 : content.getDeletions());
+            return "[" + label + "](" + url + ")";
         }
-        return scale.toString();
+        return label;
     }
 
-    private static void appendImIssue(StringBuilder sb, int index, ReviewTopIssue issue)
+    private static void appendIssue(StringBuilder sb, int index, ReviewTopIssue issue)
     {
         String title = StringUtils.defaultIfEmpty(issue.getTitle(), "未命名问题");
-        sb.append(index).append(". [")
+        sb.append(index).append(". ")
+            .append(severityIcon(issue.getSeverity())).append(' ')
             .append(ReviewCommentBodyRenderer.severityLabel(issue.getSeverity()))
-            .append('·')
+            .append(" · ")
             .append(ReviewCommentBodyRenderer.originLabel(issue.getOrigin()))
-            .append("] ")
-            .append(title);
-        String locate = formatImLocate(issue);
+            .append(" —— ")
+            .append(title)
+            .append('\n');
+
+        String locate = formatLocate(issue);
         if (StringUtils.isNotEmpty(locate))
         {
-            sb.append(" — ").append(locate);
+            sb.append("   位置: ").append(locate).append('\n');
         }
-        sb.append('\n');
-        String description = truncate(issue.getDescription(), ReviewDeliveryConstants.IM_MAX_ISSUE_DESCRIPTION_CHARS);
+
+        String description = truncateFlat(issue.getDescription(), ReviewDeliveryConstants.IM_MAX_DESCRIPTION_CHARS);
         if (StringUtils.isNotEmpty(description))
         {
-            sb.append("   ").append(description.replace("\n", " ")).append('\n');
+            sb.append("   ").append(description).append('\n');
+        }
+
+        String suggestion = truncateFlat(issue.getSuggestion(), ReviewDeliveryConstants.IM_MAX_SUGGESTION_CHARS);
+        if (StringUtils.isNotEmpty(suggestion))
+        {
+            sb.append("   建议: ").append(suggestion).append('\n');
         }
     }
 
-    private static String formatImLocate(ReviewTopIssue issue)
+    private static String formatLocate(ReviewTopIssue issue)
     {
         StringBuilder locate = new StringBuilder();
         if (StringUtils.isNotEmpty(issue.getFilePath()))
@@ -238,39 +207,75 @@ public final class ReviewNotifyMessageRenderer
         return "L" + line;
     }
 
-    private static void appendLinkLine(StringBuilder sb, ReviewSummaryContent content)
+    private static void appendScopeStats(StringBuilder sb, ReviewScopeStats stats)
     {
-        boolean hasPr = StringUtils.isNotEmpty(content.getPrUrl());
-        boolean hasDetail = StringUtils.isNotEmpty(content.getDetailUrl());
-        if (!hasPr && !hasDetail)
+        if (stats == null)
+        {
+            sb.append("- ").append(EMPTY).append('\n');
+            return;
+        }
+        sb.append("- 纳入 ").append(n(stats.getIncludedFiles()))
+            .append(" · 排除 ").append(n(stats.getExcludedFiles()))
+            .append(" · 扩展 ").append(n(stats.getExpandedFiles()))
+            .append('\n');
+        sb.append("- 新增 ").append(n(stats.getNewCount()))
+            .append(" · 存量 ").append(n(stats.getExistingCount()))
+            .append('\n');
+    }
+
+    private static void appendActionLinks(StringBuilder sb, ReviewSummaryContent content, boolean includePr)
+    {
+        List<String> links = new ArrayList<>();
+        if (includePr && StringUtils.isNotEmpty(content.getPrUrl()))
+        {
+            links.add("[查看合并请求](" + content.getPrUrl() + ")");
+        }
+        if (StringUtils.isNotEmpty(content.getDetailUrl()))
+        {
+            links.add("[查看审查详情](" + content.getDetailUrl() + ")");
+        }
+        if (links.isEmpty())
         {
             return;
         }
-        if (hasPr)
-        {
-            sb.append("合并请求：").append(content.getPrUrl());
-        }
-        if (hasDetail)
-        {
-            if (hasPr)
-            {
-                sb.append("  ");
-            }
-            sb.append("详情：").append(content.getDetailUrl());
-        }
+        sb.append('\n').append(String.join(" · ", links)).append('\n');
     }
 
-    private static String truncate(String value, int max)
+    private static String formatReviewTime(Date reviewTime)
+    {
+        if (reviewTime == null)
+        {
+            return EMPTY;
+        }
+        return DateUtils.parseDateToStr(DateUtils.YYYY_MM_DD_HH_MM, reviewTime);
+    }
+
+    private static String displayOrEmpty(String value)
+    {
+        return StringUtils.isEmpty(value) ? EMPTY : value.trim();
+    }
+
+    private static String n(Integer value)
+    {
+        return value == null ? EMPTY : String.valueOf(value);
+    }
+
+    /** 压平换行后截断，超长追加省略号 … */
+    static String truncateFlat(String value, int max)
     {
         if (value == null)
         {
             return null;
         }
-        String trimmed = value.trim();
-        if (trimmed.length() <= max)
+        String flat = value.replaceAll("\\R+", " ").trim();
+        if (flat.isEmpty())
         {
-            return trimmed;
+            return null;
         }
-        return trimmed.substring(0, max) + "...";
+        if (flat.length() <= max)
+        {
+            return flat;
+        }
+        return flat.substring(0, max) + "…";
     }
 }

@@ -30,11 +30,20 @@ public final class ReviewDeliveryConstants
     /** GitHub Top3 单条描述最大字符数。 */
     public static final int MAX_ISSUE_DESCRIPTION_CHARS = 500;
 
-    /** IM Top3 单条描述最大字符数（企微字节上限更严）。 */
-    public static final int IM_MAX_ISSUE_DESCRIPTION_CHARS = 150;
+    /** IM 单条问题描述最大字符数（压平换行后截断）。 */
+    public static final int IM_MAX_DESCRIPTION_CHARS = 120;
+
+    /** IM 单条问题建议最大字符数（压平换行后截断）。 */
+    public static final int IM_MAX_SUGGESTION_CHARS = 120;
 
     /** 企微 markdown 正文最大字节数。 */
     public static final int WECOM_MAX_MARKDOWN_BYTES = 4096;
+
+    /** 投递正文快照 kind：IM 通知。 */
+    public static final String SNAPSHOT_KIND_IM = "IM";
+
+    /** 投递正文快照 kind：PR/MR 总结评论。 */
+    public static final String SNAPSHOT_KIND_SUMMARY_COMMENT = "SUMMARY_COMMENT";
 
     /** 失败原因落库上限。 */
     public static final int MAX_FAILURE_MESSAGE_CHARS = 500;

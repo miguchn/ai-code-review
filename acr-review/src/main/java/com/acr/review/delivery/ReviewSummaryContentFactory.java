@@ -62,7 +62,10 @@ public class ReviewSummaryContentFactory
             .topIssues(resolveTopIssues(run))
             .scopeStats(resolveScopeStats(run))
             .failureType(task == null ? null : task.getFailureType())
-            .failureTypeLabel(failureTypeLabel(task == null ? null : task.getFailureType()));
+            .failureTypeLabel(failureTypeLabel(task == null ? null : task.getFailureType()))
+            .commitMessage(resolveCommitMessage(run))
+            .summaryText(run == null ? null : run.getResultSummary())
+            .reviewTime(run == null ? null : run.getFinishedTime());
 
         if (project != null)
         {
@@ -116,6 +119,23 @@ public class ReviewSummaryContentFactory
         {
             return null;
         }
+    }
+
+    /** 取 commitMessages 首行非空文本作为提交信息展示。 */
+    static String resolveCommitMessage(ReviewTaskRun run)
+    {
+        if (run == null || StringUtils.isEmpty(run.getCommitMessages()))
+        {
+            return null;
+        }
+        for (String line : run.getCommitMessages().split("\\R"))
+        {
+            if (StringUtils.isNotEmpty(line) && !line.isBlank())
+            {
+                return line.trim();
+            }
+        }
+        return null;
     }
 
     static String failureTypeLabel(String failureType)

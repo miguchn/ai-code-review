@@ -28,6 +28,16 @@ public class ReviewDeliveryRecord extends BaseEntity
     /** 触发来源：TASK_SUCCESS / ISSUE_DISPOSITION / MANUAL_RETRY。 */
     private String triggerSource;
 
+    /**
+     * 实际发出正文快照 JSON：
+     * {"kind":"IM"|"SUMMARY_COMMENT","channelType":...,"title":...,"body":...}。
+     * 列表查询不拉取此列。
+     */
+    private String contentSnapshot;
+
+    /** 列表展示：是否已保留正文快照（不返回快照正文本身）。 */
+    private Boolean hasContentSnapshot;
+
     /** 列表展示：项目名称。 */
     private String projectName;
     /** 查询条件：开始时间。 */
@@ -173,6 +183,26 @@ public class ReviewDeliveryRecord extends BaseEntity
     public void setTriggerSource(String triggerSource)
     {
         this.triggerSource = triggerSource;
+    }
+
+    public String getContentSnapshot()
+    {
+        return contentSnapshot;
+    }
+
+    public void setContentSnapshot(String contentSnapshot)
+    {
+        this.contentSnapshot = contentSnapshot;
+    }
+
+    public Boolean getHasContentSnapshot()
+    {
+        return hasContentSnapshot;
+    }
+
+    public void setHasContentSnapshot(Boolean hasContentSnapshot)
+    {
+        this.hasContentSnapshot = hasContentSnapshot;
     }
 
     public String getProjectName()

@@ -1,5 +1,6 @@
 package com.acr.review.delivery;
 
+import java.util.Date;
 import java.util.List;
 import com.acr.review.domain.result.ReviewScopeStats;
 import com.acr.review.domain.result.ReviewTopIssue;
@@ -29,6 +30,12 @@ public final class ReviewSummaryContent
     private final String detailUrl;
     private final String failureType;
     private final String failureTypeLabel;
+    /** Commit 信息（由 run.commitMessages 装配）。 */
+    private final String commitMessage;
+    /** 审查总结文本（由 run.resultSummary 装配）。 */
+    private final String summaryText;
+    /** 审查完成时间（由 run.finishedTime 装配）。 */
+    private final Date reviewTime;
 
     private ReviewSummaryContent(Builder builder)
     {
@@ -54,6 +61,9 @@ public final class ReviewSummaryContent
         this.detailUrl = builder.detailUrl;
         this.failureType = builder.failureType;
         this.failureTypeLabel = builder.failureTypeLabel;
+        this.commitMessage = builder.commitMessage;
+        this.summaryText = builder.summaryText;
+        this.reviewTime = builder.reviewTime;
     }
 
     public static Builder builder()
@@ -83,6 +93,9 @@ public final class ReviewSummaryContent
     public String getDetailUrl() { return detailUrl; }
     public String getFailureType() { return failureType; }
     public String getFailureTypeLabel() { return failureTypeLabel; }
+    public String getCommitMessage() { return commitMessage; }
+    public String getSummaryText() { return summaryText; }
+    public Date getReviewTime() { return reviewTime; }
 
     public String repositoryFullName()
     {
@@ -117,6 +130,9 @@ public final class ReviewSummaryContent
         private String detailUrl;
         private String failureType;
         private String failureTypeLabel;
+        private String commitMessage;
+        private String summaryText;
+        private Date reviewTime;
 
         public Builder taskStatus(String taskStatus) { this.taskStatus = taskStatus; return this; }
         public Builder taskId(Long taskId) { this.taskId = taskId; return this; }
@@ -140,6 +156,9 @@ public final class ReviewSummaryContent
         public Builder detailUrl(String detailUrl) { this.detailUrl = detailUrl; return this; }
         public Builder failureType(String failureType) { this.failureType = failureType; return this; }
         public Builder failureTypeLabel(String failureTypeLabel) { this.failureTypeLabel = failureTypeLabel; return this; }
+        public Builder commitMessage(String commitMessage) { this.commitMessage = commitMessage; return this; }
+        public Builder summaryText(String summaryText) { this.summaryText = summaryText; return this; }
+        public Builder reviewTime(Date reviewTime) { this.reviewTime = reviewTime; return this; }
 
         public ReviewSummaryContent build()
         {

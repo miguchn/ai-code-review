@@ -2,12 +2,38 @@ package com.acr.review.delivery;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.mockito.Mockito.mock;
+import java.util.Date;
 import org.junit.jupiter.api.Test;
 import com.acr.review.domain.ReviewProject;
+import com.acr.review.domain.ReviewTask;
+import com.acr.review.domain.ReviewTaskRun;
+import com.acr.system.service.ISysConfigService;
 
 /** 总结评论中合并请求 Web 链接的平台路径规则（§7.3）。 */
 class ReviewSummaryContentFactoryTest
 {
+    @Test
+    void assemblesCommitMessageSummaryAndReviewTimeFromRun()
+    {
+        ReviewTask task = new ReviewTask();
+        task.setTaskId(1L);
+        task.setPrNumber(4);
+        ReviewTaskRun run = new ReviewTaskRun();
+        run.setCommitMessages("Fix login\nSecond line");
+        run.setResultSummary("整体风险可控");
+        Date finished = new Date(1_700_000_000_000L);
+        run.setFinishedTime(finished);
+        ReviewProject project = project("GITHUB", "https://github.com/acme/demo", "acme", "demo");
+
+        ReviewSummaryContent content = new ReviewSummaryContentFactory(mock(ISysConfigService.class))
+            .build(task, run, project);
+
+        assertEquals("Fix login", content.getCommitMessage());
+        assertEquals("整体风险可控", content.getSummaryText());
+        assertEquals(finished, content.getReviewTime());
+    }
+
     @Test
     void githubUsesPullPath()
     {

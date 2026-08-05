@@ -60,8 +60,22 @@
       <el-table-column label="任务 ID" prop="taskId" width="100" />
       <el-table-column label="失败原因" prop="failureMessage" min-width="220" :show-overflow-tooltip="true" />
       <el-table-column label="尝试次数" prop="attemptCount" width="90" />
-      <el-table-column label="操作" width="100" fixed="right" class-name="small-padding fixed-width">
+      <el-table-column label="操作" width="160" fixed="right" class-name="small-padding fixed-width">
         <template #default="scope">
+          <el-tooltip
+            content="较早投递未保留消息快照"
+            placement="top"
+            :disabled="hasContentSnapshot(scope.row)"
+          >
+            <span class="op-btn-wrap">
+              <el-button
+                link
+                type="primary"
+                :disabled="!hasContentSnapshot(scope.row)"
+                @click="openMessageDetail(scope.row)"
+              >消息详情</el-button>
+            </span>
+          </el-tooltip>
           <el-button v-if="scope.row.deliveryStatus === 'FAILED'" link type="primary"
             :loading="retryingId === scope.row.deliveryId"
             @click="handleRetry(scope.row)" v-hasPermi="['review:delivery:retry']">补发</el-button>
@@ -71,14 +85,33 @@
 
     <pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum"
       v-model:limit="queryParams.pageSize" @pagination="getList" />
+
+    <el-drawer
+      v-model="messageDrawerVisible"
+      title="消息详情"
+      direction="rtl"
+      size="min(640px, calc(100vw - 32px))"
+      append-to-body
+      class="delivery-message-drawer"
+      @closed="resetMessageDetail"
+    >
+      <div v-loading="messageLoading" class="delivery-message-drawer__body">
+        <MessageContentView
+          v-if="!messageLoading"
+          :title="messageTitle"
+          :body="messageBody"
+        />
+      </div>
+    </el-drawer>
   </div>
 </template>
 
 <script setup name="ReviewDeliveryRecord">
 import { useRoute } from 'vue-router'
-import { listDelivery, retryDeliveryById } from '@/api/review/delivery'
+import { listDelivery, retryDeliveryById, getDeliveryContent } from '@/api/review/delivery'
 import { listReviewProject } from '@/api/review/project'
 import { formatDateTime } from '@/utils/reviewDisplay'
+import MessageContentView from '../components/MessageContentView.vue'
 
 const route = useRoute()
 
@@ -96,6 +129,11 @@ const total = ref(0)
 const dateRange = ref([])
 const retryingId = ref()
 
+const messageDrawerVisible = ref(false)
+const messageLoading = ref(false)
+const messageTitle = ref('')
+const messageBody = ref('')
+
 const queryParams = ref({
   pageNum: 1,
   pageSize: 10,
@@ -105,6 +143,11 @@ const queryParams = ref({
   prNumber: undefined,
   taskId: undefined
 })
+
+function hasContentSnapshot(row) {
+  const flag = row && row.hasContentSnapshot
+  return flag === true || flag === 1 || flag === '1'
+}
 
 function getList() {
   loading.value = true
@@ -132,6 +175,32 @@ function handleRetry(row) {
     proxy.$modal.msgSuccess('补发已完成')
     getList()
   }).catch(() => {}).finally(() => { retryingId.value = undefined })
+}
+
+function openMessageDetail(row) {
+  if (!hasContentSnapshot(row)) {
+    return
+  }
+  messageDrawerVisible.value = true
+  messageLoading.value = true
+  messageTitle.value = ''
+  messageBody.value = ''
+  getDeliveryContent(row.deliveryId).then(response => {
+    const data = response.data || {}
+    messageTitle.value = data.title || ''
+    messageBody.value = data.body || ''
+  }).catch(() => {
+    messageTitle.value = ''
+    messageBody.value = ''
+  }).finally(() => {
+    messageLoading.value = false
+  })
+}
+
+function resetMessageDetail() {
+  messageTitle.value = ''
+  messageBody.value = ''
+  messageLoading.value = false
 }
 
 loadProjects()
@@ -166,4 +235,8 @@ function applyRouteQuery() {
 
 <style scoped>
 .empty-tip { color: var(--el-text-color-placeholder); }
+.op-btn-wrap { display: inline-flex; }
+.delivery-message-drawer__body {
+  min-height: 160px;
+}
 </style>

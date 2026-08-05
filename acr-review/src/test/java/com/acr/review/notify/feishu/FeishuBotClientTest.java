@@ -40,7 +40,7 @@ class FeishuBotClientTest
     {
         server.enqueue(json(200, "{\"code\":0,\"msg\":\"success\"}"));
         String title = "AI Code Review · 通过";
-        String body = "### ✅ AI Code Review · 通过\n总分 90/100";
+        String body = "### ✅ AI Code Review · 通过 · 90/100";
 
         client.send(server.url("/").toString(), null, title, body);
 
@@ -88,20 +88,35 @@ class FeishuBotClientTest
     }
 
     @Test
-    void toPostLinksEveryUrlOnOneLine()
+    void toPostConvertsHeadingBoldListAndMarkdownLinks()
     {
         JSONArray rows = FeishuBotClient.toPostLines(
-            "PR：https://github.com/acme/demo/pull/8  详情：https://acr.example.com/review/record-detail/index/42");
+            "### ⚠️ AI Code Review · 建议修改 · 78/100\n"
+                + "**提交信息**\n"
+                + "- 提交人: miguchn\n"
+                + "[查看合并请求](https://github.com/acme/demo/pull/4) · "
+                + "[查看审查详情](https://acr.example.com/review/record-detail/index/42)");
 
-        assertEquals(1, rows.size());
-        JSONArray row = rows.getJSONArray(0);
-        long linkCount = row.stream()
-            .filter(el -> "a".equals(((JSONObject) el).getString("tag")))
-            .count();
-        assertEquals(2, linkCount);
-        JSONObject last = row.getJSONObject(row.size() - 1);
-        assertEquals("a", last.getString("tag"));
-        assertEquals("https://acr.example.com/review/record-detail/index/42", last.getString("href"));
+        assertEquals(4, rows.size());
+
+        JSONObject heading = rows.getJSONArray(0).getJSONObject(0);
+        assertEquals("text", heading.getString("tag"));
+        assertEquals("⚠️ AI Code Review · 建议修改 · 78/100", heading.getString("text"));
+        assertTrue(heading.getJSONArray("style").contains("bold"));
+
+        JSONObject label = rows.getJSONArray(1).getJSONObject(0);
+        assertEquals("提交信息", label.getString("text"));
+        assertTrue(label.getJSONArray("style").contains("bold"));
+
+        JSONObject list = rows.getJSONArray(2).getJSONObject(0);
+        assertEquals("· 提交人: miguchn", list.getString("text"));
+
+        JSONArray links = rows.getJSONArray(3);
+        assertEquals("a", links.getJSONObject(0).getString("tag"));
+        assertEquals("查看合并请求", links.getJSONObject(0).getString("text"));
+        assertEquals("https://github.com/acme/demo/pull/4", links.getJSONObject(0).getString("href"));
+        assertEquals(" · ", links.getJSONObject(1).getString("text"));
+        assertEquals("查看审查详情", links.getJSONObject(2).getString("text"));
     }
 
     @Test

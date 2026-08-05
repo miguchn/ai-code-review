@@ -68,4 +68,12 @@ public class ReviewDeliveryController extends BaseController
         deliveryService.retryDeliveryById(deliveryId);
         return success("投递补发已完成");
     }
+
+    /** 查看实际发出的正文快照（复用列表权限 + 部门数据范围）。 */
+    @PreAuthorize("@ss.hasPermi('review:delivery:list')")
+    @GetMapping("/record/{deliveryId}/content")
+    public AjaxResult content(@PathVariable Long deliveryId)
+    {
+        return success(deliveryService.selectDeliveryContent(deliveryId));
+    }
 }

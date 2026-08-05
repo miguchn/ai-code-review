@@ -1,10 +1,12 @@
 package com.acr.review.service.impl;
 
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DuplicateKeyException;
@@ -46,6 +48,8 @@ import com.acr.review.service.IReviewNotifyChannelService.DecryptedNotifyChannel
 import com.acr.review.service.ReviewIssueDispositionEnricher;
 import com.acr.review.notify.NotifyRobotClients;
 import com.acr.system.service.ISysDeptService;
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
 
 /** 审查结果投递：总结评论 + IM 群机器人；失败不污染审查结论。 */
 @Service
@@ -100,11 +104,12 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
         {
             return;
         }
+        AtomicReference<String> snapshotRef = new AtomicReference<>();
         try
         {
-            String externalId = writeComment(task, run);
+            String externalId = writeComment(task, run, snapshotRef);
             upsertSummaryCommentResult(task, run, ReviewDeliveryConstants.STATUS_SUCCESS, externalId, null,
-                ReviewDeliveryConstants.TRIGGER_TASK_SUCCESS);
+                ReviewDeliveryConstants.TRIGGER_TASK_SUCCESS, snapshotRef.get());
         }
         catch (Exception ex)
         {
@@ -113,7 +118,7 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
             try
             {
                 upsertSummaryCommentResult(task, run, ReviewDeliveryConstants.STATUS_FAILED, null, message,
-                    ReviewDeliveryConstants.TRIGGER_TASK_SUCCESS);
+                    ReviewDeliveryConstants.TRIGGER_TASK_SUCCESS, snapshotRef.get());
             }
             catch (Exception persistEx)
             {
@@ -136,6 +141,8 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
         {
             return;
         }
+        String renderedChannelType = null;
+        String contentSnapshot = null;
         try
         {
             ReviewProject project = projectMapper.selectReviewProjectById(task.getProjectId());
@@ -163,7 +170,7 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
                 // 渠道停用/删除/解密失败：仍按真实渠道类型落幂等键，避免 UNKNOWN_IM 脏值
                 upsertImResult(task, run, resolveChannelType(project), ReviewDeliveryConstants.STATUS_FAILED,
                     StringUtils.defaultIfEmpty(ex.getMessage(), "通知渠道不可用"),
-                    ReviewDeliveryConstants.TRIGGER_TASK_SUCCESS);
+                    ReviewDeliveryConstants.TRIGGER_TASK_SUCCESS, null);
                 return;
             }
             ReviewSummaryContent content = contentFactory.build(task, run, project);
@@ -173,10 +180,13 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
             String body = success
                 ? ReviewNotifyMessageRenderer.renderSuccess(content)
                 : ReviewNotifyMessageRenderer.renderFailed(content);
+            renderedChannelType = channel.channelType();
+            contentSnapshot = buildContentSnapshot(ReviewDeliveryConstants.SNAPSHOT_KIND_IM,
+                renderedChannelType, title, body);
             robotClients.require(channel.channelType()).send(
                 channel.webhookUrl(), channel.secret(), title, body);
             upsertImResult(task, run, channel.channelType(), ReviewDeliveryConstants.STATUS_SUCCESS, null,
-                ReviewDeliveryConstants.TRIGGER_TASK_SUCCESS);
+                ReviewDeliveryConstants.TRIGGER_TASK_SUCCESS, contentSnapshot);
         }
         catch (Exception ex)
         {
@@ -185,9 +195,9 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
             try
             {
                 ReviewProject project = projectMapper.selectReviewProjectById(task.getProjectId());
-                String channelType = resolveChannelType(project);
+                String channelType = renderedChannelType != null ? renderedChannelType : resolveChannelType(project);
                 upsertImResult(task, run, channelType, ReviewDeliveryConstants.STATUS_FAILED, message,
-                    ReviewDeliveryConstants.TRIGGER_TASK_SUCCESS);
+                    ReviewDeliveryConstants.TRIGGER_TASK_SUCCESS, contentSnapshot);
             }
             catch (Exception persistEx)
             {
@@ -212,17 +222,18 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
             throw new ServiceException("该 PR 尚无成功审查结果，无法投递评论");
         }
         ReviewTaskRun run = pickLatestSuccessRun(latest.getTaskId());
+        AtomicReference<String> snapshotRef = new AtomicReference<>();
         try
         {
-            String externalId = writeComment(latest, run);
+            String externalId = writeComment(latest, run, snapshotRef);
             upsertSummaryCommentResult(latest, run, ReviewDeliveryConstants.STATUS_SUCCESS, externalId, null,
-                ReviewDeliveryConstants.TRIGGER_MANUAL_RETRY);
+                ReviewDeliveryConstants.TRIGGER_MANUAL_RETRY, snapshotRef.get());
         }
         catch (Exception ex)
         {
             String message = sanitizeFailure(ex, null);
             upsertSummaryCommentResult(latest, run, ReviewDeliveryConstants.STATUS_FAILED, null, message,
-                ReviewDeliveryConstants.TRIGGER_MANUAL_RETRY);
+                ReviewDeliveryConstants.TRIGGER_MANUAL_RETRY, snapshotRef.get());
             throw new ServiceException("投递重试失败：" + message);
         }
     }
@@ -241,12 +252,13 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
             return ReviewCommentSyncResult.skipped();
         }
         ReviewTaskRun run = pickLatestSuccessRun(latest.getTaskId());
+        AtomicReference<String> snapshotRef = new AtomicReference<>();
         try
         {
-            String externalId = writeComment(latest, run);
+            String externalId = writeComment(latest, run, snapshotRef);
             ReviewDeliveryRecord record = upsertSummaryCommentResult(latest, run,
                 ReviewDeliveryConstants.STATUS_SUCCESS, externalId, null,
-                ReviewDeliveryConstants.TRIGGER_ISSUE_DISPOSITION);
+                ReviewDeliveryConstants.TRIGGER_ISSUE_DISPOSITION, snapshotRef.get());
             return ReviewCommentSyncResult.of(ReviewDeliveryConstants.STATUS_SUCCESS, null,
                 record == null ? null : record.getDeliveryId());
         }
@@ -260,7 +272,7 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
             {
                 ReviewDeliveryRecord record = upsertSummaryCommentResult(latest, run,
                     ReviewDeliveryConstants.STATUS_FAILED, null, message,
-                    ReviewDeliveryConstants.TRIGGER_ISSUE_DISPOSITION);
+                    ReviewDeliveryConstants.TRIGGER_ISSUE_DISPOSITION, snapshotRef.get());
                 deliveryId = record == null ? null : record.getDeliveryId();
             }
             catch (Exception persistEx)
@@ -302,6 +314,7 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
             throw new ServiceException("关联审查任务不存在");
         }
         ReviewTaskRun run = pickTerminalRun(task);
+        String contentSnapshot = null;
         try
         {
             if (!"Y".equals(project.getNotifyEnabled()) || project.getNotifyChannelId() == null)
@@ -333,16 +346,18 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
             String body = success
                 ? ReviewNotifyMessageRenderer.renderSuccess(content)
                 : ReviewNotifyMessageRenderer.renderFailed(content);
+            contentSnapshot = buildContentSnapshot(ReviewDeliveryConstants.SNAPSHOT_KIND_IM,
+                record.getChannel(), title, body);
             robotClients.require(channel.channelType()).send(
                 channel.webhookUrl(), channel.secret(), title, body);
             upsertImResult(task, run, record.getChannel(), ReviewDeliveryConstants.STATUS_SUCCESS, null,
-                ReviewDeliveryConstants.TRIGGER_MANUAL_RETRY);
+                ReviewDeliveryConstants.TRIGGER_MANUAL_RETRY, contentSnapshot);
         }
         catch (Exception ex)
         {
             String message = sanitizeFailure(ex, null);
             upsertImResult(task, run, record.getChannel(), ReviewDeliveryConstants.STATUS_FAILED, message,
-                ReviewDeliveryConstants.TRIGGER_MANUAL_RETRY);
+                ReviewDeliveryConstants.TRIGGER_MANUAL_RETRY, contentSnapshot);
             throw new ServiceException("投递补发失败：" + message);
         }
     }
@@ -398,6 +413,32 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
     }
 
     @Override
+    public Map<String, Object> selectDeliveryContent(Long deliveryId)
+    {
+        // 与列表同数据范围：先按投递记录所属项目做部门校验
+        selectDeliveryById(deliveryId);
+        String snapshot = deliveryMapper.selectContentSnapshotById(deliveryId);
+        if (StringUtils.isEmpty(snapshot))
+        {
+            return Collections.emptyMap();
+        }
+        try
+        {
+            JSONObject parsed = JSON.parseObject(snapshot);
+            if (parsed == null)
+            {
+                return Collections.emptyMap();
+            }
+            return new HashMap<>(parsed);
+        }
+        catch (Exception ex)
+        {
+            log.warn("投递正文快照解析失败, deliveryId={}", deliveryId);
+            return Collections.emptyMap();
+        }
+    }
+
+    @Override
     @DataScope(deptAlias = "d", userAlias = "owner", permission = "review:delivery:list")
     public List<ReviewDeliveryRecord> selectDeliveryList(ReviewDeliveryRecord query)
     {
@@ -411,7 +452,7 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
         return deliveryMapper.countDeliveryList(query);
     }
 
-    private String writeComment(ReviewTask task, ReviewTaskRun run)
+    private String writeComment(ReviewTask task, ReviewTaskRun run, AtomicReference<String> snapshotRef)
     {
         ReviewProject project = projectMapper.selectReviewProjectById(task.getProjectId());
         if (project == null || !"0".equals(project.getStatus()))
@@ -447,6 +488,12 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
         ReviewSummaryContent content = contentFactory.build(task, run, project);
         enrichDisposition(content, task.getProjectId(), task.getPrNumber());
         String body = ReviewCommentBodyRenderer.render(content);
+        String channel = ReviewDeliveryConstants.channelForProvider(provider);
+        if (snapshotRef != null)
+        {
+            snapshotRef.set(buildContentSnapshot(
+                ReviewDeliveryConstants.SNAPSHOT_KIND_SUMMARY_COMMENT, channel, "", body));
+        }
 
         GitPullRequestCommentClient commentClient = adapterRegistry.requireCommentClient(provider);
         Optional<GitPullRequestComment> existing = commentClient.findCommentWithMarker(
@@ -481,7 +528,8 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
 
     /** 总结评论投递结果幂等落库。 */
     private ReviewDeliveryRecord upsertSummaryCommentResult(ReviewTask task, ReviewTaskRun run, String status,
-                                                            String externalId, String failureMessage, String triggerSource)
+                                                            String externalId, String failureMessage,
+                                                            String triggerSource, String contentSnapshot)
     {
         ReviewProject project = projectMapper.selectReviewProjectById(task.getProjectId());
         String provider = project != null && StringUtils.isNotEmpty(project.getProvider())
@@ -489,11 +537,12 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
         String key = ReviewDeliveryConstants.idempotencyKey(provider, task.getProjectId(), task.getPrNumber());
         return upsertResult(task, run, provider,
             ReviewDeliveryConstants.channelForProvider(provider), key, externalId, status, failureMessage,
-            triggerSource);
+            triggerSource, contentSnapshot);
     }
 
     private ReviewDeliveryRecord upsertImResult(ReviewTask task, ReviewTaskRun run, String channelType,
-                                                String status, String failureMessage, String triggerSource)
+                                                String status, String failureMessage, String triggerSource,
+                                                String contentSnapshot)
     {
         String type = StringUtils.isNotEmpty(channelType) ? channelType : "UNKNOWN_IM";
         String key = ReviewDeliveryConstants.imIdempotencyKey(type, task.getTaskId());
@@ -503,12 +552,13 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
         {
             provider = project.getProvider();
         }
-        return upsertResult(task, run, provider, type, key, null, status, failureMessage, triggerSource);
+        return upsertResult(task, run, provider, type, key, null, status, failureMessage, triggerSource,
+            contentSnapshot);
     }
 
     private ReviewDeliveryRecord upsertResult(ReviewTask task, ReviewTaskRun run, String provider, String channel,
                                               String key, String externalId, String status, String failureMessage,
-                                              String triggerSource)
+                                              String triggerSource, String contentSnapshot)
     {
         Date now = new Date();
         ReviewDeliveryRecord existing = deliveryMapper.selectByIdempotencyKey(key);
@@ -527,6 +577,7 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
         record.setFailureMessage(truncate(failureMessage));
         record.setLastAttemptTime(now);
         record.setTriggerSource(triggerSource);
+        record.setContentSnapshot(contentSnapshot);
         record.setCreateBy("system");
         record.setUpdateBy("system");
 
@@ -553,6 +604,16 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
         record.setDeliveryId(existing.getDeliveryId());
         deliveryMapper.updateDeliveryResult(record);
         return record;
+    }
+
+    static String buildContentSnapshot(String kind, String channelType, String title, String body)
+    {
+        JSONObject json = new JSONObject();
+        json.put("kind", kind);
+        json.put("channelType", channelType == null ? "" : channelType);
+        json.put("title", title == null ? "" : title);
+        json.put("body", body == null ? "" : body);
+        return json.toJSONString();
     }
 
     private String resolveChannelType(ReviewProject project)
