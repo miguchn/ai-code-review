@@ -67,4 +67,4 @@ Settings → Developer settings → Personal access tokens → **Tokens (classic
 | 凭据「检测」失败 | 令牌过期、权限不足或仓库未授权，重新生成令牌并更新凭据 |
 | Recent Deliveries 正常但没有审查任务 | 事件被平台按规则忽略，见「常见问题 → Webhook 没触发怎么办」第 2 步 |
 
-> 提示：GitHub Webhook 页面的 **Test delivery** 按钮发送的是 push 样例载荷，不会创建审查任务，验证请以真实 PR 为准。
+> 提示：GitHub Webhook 页面的 **Test delivery** 按钮发送的是 ping 事件而非真实 PR：项目已接入时平台记录为「非合并请求事件（ping）」，未接入时记录为「未匹配到已接入的代码项目」，不会创建审查任务，验证请以真实 PR 为准。

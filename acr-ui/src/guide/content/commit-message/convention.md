@@ -1,6 +1,6 @@
 # 提交注释规范说明
 
-这篇说明平台如何使用你的 commit 注释（commit message），以及怎样写注释能让审查结果更准。
+这篇帮你了解平台如何使用你的 commit 注释（commit message），以及怎样写注释能让审查结果更准。
 
 ## 平台如何读取 commit 注释
 
