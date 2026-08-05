@@ -48,3 +48,9 @@ sql/init-local.sh
 
 # MCP server config with credentials (not tracked)
 .mcp.json
+
+# Design mockups / social preview assets (not tracked)
+docs/images/social-preview.html
+docs/images/social-preview.png
+docs/images/im-notify-redesign-mockup.html
+docs/images/im-notify-redesign-mockup.png
