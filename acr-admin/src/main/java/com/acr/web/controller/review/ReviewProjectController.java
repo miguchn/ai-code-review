@@ -50,7 +50,7 @@ public class ReviewProjectController extends BaseController
     }
 
     @PreAuthorize("@ss.hasPermi('review:project:test')")
-    @Log(title = "读取 GitHub 仓库信息")
+    @Log(title = "读取仓库信息")
     @PostMapping("/repository-info")
     public AjaxResult readRepositoryInfo(@Validated @RequestBody GitRepositoryReadRequest request)
     {

@@ -60,6 +60,14 @@ public interface ISysDeptService
     public SysDept selectDeptById(Long deptId);
 
     /**
+     * 根据ID查询所有子部门（ancestors 含子节点，含停用/删除标记行）
+     *
+     * @param deptId 部门ID
+     * @return 子部门列表
+     */
+    public List<SysDept> selectChildrenDeptById(Long deptId);
+
+    /**
      * 根据ID查询所有子部门（正常状态）
      * 
      * @param deptId 部门ID

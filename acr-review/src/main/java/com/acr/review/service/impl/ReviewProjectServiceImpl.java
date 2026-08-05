@@ -1,5 +1,6 @@
 package com.acr.review.service.impl;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
@@ -142,17 +143,7 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
             .map(system -> new ReviewProjectOptions.Option(system.getSystemId(), system.getSystemName(), system.getDeptId(), null, system.getStatus()))
             .toList());
 
-        SysDept deptQuery = new SysDept();
-        deptQuery.setStatus("0");
-        options.setDepartments(deptService.selectDeptList(deptQuery).stream()
-            .map(dept -> new ReviewProjectOptions.Option(dept.getDeptId(), dept.getDeptName(), dept.getDeptId(), dept.getParentId(), dept.getStatus()))
-            .toList());
-
-        SysUser userQuery = new SysUser();
-        userQuery.setStatus("0");
-        options.setOwners(userService.selectUserList(userQuery).stream()
-            .map(user -> new ReviewProjectOptions.Option(user.getUserId(), user.getNickName(), user.getDeptId(), null, user.getStatus()))
-            .toList());
+        fillDepartmentAndOwnerOptions(options);
 
         GitCredential credentialQuery = new GitCredential();
         credentialQuery.setStatus("0");
@@ -192,6 +183,75 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
         return options;
     }
 
+    /**
+     * 管理员返回全量部门/负责人；非管理员仅本部门及子部门与对应用户。
+     * 当前用户无所属部门时 fail-close：departments / owners 返回空列表。
+     */
+    private void fillDepartmentAndOwnerOptions(ReviewProjectOptions options)
+    {
+        if (SecurityUtils.isAdmin())
+        {
+            SysDept deptQuery = new SysDept();
+            deptQuery.setStatus("0");
+            options.setDepartments(deptService.selectDeptList(deptQuery).stream()
+                .map(dept -> new ReviewProjectOptions.Option(dept.getDeptId(), dept.getDeptName(), dept.getDeptId(), dept.getParentId(), dept.getStatus()))
+                .toList());
+
+            SysUser userQuery = new SysUser();
+            userQuery.setStatus("0");
+            options.setOwners(userService.selectUserList(userQuery).stream()
+                .map(user -> new ReviewProjectOptions.Option(user.getUserId(), user.getNickName(), user.getDeptId(), null, user.getStatus()))
+                .toList());
+            return;
+        }
+
+        Long deptId = SecurityUtils.getDeptId();
+        if (deptId == null)
+        {
+            options.setDepartments(List.of());
+            options.setOwners(List.of());
+            return;
+        }
+
+        options.setDepartments(listScopedDepartments(deptId).stream()
+            .map(dept -> new ReviewProjectOptions.Option(dept.getDeptId(), dept.getDeptName(), dept.getDeptId(), dept.getParentId(), dept.getStatus()))
+            .toList());
+
+        SysUser userQuery = new SysUser();
+        userQuery.setStatus("0");
+        userQuery.setDeptId(deptId);
+        options.setOwners(userService.selectUserList(userQuery).stream()
+            .map(user -> new ReviewProjectOptions.Option(user.getUserId(), user.getNickName(), user.getDeptId(), null, user.getStatus()))
+            .toList());
+    }
+
+    /** 当前部门 + ancestors 子树中 status=0 的部门。 */
+    private List<SysDept> listScopedDepartments(Long deptId)
+    {
+        List<SysDept> departments = new ArrayList<>();
+        SysDept self = deptService.selectDeptById(deptId);
+        if (self != null && "0".equals(self.getStatus()) && !"2".equals(self.getDelFlag()))
+        {
+            departments.add(self);
+        }
+        List<SysDept> children = deptService.selectChildrenDeptById(deptId);
+        if (children != null)
+        {
+            for (SysDept child : children)
+            {
+                if (child != null && "0".equals(child.getStatus()) && !"2".equals(child.getDelFlag()))
+                {
+                    departments.add(child);
+                }
+            }
+        }
+        return departments;
+    }
+
+    /**
+     * Git 凭据为平台级共享资源，由管理员统一维护凭据，
+     * 访问控制依赖 review:project:test 权限串与操作日志审计。
+     */
     @Override
     public ReviewRepositoryInfo readRepositoryInfo(GitRepositoryReadRequest request)
     {
