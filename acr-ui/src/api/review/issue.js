@@ -19,3 +19,7 @@ export function closeIssue(issueId, data) {
 export function dismissIssue(issueId, data) {
   return request({ url: '/review/issue/' + issueId + '/dismiss', method: 'put', data })
 }
+
+export function reopenIssue(issueId) {
+  return request({ url: '/review/issue/' + issueId + '/reopen', method: 'put' })
+}

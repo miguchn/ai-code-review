@@ -9,6 +9,7 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import com.acr.common.annotation.DataScope;
@@ -25,6 +26,7 @@ import com.acr.review.domain.ReviewDeliveryRecord;
 import com.acr.review.domain.ReviewIssue;
 import com.acr.review.domain.ReviewPipelineConstants;
 import com.acr.review.domain.ReviewProject;
+import com.acr.review.domain.ReviewRoundReconcileResult;
 import com.acr.review.domain.ReviewTask;
 import com.acr.review.domain.ReviewTaskRun;
 import com.acr.review.git.GitAccessContext;
@@ -43,6 +45,7 @@ import com.acr.review.mapper.ReviewTaskRunMapper;
 import com.acr.review.notify.NotifyRobotException;
 import com.acr.review.service.IGitCredentialService;
 import com.acr.review.service.IReviewDeliveryService;
+import com.acr.review.service.IReviewIssueService;
 import com.acr.review.service.IReviewNotifyChannelService;
 import com.acr.review.service.IReviewNotifyChannelService.DecryptedNotifyChannel;
 import com.acr.review.service.ReviewIssueDispositionEnricher;
@@ -69,6 +72,7 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
     private final ISysDeptService deptService;
     private final GitAdapterRegistry adapterRegistry;
     private final GitCredentialMapper credentialMapper;
+    private final IReviewIssueService issueService;
 
     public ReviewDeliveryServiceImpl(ReviewDeliveryRecordMapper deliveryMapper,
                                      ReviewTaskMapper taskMapper,
@@ -81,7 +85,8 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
                                      ReviewSummaryContentFactory contentFactory,
                                      ISysDeptService deptService,
                                      GitAdapterRegistry adapterRegistry,
-                                     GitCredentialMapper credentialMapper)
+                                     GitCredentialMapper credentialMapper,
+                                     @Lazy IReviewIssueService issueService)
     {
         this.deliveryMapper = deliveryMapper;
         this.taskMapper = taskMapper;
@@ -95,10 +100,11 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
         this.deptService = deptService;
         this.adapterRegistry = adapterRegistry;
         this.credentialMapper = credentialMapper;
+        this.issueService = issueService;
     }
 
     @Override
-    public void deliverAfterSuccess(ReviewTask task, ReviewTaskRun run)
+    public void deliverAfterSuccess(ReviewTask task, ReviewTaskRun run, ReviewRoundReconcileResult reconcile)
     {
         if (task == null || !ReviewPipelineConstants.TASK_SUCCESS.equals(task.getTaskStatus()))
         {
@@ -107,7 +113,7 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
         AtomicReference<String> snapshotRef = new AtomicReference<>();
         try
         {
-            String externalId = writeComment(task, run, snapshotRef);
+            String externalId = writeComment(task, run, reconcile, snapshotRef);
             upsertSummaryCommentResult(task, run, ReviewDeliveryConstants.STATUS_SUCCESS, externalId, null,
                 ReviewDeliveryConstants.TRIGGER_TASK_SUCCESS, snapshotRef.get());
         }
@@ -128,7 +134,7 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
     }
 
     @Override
-    public void deliverNotifyAfterTerminal(ReviewTask task, ReviewTaskRun run)
+    public void deliverNotifyAfterTerminal(ReviewTask task, ReviewTaskRun run, ReviewRoundReconcileResult reconcile)
     {
         if (task == null || task.getTaskId() == null)
         {
@@ -173,7 +179,8 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
                     ReviewDeliveryConstants.TRIGGER_TASK_SUCCESS, null);
                 return;
             }
-            ReviewSummaryContent content = contentFactory.build(task, run, project);
+            ReviewSummaryContent content = contentFactory.build(task, run, project,
+                resolveRecheckingForRender(reconcile, task.getProjectId(), task.getPrNumber()));
             String title = success
                 ? "AI Code Review · " + content.getConclusionLabel()
                 : "AI Code Review · 执行失败";
@@ -225,7 +232,7 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
         AtomicReference<String> snapshotRef = new AtomicReference<>();
         try
         {
-            String externalId = writeComment(latest, run, snapshotRef);
+            String externalId = writeComment(latest, run, null, snapshotRef);
             upsertSummaryCommentResult(latest, run, ReviewDeliveryConstants.STATUS_SUCCESS, externalId, null,
                 ReviewDeliveryConstants.TRIGGER_MANUAL_RETRY, snapshotRef.get());
         }
@@ -255,7 +262,7 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
         AtomicReference<String> snapshotRef = new AtomicReference<>();
         try
         {
-            String externalId = writeComment(latest, run, snapshotRef);
+            String externalId = writeComment(latest, run, null, snapshotRef);
             ReviewDeliveryRecord record = upsertSummaryCommentResult(latest, run,
                 ReviewDeliveryConstants.STATUS_SUCCESS, externalId, null,
                 ReviewDeliveryConstants.TRIGGER_ISSUE_DISPOSITION, snapshotRef.get());
@@ -329,7 +336,8 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
                 log.info("投递记录渠道 {} 与项目当前渠道 {} 不一致，按当前渠道补发, deliveryId={}",
                     record.getChannel(), channel.channelType(), deliveryId);
             }
-            ReviewSummaryContent content = contentFactory.build(task, run, project);
+            ReviewSummaryContent content = contentFactory.build(task, run, project,
+                resolveRecheckingForRender(null, task.getProjectId(), task.getPrNumber()));
             boolean success = ReviewPipelineConstants.TASK_SUCCESS.equals(task.getTaskStatus());
             boolean failed = ReviewPipelineConstants.TASK_FAILED.equals(task.getTaskStatus());
             if (!success && !failed)
@@ -452,7 +460,8 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
         return deliveryMapper.countDeliveryList(query);
     }
 
-    private String writeComment(ReviewTask task, ReviewTaskRun run, AtomicReference<String> snapshotRef)
+    private String writeComment(ReviewTask task, ReviewTaskRun run, ReviewRoundReconcileResult reconcile,
+                                AtomicReference<String> snapshotRef)
     {
         ReviewProject project = projectMapper.selectReviewProjectById(task.getProjectId());
         if (project == null || !"0".equals(project.getStatus()))
@@ -485,7 +494,8 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
             : project.getRepositoryOwner() + "/" + project.getRepositoryName();
         GitRepositoryCoordinates repository = new GitRepositoryCoordinates(
             project.getRepositoryOwner(), project.getRepositoryName(), fullPath, project.getRepositoryUrl());
-        ReviewSummaryContent content = contentFactory.build(task, run, project);
+        ReviewSummaryContent content = contentFactory.build(task, run, project,
+            resolveRecheckingForRender(reconcile, task.getProjectId(), task.getPrNumber()));
         enrichDisposition(content, task.getProjectId(), task.getPrNumber());
         String body = ReviewCommentBodyRenderer.render(content);
         String channel = ReviewDeliveryConstants.channelForProvider(provider);
@@ -524,6 +534,29 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
             byFp.put(issue.getFingerprint(), issue);
         }
         ReviewIssueDispositionEnricher.enrich(content.getTopIssues(), byFp);
+    }
+
+    /**
+     * 首投递使用本轮对账结果；重渲染/人工重试传 null 时从台账派生 RECHECKING 标题。
+     * 派生失败静默降级为空，不阻塞评论/通知主体。
+     */
+    private ReviewRoundReconcileResult resolveRecheckingForRender(ReviewRoundReconcileResult reconcile,
+                                                                  Long projectId, Integer prNumber)
+    {
+        if (reconcile != null)
+        {
+            return reconcile;
+        }
+        try
+        {
+            return ReviewRoundReconcileResult.forRecheckingTitles(
+                issueService.listRecheckingTitles(projectId, prNumber));
+        }
+        catch (Exception ex)
+        {
+            log.warn("派生待复核标题失败（评论/通知降级为空）, projectId={}, pr={}", projectId, prNumber, ex);
+            return ReviewRoundReconcileResult.empty();
+        }
     }
 
     /** 总结评论投递结果幂等落库。 */

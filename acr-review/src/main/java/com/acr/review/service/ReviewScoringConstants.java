@@ -9,18 +9,19 @@ import com.acr.review.domain.ReviewPlatformRules;
 /** 平台统一评分与结果协议常量（代码管理，不进模板正文）。 */
 public final class ReviewScoringConstants
 {
-    public static final String PROTOCOL_VERSION = "1.1";
+    public static final String PROTOCOL_VERSION = "1.2";
 
     /**
-     * 可兼容解析的协议版本。1.0 是 1.1 的真子集（无 origin/scopeStats），
+     * 可兼容解析的协议版本。1.0/1.1 是 1.2 的子集，
      * 模型偶发回写旧版本号时按兼容解析，归属缺省视为 NEW。
      */
-    public static final java.util.Set<String> COMPATIBLE_PROTOCOL_VERSIONS = java.util.Set.of("1.0", "1.1");
+    public static final java.util.Set<String> COMPATIBLE_PROTOCOL_VERSIONS =
+        java.util.Set.of("1.0", "1.1", "1.2");
 
     public static final String PARSE_SUCCESS = "SUCCESS";
     public static final String PARSE_FAILED = "FAILED";
 
-    /** 问题归属（v1.1）：本次变更引入 / 存量。 */
+    /** 问题归属（v1.1+）：本次变更引入 / 存量。 */
     public static final String ORIGIN_NEW = "NEW";
     public static final String ORIGIN_EXISTING = "EXISTING";
 
@@ -36,7 +37,12 @@ public final class ReviewScoringConstants
     public static final int MAX_PERFORMANCE = 5;
     public static final int MAX_COMMIT_QUALITY = 5;
     public static final int MAX_TOTAL = 100;
+    /** 展示层 Top N（总结评论 / IM / 记录详情）。 */
     public static final int MAX_TOP_ISSUES = 3;
+    /** 协议 v1.2 单轮问题清单解析上限。 */
+    public static final int MAX_ISSUES = 20;
+
+    public static final String CONFIG_MAX_ISSUES = "review.protocol.maxIssues";
 
     public static final String SEVERITY_CRITICAL = "CRITICAL";
     public static final String SEVERITY_HIGH = "HIGH";
@@ -66,12 +72,10 @@ public final class ReviewScoringConstants
         new ScoreDimensionDef(DIM_COMMIT_QUALITY, "提交信息质量", MAX_COMMIT_QUALITY,
             "主要评估 PR 描述和 Commit Message 的清晰度与完整性"));
 
-    private static final String TOP_ISSUES_HINT = "审查结果仅输出最重要的 Top " + MAX_TOP_ISSUES + " 问题。";
+    private static final String TOP_ISSUES_HINT = "展示层仅呈现最重要的 Top " + MAX_TOP_ISSUES + " 问题；协议输出全量清单。";
 
     private static final String UI_HINT =
-        "模板正文只需维护当前技术栈的专项审查重点；平台会在执行时自动追加上述公共评分标准、Top "
-            + MAX_TOP_ISSUES
-            + " 重点问题规则与统一输出协议，无需在模板中重复编写评分标准或输出格式。";
+        "模板正文只需维护当前技术栈的专项审查重点；平台会在执行时自动追加上述公共评分标准、全量问题清单规则与统一输出协议，无需在模板中重复编写评分标准或输出格式。";
 
     private ReviewScoringConstants()
     {
@@ -104,7 +108,7 @@ public final class ReviewScoringConstants
 
     /**
      * 审查范围指令块（M3.2）：约束模型只报告本次变更引入的问题。
-     * 归属（origin）输出要求随协议 v1.1（步 5）另行追加，本块保持协议版本中立。
+     * 归属（origin）输出要求随协议另行追加，本块保持协议版本中立。
      *
      * @param scopeApplied    范围决策是否生效（降级全量 Diff 时为 false，不出现"已筛选"表述）
      * @param hasFullContent  是否附有高影响扩展文件全文段
@@ -152,13 +156,13 @@ public final class ReviewScoringConstants
             sb.append('\n');
         }
         sb.append("总分满分 ").append(MAX_TOTAL).append("。\n\n");
-        sb.append("Top ").append(MAX_TOP_ISSUES).append(" 重点问题规则：\n");
-        sb.append("- 仅输出最重要的最多 ").append(MAX_TOP_ISSUES).append(" 个问题，按影响程度从高到低排序；\n");
-        sb.append("- focusIssueCount 为重点问题数（0～").append(MAX_TOP_ISSUES).append("），不是全部问题数量；\n");
+        sb.append("问题清单规则：\n");
+        sb.append("- 输出发现的全部问题，按影响程度从高到低排序，最多 ").append(MAX_ISSUES).append(" 条；\n");
+        sb.append("- focusIssueCount 可自报，平台会按 NEW 问题中 CRITICAL/HIGH 数量重算；\n");
         sb.append("- 每个问题字段：rank、severity、category、title、description、filePath、startLine、endLine、evidence、suggestion、origin；\n");
         sb.append("- severity 取值：CRITICAL|HIGH|MEDIUM|LOW|INFO；\n");
         sb.append("- origin 取值：NEW（本次变更引入）|EXISTING（存量问题）；平台以后端 Diff 行号映射为准覆写该字段，")
-            .append("EXISTING 问题不进入 Top 3、不计 focusIssueCount、不影响评分与结论；\n");
+            .append("EXISTING 问题不计 focusIssueCount、不影响评分与结论；\n");
         sb.append("- 文件路径与行号无法准确确定时必须为 null，禁止伪造位置。\n\n");
         sb.append("JSON 必须包含字段：\n");
         sb.append("protocolVersion（固定 \"").append(PROTOCOL_VERSION).append("\"）、\n");

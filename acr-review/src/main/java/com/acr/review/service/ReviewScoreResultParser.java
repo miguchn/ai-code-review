@@ -8,23 +8,30 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import com.acr.common.utils.StringUtils;
 import com.acr.review.domain.ReviewPipelineConstants;
 import com.acr.review.domain.result.ReviewScoreDimension;
 import com.acr.review.domain.result.ReviewScoreResult;
 import com.acr.review.domain.result.ReviewTopIssue;
 import com.acr.review.scope.IssueOriginClassifier;
+import com.acr.system.service.ISysConfigService;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
- * 解析并校验大模型统一评分 JSON；总分由后端重算，Top3 由后端截断校正。
- * v1.1：传入归属分类器时按 Diff 行号映射打标 origin，EXISTING 问题不进 Top 3、
- * 不计 focusIssueCount、不影响结论；分类在排序后、截断前执行，避免存量问题占用 Top 3 名额。
+ * 解析并校验大模型统一评分 JSON；总分由后端重算。
+ * v1.2：全量问题清单（上限 maxIssues，默认 20）；origin 打标与排序作用于全量；
+ * focusIssueCount 重算为 NEW 中 CRITICAL/HIGH 数量；展示层 Top3 另行截取。
  */
 @Component
 public class ReviewScoreResultParser
 {
+    private static final Logger log = LoggerFactory.getLogger(ReviewScoreResultParser.class);
+
     /** 匹配任意位置的 markdown 围栏 JSON 块（模型常见输出形态）。 */
     private static final java.util.regex.Pattern FENCE_PATTERN = java.util.regex.Pattern.compile(
         "```(?:json)?\\s*\\n(.*?)```", java.util.regex.Pattern.DOTALL | java.util.regex.Pattern.CASE_INSENSITIVE);
@@ -32,16 +39,29 @@ public class ReviewScoreResultParser
     private final ObjectMapper objectMapper = new ObjectMapper()
         .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
-    /** v1.0 兼容入口：不做归属打标，行为与协议 v1.0 一致。 */
+    private final ISysConfigService configService;
+
+    public ReviewScoreResultParser()
+    {
+        this(null);
+    }
+
+    @Autowired
+    public ReviewScoreResultParser(ISysConfigService configService)
+    {
+        this.configService = configService;
+    }
+
+    /** v1.0 兼容入口：不做归属打标。 */
     public ReviewScoreParseResult parse(String rawContent)
     {
         return parse(rawContent, null, false);
     }
 
     /**
-     * v1.1 入口。
+     * v1.1+ 入口。
      *
-     * @param originClassifier 归属分类器；null 时退化为 v1.0 行为（不打标、直接截断 Top 3）
+     * @param originClassifier 归属分类器；null 时不打标
      * @param reportExisting   项目快照 scope_report_existing：true 时 EXISTING 问题标注后保留（仅信息展示），
      *                         false 时剔除并计数
      */
@@ -72,8 +92,15 @@ public class ReviewScoreResultParser
         try
         {
             NormalizeOutcome outcome = normalizeAndValidate(parsed, originClassifier, reportExisting);
+            if (outcome.issuesTruncated())
+            {
+                log.warn("问题清单超出上限已截断, maxIssues={}, kept={}, newCount={}, existingCount={}",
+                    resolveMaxIssues(), outcome.result().getTopIssues().size(),
+                    outcome.newCount(), outcome.existingCount());
+            }
             return ReviewScoreParseResult.ok(outcome.result(), excerpt,
-                outcome.newCount(), outcome.existingCount(), outcome.unverifiableCount());
+                outcome.newCount(), outcome.existingCount(), outcome.unverifiableCount(),
+                outcome.issuesTruncated());
         }
         catch (IllegalArgumentException ex)
         {
@@ -244,8 +271,7 @@ public class ReviewScoreResultParser
             .comparingInt((ReviewTopIssue i) -> severityRank(i.getSeverity()))
             .thenComparing(i -> i.getRank() == null ? Integer.MAX_VALUE : i.getRank()));
 
-        // 归属打标（v1.1）：分类在排序后、Top 3 截断前执行，存量问题不占用 Top 3 名额。
-        // 未传分类器（降级/v1.0 调用方）时保持既有行为：不打标、直接截断。
+        // 归属打标：分类在排序后、清单截断前执行。
         List<ReviewTopIssue> newIssues = new ArrayList<>();
         List<ReviewTopIssue> existingIssues = new ArrayList<>();
         int unverifiableCount = 0;
@@ -275,32 +301,37 @@ public class ReviewScoreResultParser
         }
 
         int totalNewCount = newIssues.size();
-        if (newIssues.size() > ReviewScoringConstants.MAX_TOP_ISSUES)
+        int maxIssues = resolveMaxIssues();
+        boolean truncated = false;
+        List<ReviewTopIssue> finalIssues = new ArrayList<>();
+        for (ReviewTopIssue issue : newIssues)
         {
-            newIssues = new ArrayList<>(newIssues.subList(0, ReviewScoringConstants.MAX_TOP_ISSUES));
+            if (finalIssues.size() >= maxIssues)
+            {
+                truncated = true;
+                break;
+            }
+            issue.setRank(finalIssues.size() + 1);
+            issue.setSeverity(normalizeSeverity(issue.getSeverity()));
+            finalIssues.add(issue);
         }
-        List<ReviewTopIssue> finalIssues = new ArrayList<>(newIssues);
-        for (int i = 0; i < newIssues.size(); i++)
-        {
-            newIssues.get(i).setRank(i + 1);
-            newIssues.get(i).setSeverity(normalizeSeverity(newIssues.get(i).getSeverity()));
-        }
-        // reportExisting=Y：存量问题标注保留（排在新增问题之后，同样封顶，仅信息展示，不计 focusIssueCount）。
-        int existingKept = 0;
+        // reportExisting=Y：存量问题标注保留（排在新增之后），共用 maxIssues 上限。
         if (originClassifier != null && reportExisting)
         {
             for (ReviewTopIssue issue : existingIssues)
             {
-                if (existingKept >= ReviewScoringConstants.MAX_TOP_ISSUES)
+                if (finalIssues.size() >= maxIssues)
                 {
+                    truncated = true;
                     break;
                 }
                 issue.setRank(finalIssues.size() + 1);
                 issue.setSeverity(normalizeSeverity(issue.getSeverity()));
                 finalIssues.add(issue);
-                existingKept++;
             }
         }
+
+        int focusCount = countFocusIssues(finalIssues);
 
         ReviewScoreResult normalized = new ReviewScoreResult();
         normalized.setProtocolVersion(ReviewScoringConstants.PROTOCOL_VERSION);
@@ -308,13 +339,60 @@ public class ReviewScoreResultParser
         normalized.setTotalScore(total);
         normalized.setSummary(parsed.getSummary().trim());
         normalized.setTopIssues(finalIssues);
-        normalized.setFocusIssueCount(newIssues.size());
+        normalized.setFocusIssueCount(focusCount);
         normalized.setHasCriticalSecurityIssue(parsed.getHasCriticalSecurityIssue());
-        return new NormalizeOutcome(normalized, totalNewCount, existingIssues.size(), unverifiableCount);
+        return new NormalizeOutcome(normalized, totalNewCount, existingIssues.size(), unverifiableCount, truncated);
     }
 
-    /** 归一化输出：结果 + 归属统计（均为截断前发现总数；未打标时全为 0）。 */
-    private record NormalizeOutcome(ReviewScoreResult result, int newCount, int existingCount, int unverifiableCount)
+    /** NEW（或未打标）问题中 CRITICAL/HIGH 数量。 */
+    static int countFocusIssues(List<ReviewTopIssue> issues)
+    {
+        if (issues == null || issues.isEmpty())
+        {
+            return 0;
+        }
+        int count = 0;
+        for (ReviewTopIssue issue : issues)
+        {
+            if (ReviewScoringConstants.ORIGIN_EXISTING.equals(issue.getOrigin()))
+            {
+                continue;
+            }
+            String severity = issue.getSeverity() == null ? "" : issue.getSeverity().toUpperCase(Locale.ROOT);
+            if (ReviewScoringConstants.SEVERITY_CRITICAL.equals(severity)
+                || ReviewScoringConstants.SEVERITY_HIGH.equals(severity))
+            {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    int resolveMaxIssues()
+    {
+        if (configService == null)
+        {
+            return ReviewScoringConstants.MAX_ISSUES;
+        }
+        try
+        {
+            String raw = configService.selectConfigByKey(ReviewScoringConstants.CONFIG_MAX_ISSUES);
+            if (StringUtils.isEmpty(raw))
+            {
+                return ReviewScoringConstants.MAX_ISSUES;
+            }
+            int value = Integer.parseInt(raw.trim());
+            return value > 0 ? value : ReviewScoringConstants.MAX_ISSUES;
+        }
+        catch (Exception ex)
+        {
+            return ReviewScoringConstants.MAX_ISSUES;
+        }
+    }
+
+    /** 归一化输出：结果 + 可选归属统计 + 截断标记。 */
+    private record NormalizeOutcome(ReviewScoreResult result, int newCount, int existingCount,
+                                    int unverifiableCount, boolean issuesTruncated)
     {
     }
 
@@ -486,5 +564,4 @@ public class ReviewScoreResultParser
     {
         return ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage();
     }
-
 }

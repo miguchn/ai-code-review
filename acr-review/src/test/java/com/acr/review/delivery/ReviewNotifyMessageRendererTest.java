@@ -183,4 +183,29 @@ class ReviewNotifyMessageRendererTest
             .orElse("");
         assertTrue(suggestionLine.contains("…"));
     }
+
+    @Test
+    void rendersRecheckingSectionAfterReviewResults()
+    {
+        ReviewTopIssue issue = new ReviewTopIssue();
+        issue.setSeverity("MEDIUM");
+        issue.setOrigin("NEW");
+        issue.setTitle("质量问题");
+
+        ReviewSummaryContent content = ReviewSummaryContent.builder()
+            .conclusionLabel("通过")
+            .totalScore(88)
+            .topIssues(List.of(issue))
+            .recheckingTitles(List.of("sql-injection", "cmd-injection"))
+            .build();
+
+        String body = ReviewNotifyMessageRenderer.renderSuccess(content);
+        int resultIdx = body.indexOf("**审查结果");
+        int recheckIdx = body.indexOf("疑似已修复（2）：sql-injection / cmd-injection");
+        int scopeIdx = body.indexOf("**范围统计**");
+        assertTrue(resultIdx >= 0);
+        assertTrue(recheckIdx > resultIdx);
+        assertTrue(scopeIdx > recheckIdx);
+        assertTrue(body.contains("请前往问题台账复核"));
+    }
 }

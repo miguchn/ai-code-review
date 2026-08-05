@@ -83,10 +83,10 @@
                 </div>
 
                 <div id="focus-issues" class="result-block">
-                  <div class="result-block-title">重点问题（Top 3，非全量）</div>
+                  <div class="result-block-title">重点问题</div>
                   <el-empty v-if="!newIssues.length" description="暂无重点问题" :image-size="48" />
                   <div v-else class="issue-list">
-                    <div v-for="issue in newIssues" :key="issue.rank || issue.title" class="issue-card">
+                    <div v-for="issue in displayedNewIssues" :key="issue.rank || issue.title" class="issue-card">
                       <div class="issue-head">
                         <span class="issue-rank">#{{ issue.rank || '--' }}</span>
                         <el-tag v-if="issue.severity" :type="severityTagType(issue.severity)" size="small">
@@ -111,6 +111,13 @@
                         <p class="issue-text">{{ issue.suggestion }}</p>
                       </div>
                     </div>
+                    <el-button
+                      v-if="newIssues.length > 3"
+                      link
+                      type="primary"
+                      class="issue-more-link"
+                      @click="goIssueLedgerByPr"
+                    >共 {{ newIssues.length }} 个问题，其余见问题台账</el-button>
                   </div>
                 </div>
 
@@ -231,6 +238,7 @@ const taskId = computed(() => route.params.taskId)
 const resultRun = computed(() => pickLatestSuccessRun(detailRuns.value))
 const topIssues = computed(() => getTopIssues(resultRun.value))
 const newIssues = computed(() => topIssues.value.filter(issue => (issue?.origin || '').toUpperCase() !== 'EXISTING'))
+const displayedNewIssues = computed(() => newIssues.value.slice(0, 3))
 const existingIssues = computed(() => topIssues.value.filter(issue => (issue?.origin || '').toUpperCase() === 'EXISTING'))
 const mergeRequestLink = computed(() => buildMergeRequestUrl(detailTask.value || {}))
 const mergeRequestLinkLabel = computed(() => mergeRequestLabel(detailTask.value?.provider))
@@ -273,6 +281,13 @@ function openMergeRequest() {
 
 function goIssueLedger(issueId) {
   proxy.$router.push({ path: '/review/issue', query: { issueId: String(issueId) } })
+}
+
+function goIssueLedgerByPr() {
+  const prNumber = detailTask.value?.prNumber
+  const query = {}
+  if (prNumber != null && prNumber !== '') query.prNumber = String(prNumber)
+  proxy.$router.push({ path: '/review/issue', query })
 }
 
 function handleRetry() {
@@ -357,6 +372,7 @@ watch(() => route.query.focus, () => focusIssuesIfNeeded())
 .issue-category { font-size: 12px; color: var(--el-text-color-secondary); }
 .issue-title { font-size: 14px; font-weight: 600; }
 .issue-ledger-link { margin-left: auto; }
+.issue-more-link { align-self: flex-start; margin-top: 4px; padding: 0; }
 .issue-text { margin: 0; font-size: 13px; line-height: 1.7; white-space: pre-wrap; }
 .issue-locate { margin-top: 6px; font-size: 12px; color: var(--el-text-color-secondary); }
 .issue-locate code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; }

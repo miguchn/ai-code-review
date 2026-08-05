@@ -45,6 +45,24 @@ public final class ReviewIssueFingerprint
         return baseFingerprint + ":" + batchIndex;
     }
 
+    /**
+     * 族键：SHA-256(filePath + "\0" + category)，用于单义族合并。
+     * 与指纹算法风格一致，但不含 title。
+     */
+    public static String familyKey(ReviewTopIssue issue)
+    {
+        if (issue == null)
+        {
+            return familyKey("", "");
+        }
+        return familyKey(issue.getFilePath(), issue.getCategory());
+    }
+
+    public static String familyKey(String filePath, String category)
+    {
+        return hash(nullToEmpty(filePath) + "\0" + nullToEmpty(category));
+    }
+
     static String normalizeTitle(String title)
     {
         if (title == null)

@@ -237,6 +237,12 @@ public class WorkbenchServiceImpl implements IWorkbenchService
                 WorkbenchConstants.SUBTITLE_ALL_ORIGIN,
                 ReviewIssueConstants.STATUS_AWAITING_FIX,
                 null));
+            cards.add(issueCard(
+                WorkbenchConstants.CARD_ISSUE_RECHECKING,
+                WorkbenchConstants.TITLE_ISSUE_RECHECKING,
+                WorkbenchConstants.SUBTITLE_RECHECK_PENDING,
+                ReviewIssueConstants.STATUS_RECHECKING,
+                null));
         }
         if (SecurityUtils.hasPermi(WorkbenchConstants.PERM_RECORD_LIST))
         {

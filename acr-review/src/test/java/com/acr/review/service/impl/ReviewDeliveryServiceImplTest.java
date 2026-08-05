@@ -35,6 +35,7 @@ import com.acr.review.domain.ReviewDeliveryRecord;
 import com.acr.review.domain.ReviewNotifyChannel;
 import com.acr.review.domain.ReviewPipelineConstants;
 import com.acr.review.domain.ReviewProject;
+import com.acr.review.domain.ReviewRoundReconcileResult;
 import com.acr.review.domain.ReviewTask;
 import com.acr.review.domain.ReviewTaskRun;
 import com.acr.review.git.GitAdapterRegistry;
@@ -51,6 +52,7 @@ import com.acr.review.notify.NotifyRobotClient;
 import com.acr.review.notify.NotifyRobotClients;
 import com.acr.review.notify.NotifyRobotException;
 import com.acr.review.service.IGitCredentialService;
+import com.acr.review.service.IReviewIssueService;
 import com.acr.review.service.IReviewNotifyChannelService;
 import com.acr.review.service.IReviewNotifyChannelService.DecryptedNotifyChannel;
 import com.acr.system.service.ISysDeptService;
@@ -71,6 +73,7 @@ class ReviewDeliveryServiceImplTest
     @Mock private GitAdapterRegistry adapterRegistry;
     @Mock private GitCredentialMapper credentialMapper;
     @Mock private GitPullRequestCommentClient commentClient;
+    @Mock private IReviewIssueService issueService;
 
     private ReviewDeliveryServiceImpl service;
 
@@ -79,9 +82,10 @@ class ReviewDeliveryServiceImplTest
     {
         lenient().when(adapterRegistry.requireCommentClient("GITHUB")).thenReturn(commentClient);
         lenient().when(credentialMapper.selectGitCredentialById(5L)).thenReturn(credential());
+        lenient().when(issueService.listRecheckingTitles(anyLong(), anyInt())).thenReturn(List.of());
         service = new ReviewDeliveryServiceImpl(deliveryMapper, taskMapper, runMapper, projectMapper,
             issueMapper, credentialService, notifyChannelService, robotClients, contentFactory,
-            deptService, adapterRegistry, credentialMapper);
+            deptService, adapterRegistry, credentialMapper, issueService);
     }
 
     @Test
@@ -96,7 +100,7 @@ class ReviewDeliveryServiceImplTest
             .thenReturn(new GitPullRequestComment("501", "body"));
         when(deliveryMapper.selectByIdempotencyKey(anyString())).thenReturn(null);
 
-        service.deliverAfterSuccess(task, run);
+        service.deliverAfterSuccess(task, run, null);
 
         verify(commentClient).createIssueComment(any(), any(), eq(8), anyString());
         ArgumentCaptor<ReviewDeliveryRecord> captor = ArgumentCaptor.forClass(ReviewDeliveryRecord.class);
@@ -143,7 +147,7 @@ class ReviewDeliveryServiceImplTest
         existing.setAttemptCount(1);
         when(deliveryMapper.selectByIdempotencyKey(anyString())).thenReturn(existing);
 
-        service.deliverAfterSuccess(task, run);
+        service.deliverAfterSuccess(task, run, null);
 
         verify(commentClient).updateIssueComment(any(), any(), eq("77"), anyString());
         verify(commentClient, never()).createIssueComment(any(), any(), anyInt(), anyString());
@@ -160,7 +164,7 @@ class ReviewDeliveryServiceImplTest
             .thenThrow(new GitPullRequestCommentException("GitHub API 超时"));
         when(deliveryMapper.selectByIdempotencyKey(anyString())).thenReturn(null);
 
-        service.deliverAfterSuccess(task, run);
+        service.deliverAfterSuccess(task, run, null);
 
         ArgumentCaptor<ReviewDeliveryRecord> captor = ArgumentCaptor.forClass(ReviewDeliveryRecord.class);
         verify(deliveryMapper).insertDelivery(captor.capture());
@@ -175,7 +179,7 @@ class ReviewDeliveryServiceImplTest
         ReviewTask task = successTask(13L, 3L, 8);
         task.setTaskStatus(ReviewPipelineConstants.TASK_FAILED);
 
-        service.deliverAfterSuccess(task, successRun(1L, 1));
+        service.deliverAfterSuccess(task, successRun(1L, 1), null);
 
         verify(commentClient, never()).findCommentWithMarker(any(), any(), anyInt(), anyString());
         verify(deliveryMapper, never()).insertDelivery(any());
@@ -197,7 +201,7 @@ class ReviewDeliveryServiceImplTest
         when(taskMapper.selectLatestSuccessByProjectAndPr(3L, 8)).thenReturn(latest);
         when(runMapper.selectRunsByTaskId(21L)).thenReturn(List.of(run));
         when(credentialService.getPlainToken(5L, true)).thenReturn("pat");
-        when(contentFactory.build(any(), any(), any())).thenAnswer(inv -> {
+        when(contentFactory.build(any(), any(), any(), any())).thenAnswer(inv -> {
             ReviewTask task = inv.getArgument(0);
             return ReviewSummaryContent.builder()
                 .conclusion(task.getReviewConclusion())
@@ -237,7 +241,7 @@ class ReviewDeliveryServiceImplTest
         when(deliveryMapper.insertDelivery(any()))
             .thenThrow(new DuplicateKeyException("Duplicate entry"));
 
-        service.deliverAfterSuccess(task, run);
+        service.deliverAfterSuccess(task, run, null);
 
         ArgumentCaptor<ReviewDeliveryRecord> captor = ArgumentCaptor.forClass(ReviewDeliveryRecord.class);
         verify(deliveryMapper).updateDeliveryResult(captor.capture());
@@ -264,13 +268,13 @@ class ReviewDeliveryServiceImplTest
         when(projectMapper.selectReviewProjectById(3L)).thenReturn(notifyProject("Y", "Y", 7L));
         when(notifyChannelService.getDecryptedChannel(7L, true))
             .thenReturn(decryptedChannel(ReviewDeliveryConstants.CHANNEL_DINGTALK_ROBOT));
-        when(contentFactory.build(any(), any(), any()))
+        when(contentFactory.build(any(), any(), any(), any()))
             .thenReturn(ReviewSummaryContent.builder().conclusionLabel("通过").build());
         NotifyRobotClient robot = mock(NotifyRobotClient.class);
         when(robotClients.require(ReviewDeliveryConstants.CHANNEL_DINGTALK_ROBOT)).thenReturn(robot);
         when(deliveryMapper.selectByIdempotencyKey(anyString())).thenReturn(null);
 
-        service.deliverNotifyAfterTerminal(task, successRun(300L, 1));
+        service.deliverNotifyAfterTerminal(task, successRun(300L, 1), null);
 
         verify(robot).send(eq("https://robot.example/send"), eq(null), anyString(), anyString());
         ArgumentCaptor<ReviewDeliveryRecord> captor = ArgumentCaptor.forClass(ReviewDeliveryRecord.class);
@@ -290,7 +294,7 @@ class ReviewDeliveryServiceImplTest
         ReviewTask task = successTask(31L, 3L, 8);
         when(projectMapper.selectReviewProjectById(3L)).thenReturn(notifyProject("N", "Y", 7L));
 
-        service.deliverNotifyAfterTerminal(task, successRun(301L, 1));
+        service.deliverNotifyAfterTerminal(task, successRun(301L, 1), null);
 
         verify(notifyChannelService, never()).getDecryptedChannel(anyLong(), anyBoolean());
         verify(deliveryMapper, never()).insertDelivery(any());
@@ -303,7 +307,7 @@ class ReviewDeliveryServiceImplTest
         task.setTaskStatus(ReviewPipelineConstants.TASK_FAILED);
         when(projectMapper.selectReviewProjectById(3L)).thenReturn(notifyProject("Y", "N", 7L));
 
-        service.deliverNotifyAfterTerminal(task, successRun(302L, 1));
+        service.deliverNotifyAfterTerminal(task, successRun(302L, 1), null);
 
         verify(notifyChannelService, never()).getDecryptedChannel(anyLong(), anyBoolean());
         verify(deliveryMapper, never()).insertDelivery(any());
@@ -321,7 +325,7 @@ class ReviewDeliveryServiceImplTest
         when(notifyChannelService.selectReviewNotifyChannelById(7L)).thenReturn(channel);
         when(deliveryMapper.selectByIdempotencyKey(anyString())).thenReturn(null);
 
-        service.deliverNotifyAfterTerminal(task, successRun(303L, 1));
+        service.deliverNotifyAfterTerminal(task, successRun(303L, 1), null);
 
         ArgumentCaptor<ReviewDeliveryRecord> captor = ArgumentCaptor.forClass(ReviewDeliveryRecord.class);
         verify(deliveryMapper).insertDelivery(captor.capture());
@@ -337,7 +341,7 @@ class ReviewDeliveryServiceImplTest
         when(projectMapper.selectReviewProjectById(3L)).thenReturn(notifyProject("Y", "Y", 7L));
         when(notifyChannelService.getDecryptedChannel(7L, true))
             .thenReturn(decryptedChannel(ReviewDeliveryConstants.CHANNEL_WECOM_ROBOT));
-        when(contentFactory.build(any(), any(), any()))
+        when(contentFactory.build(any(), any(), any(), any()))
             .thenReturn(ReviewSummaryContent.builder().conclusionLabel("通过").build());
         NotifyRobotClient robot = mock(NotifyRobotClient.class);
         when(robotClients.require(ReviewDeliveryConstants.CHANNEL_WECOM_ROBOT)).thenReturn(robot);
@@ -345,7 +349,7 @@ class ReviewDeliveryServiceImplTest
             .when(robot).send(anyString(), any(), anyString(), anyString());
         when(deliveryMapper.selectByIdempotencyKey(anyString())).thenReturn(null);
 
-        service.deliverNotifyAfterTerminal(task, successRun(304L, 1));
+        service.deliverNotifyAfterTerminal(task, successRun(304L, 1), null);
 
         ArgumentCaptor<ReviewDeliveryRecord> captor = ArgumentCaptor.forClass(ReviewDeliveryRecord.class);
         verify(deliveryMapper).insertDelivery(captor.capture());
@@ -370,7 +374,7 @@ class ReviewDeliveryServiceImplTest
         when(runMapper.selectRunsByTaskId(40L)).thenReturn(List.of(successRun(400L, 1)));
         when(notifyChannelService.getDecryptedChannel(7L, true))
             .thenReturn(decryptedChannel(ReviewDeliveryConstants.CHANNEL_DINGTALK_ROBOT));
-        when(contentFactory.build(any(), any(), any()))
+        when(contentFactory.build(any(), any(), any(), any()))
             .thenReturn(ReviewSummaryContent.builder().conclusionLabel("通过").build());
         NotifyRobotClient robot = mock(NotifyRobotClient.class);
         when(robotClients.require(ReviewDeliveryConstants.CHANNEL_DINGTALK_ROBOT)).thenReturn(robot);
@@ -430,7 +434,7 @@ class ReviewDeliveryServiceImplTest
         when(taskMapper.selectLatestSuccessByProjectAndPr(3L, 8)).thenReturn(latest);
         when(runMapper.selectRunsByTaskId(21L)).thenReturn(List.of(successRun(401L, 1)));
         when(credentialService.getPlainToken(5L, true)).thenReturn("pat");
-        when(contentFactory.build(any(), any(), any()))
+        when(contentFactory.build(any(), any(), any(), any()))
             .thenReturn(ReviewSummaryContent.builder().conclusionLabel("通过").build());
         when(commentClient.findCommentWithMarker(any(), any(), anyInt(), anyString()))
             .thenReturn(Optional.empty());
@@ -467,7 +471,7 @@ class ReviewDeliveryServiceImplTest
         when(taskMapper.selectLatestSuccessByProjectAndPr(3L, 8)).thenReturn(latest);
         when(runMapper.selectRunsByTaskId(21L)).thenReturn(List.of(successRun(401L, 1)));
         stubProjectAndToken();
-        when(contentFactory.build(any(), any(), any()))
+        when(contentFactory.build(any(), any(), any(), any()))
             .thenReturn(ReviewSummaryContent.builder().conclusionLabel("通过").build());
         when(commentClient.findCommentWithMarker(any(), any(), anyInt(), anyString()))
             .thenReturn(Optional.empty());
@@ -492,7 +496,7 @@ class ReviewDeliveryServiceImplTest
         when(taskMapper.selectLatestSuccessByProjectAndPr(3L, 8)).thenReturn(latest);
         when(runMapper.selectRunsByTaskId(22L)).thenReturn(List.of(successRun(402L, 1)));
         stubProjectAndToken();
-        when(contentFactory.build(any(), any(), any()))
+        when(contentFactory.build(any(), any(), any(), any()))
             .thenReturn(ReviewSummaryContent.builder().conclusionLabel("通过").build());
         when(commentClient.findCommentWithMarker(any(), any(), anyInt(), anyString()))
             .thenThrow(new GitPullRequestCommentException("GitHub API 超时"));
@@ -527,7 +531,7 @@ class ReviewDeliveryServiceImplTest
         when(deliveryMapper.selectByIdempotencyKey(anyString())).thenReturn(existing);
         when(taskMapper.selectLatestSuccessByProjectAndPr(3L, 8)).thenReturn(task);
         when(runMapper.selectRunsByTaskId(30L)).thenReturn(List.of(run));
-        when(contentFactory.build(any(), any(), any()))
+        when(contentFactory.build(any(), any(), any(), any()))
             .thenReturn(ReviewSummaryContent.builder().conclusionLabel("通过").build());
 
         ReviewCommentSyncResult result = service.rerenderSummaryComment(3L, 8);
@@ -549,7 +553,7 @@ class ReviewDeliveryServiceImplTest
         when(taskMapper.selectLatestSuccessByProjectAndPr(3L, 8)).thenReturn(latest);
         when(runMapper.selectRunsByTaskId(41L)).thenReturn(List.of(successRun(601L, 1)));
         when(credentialService.getPlainToken(5L, true)).thenReturn("pat");
-        when(contentFactory.build(any(), any(), any()))
+        when(contentFactory.build(any(), any(), any(), any()))
             .thenReturn(ReviewSummaryContent.builder().conclusionLabel("通过").build());
         when(commentClient.findCommentWithMarker(any(), any(), anyInt(), anyString()))
             .thenReturn(Optional.empty());
@@ -562,6 +566,88 @@ class ReviewDeliveryServiceImplTest
         ArgumentCaptor<ReviewDeliveryRecord> captor = ArgumentCaptor.forClass(ReviewDeliveryRecord.class);
         verify(deliveryMapper).insertDelivery(captor.capture());
         assertEquals(ReviewDeliveryConstants.TRIGGER_MANUAL_RETRY, captor.getValue().getTriggerSource());
+    }
+
+    @Test
+    void rerenderDerivesRecheckingTitlesFromLedgerWhenPresent()
+    {
+        ReviewTask latest = successTask(50L, 3L, 8);
+        when(taskMapper.selectLatestSuccessByProjectAndPr(3L, 8)).thenReturn(latest);
+        when(runMapper.selectRunsByTaskId(50L)).thenReturn(List.of(successRun(701L, 1)));
+        stubProjectAndToken();
+        when(issueService.listRecheckingTitles(3L, 8)).thenReturn(List.of("sql-injection", "cmd-injection"));
+        ArgumentCaptor<ReviewRoundReconcileResult> reconcileCaptor =
+            ArgumentCaptor.forClass(ReviewRoundReconcileResult.class);
+        when(contentFactory.build(any(), any(), any(), reconcileCaptor.capture()))
+            .thenReturn(ReviewSummaryContent.builder()
+                .conclusionLabel("通过")
+                .recheckingTitles(List.of("sql-injection", "cmd-injection"))
+                .build());
+        when(commentClient.findCommentWithMarker(any(), any(), anyInt(), anyString()))
+            .thenReturn(Optional.empty());
+        when(commentClient.createIssueComment(any(), any(), anyInt(), anyString()))
+            .thenReturn(new GitPullRequestComment("90", "body"));
+        when(deliveryMapper.selectByIdempotencyKey(anyString())).thenReturn(null);
+
+        ReviewCommentSyncResult result = service.rerenderSummaryComment(3L, 8);
+
+        assertEquals(ReviewDeliveryConstants.STATUS_SUCCESS, result.getStatus());
+        verify(issueService).listRecheckingTitles(3L, 8);
+        assertTrue(reconcileCaptor.getValue().hasRechecking());
+        assertEquals(List.of("sql-injection", "cmd-injection"), reconcileCaptor.getValue().recheckingTitles());
+        ArgumentCaptor<String> bodyCaptor = ArgumentCaptor.forClass(String.class);
+        verify(commentClient).createIssueComment(any(), any(), eq(8), bodyCaptor.capture());
+        assertTrue(bodyCaptor.getValue().contains("疑似已修复（2）：sql-injection / cmd-injection"));
+    }
+
+    @Test
+    void rerenderOmitsRecheckingSectionWhenLedgerHasNone()
+    {
+        ReviewTask latest = successTask(51L, 3L, 8);
+        when(taskMapper.selectLatestSuccessByProjectAndPr(3L, 8)).thenReturn(latest);
+        when(runMapper.selectRunsByTaskId(51L)).thenReturn(List.of(successRun(702L, 1)));
+        stubProjectAndToken();
+        when(issueService.listRecheckingTitles(3L, 8)).thenReturn(List.of());
+        when(contentFactory.build(any(), any(), any(), any()))
+            .thenReturn(ReviewSummaryContent.builder().conclusionLabel("通过").build());
+        when(commentClient.findCommentWithMarker(any(), any(), anyInt(), anyString()))
+            .thenReturn(Optional.empty());
+        when(commentClient.createIssueComment(any(), any(), anyInt(), anyString()))
+            .thenReturn(new GitPullRequestComment("91", "body"));
+        when(deliveryMapper.selectByIdempotencyKey(anyString())).thenReturn(null);
+
+        service.rerenderSummaryComment(3L, 8);
+
+        ArgumentCaptor<String> bodyCaptor = ArgumentCaptor.forClass(String.class);
+        verify(commentClient).createIssueComment(any(), any(), eq(8), bodyCaptor.capture());
+        assertTrue(!bodyCaptor.getValue().contains("疑似已修复"));
+    }
+
+    @Test
+    void rerenderDegradesWhenRecheckingTitleQueryFails()
+    {
+        ReviewTask latest = successTask(52L, 3L, 8);
+        when(taskMapper.selectLatestSuccessByProjectAndPr(3L, 8)).thenReturn(latest);
+        when(runMapper.selectRunsByTaskId(52L)).thenReturn(List.of(successRun(703L, 1)));
+        stubProjectAndToken();
+        when(issueService.listRecheckingTitles(3L, 8)).thenThrow(new RuntimeException("db down"));
+        ArgumentCaptor<ReviewRoundReconcileResult> reconcileCaptor =
+            ArgumentCaptor.forClass(ReviewRoundReconcileResult.class);
+        when(contentFactory.build(any(), any(), any(), reconcileCaptor.capture()))
+            .thenReturn(ReviewSummaryContent.builder().conclusionLabel("通过").build());
+        when(commentClient.findCommentWithMarker(any(), any(), anyInt(), anyString()))
+            .thenReturn(Optional.empty());
+        when(commentClient.createIssueComment(any(), any(), anyInt(), anyString()))
+            .thenReturn(new GitPullRequestComment("92", "body"));
+        when(deliveryMapper.selectByIdempotencyKey(anyString())).thenReturn(null);
+
+        ReviewCommentSyncResult result = service.rerenderSummaryComment(3L, 8);
+
+        assertEquals(ReviewDeliveryConstants.STATUS_SUCCESS, result.getStatus());
+        assertTrue(!reconcileCaptor.getValue().hasRechecking());
+        ArgumentCaptor<String> bodyCaptor = ArgumentCaptor.forClass(String.class);
+        verify(commentClient).createIssueComment(any(), any(), eq(8), bodyCaptor.capture());
+        assertTrue(!bodyCaptor.getValue().contains("疑似已修复"));
     }
 
     private void stubProjectAndToken()

@@ -49,6 +49,23 @@ class ReviewIssueFingerprintTest
             ReviewIssueFingerprint.of("C", "f", null));
     }
 
+    @Test
+    void familyKeyIgnoresTitleAndUsesFileThenCategory()
+    {
+        assertEquals(
+            ReviewIssueFingerprint.familyKey("a.java", "SEC"),
+            ReviewIssueFingerprint.familyKey("a.java", "SEC"));
+        assertEquals(
+            ReviewIssueFingerprint.familyKey(issue("SEC", "a.java", "one")),
+            ReviewIssueFingerprint.familyKey(issue("SEC", "a.java", "two")));
+        assertNotEquals(
+            ReviewIssueFingerprint.familyKey("a.java", "SEC"),
+            ReviewIssueFingerprint.familyKey("b.java", "SEC"));
+        assertNotEquals(
+            ReviewIssueFingerprint.of("SEC", "a.java", "t"),
+            ReviewIssueFingerprint.familyKey("a.java", "SEC"));
+    }
+
     private static ReviewTopIssue issue(String category, String path, String title)
     {
         ReviewTopIssue issue = new ReviewTopIssue();

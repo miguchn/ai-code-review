@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Map;
 import com.acr.review.domain.ReviewCommentSyncResult;
 import com.acr.review.domain.ReviewDeliveryRecord;
+import com.acr.review.domain.ReviewRoundReconcileResult;
 import com.acr.review.domain.ReviewTask;
 import com.acr.review.domain.ReviewTaskRun;
 
@@ -12,13 +13,17 @@ public interface IReviewDeliveryService
 {
     /**
      * 审查成功后投递 GitHub 总结评论。失败只记投递记录，不抛出到调用方影响任务状态。
+     *
+     * @param reconcile 本轮对账结果；首投递传入；重试/重渲染传 null 时从台账派生待复核标题
      */
-    void deliverAfterSuccess(ReviewTask task, ReviewTaskRun run);
+    void deliverAfterSuccess(ReviewTask task, ReviewTaskRun run, ReviewRoundReconcileResult reconcile);
 
     /**
      * 审查结束后投递 IM（SUCCESS 摘要 / FAILED 简讯）。失败只记投递记录，不影响任务状态。
+     *
+     * @param reconcile 本轮对账结果；首投递传入；补发传 null 时从台账派生待复核标题
      */
-    void deliverNotifyAfterTerminal(ReviewTask task, ReviewTaskRun run);
+    void deliverNotifyAfterTerminal(ReviewTask task, ReviewTaskRun run, ReviewRoundReconcileResult reconcile);
 
     /**
      * 人工重试投递：以 taskId 定位项目/PR，按该 PR 最近一次 SUCCESS 任务结论渲染（GitHub）。

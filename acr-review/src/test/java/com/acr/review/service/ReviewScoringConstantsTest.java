@@ -36,6 +36,11 @@ class ReviewScoringConstantsTest
         assertEquals(ReviewScoringConstants.protocolUiHint(), rules.getUiHint());
         assertTrue(rules.getTopIssuesHint().contains("Top 3"));
         assertFalse(rules.getUiHint().isBlank());
+        assertEquals("1.2", ReviewScoringConstants.PROTOCOL_VERSION);
+        assertTrue(ReviewScoringConstants.COMPATIBLE_PROTOCOL_VERSIONS.contains("1.2"));
+        assertEquals(20, ReviewScoringConstants.MAX_ISSUES);
+        assertTrue(appendix.contains("输出发现的全部问题"));
+        assertTrue(appendix.contains("最多 20 条"));
 
         assertEquals(5, rules.getDimensions().size());
         for (ReviewPlatformRules.Dimension dimension : rules.getDimensions())

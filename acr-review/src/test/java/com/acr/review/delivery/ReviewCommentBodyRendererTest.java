@@ -133,4 +133,54 @@ class ReviewCommentBodyRendererTest
         assertEquals("GITHUB:9:15:SUMMARY_COMMENT",
             ReviewDeliveryConstants.idempotencyKey(9L, 15));
     }
+
+    @Test
+    void rendersRecheckingSectionAndDispositionPendingLabel()
+    {
+        ReviewTopIssue issue = new ReviewTopIssue();
+        issue.setSeverity("HIGH");
+        issue.setOrigin("NEW");
+        issue.setTitle("注入风险");
+        issue.setDispositionStatus("RECHECKING");
+
+        ReviewSummaryContent content = ReviewSummaryContent.builder()
+            .taskId(1L)
+            .conclusionLabel("建议修改")
+            .totalScore(70)
+            .topIssues(List.of(issue))
+            .recheckingTitles(List.of("sql-injection", "cmd-injection", "hardcoded-password", "extra"))
+            .build();
+
+        String body = ReviewCommentBodyRenderer.render(content);
+        assertTrue(body.contains("处置：待复核"));
+        assertTrue(body.contains("疑似已修复（4）：sql-injection / cmd-injection / hardcoded-password…"));
+        assertTrue(body.contains("请前往问题台账复核"));
+        assertTrue(body.contains(ReviewDeliveryConstants.COMMENT_MARKER));
+    }
+
+    @Test
+    void displayTopIssuesLimitsToThreeWithTotalHint()
+    {
+        List<ReviewTopIssue> issues = new java.util.ArrayList<>();
+        for (int i = 1; i <= 5; i++)
+        {
+            ReviewTopIssue issue = new ReviewTopIssue();
+            issue.setSeverity("LOW");
+            issue.setOrigin("NEW");
+            issue.setTitle("issue-" + i);
+            issues.add(issue);
+        }
+        ReviewSummaryContent content = ReviewSummaryContent.builder()
+            .taskId(1L)
+            .conclusionLabel("通过")
+            .totalScore(90)
+            .topIssues(issues)
+            .build();
+
+        String body = ReviewCommentBodyRenderer.render(content);
+        assertTrue(body.contains("issue-1"));
+        assertTrue(body.contains("issue-3"));
+        assertTrue(body.contains("共 5 个问题，其余见问题台账"));
+        assertTrue(!body.contains("issue-4") || body.contains("共 5 个问题"));
+    }
 }

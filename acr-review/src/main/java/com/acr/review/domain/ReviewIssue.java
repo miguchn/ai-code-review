@@ -14,6 +14,7 @@ public class ReviewIssue extends BaseEntity
     private String provider;
     private Integer prNumber;
     private String fingerprint;
+    private String familyKey;
     private Long firstTaskId;
     private Long firstRunId;
     private Long lastTaskId;
@@ -37,11 +38,23 @@ public class ReviewIssue extends BaseEntity
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private Date closedTime;
 
+    private Integer missedStreak;
+    private String lastSeenHeadSha;
+    private Long lastMissedRunId;
+    private Long recheckTaskId;
+    private Long recheckRunId;
+    private String recheckCommitSha;
+
     /** 列表展示 */
     private String projectName;
     private String keyword;
     private String beginTime;
     private String endTime;
+    /**
+     * 活跃视图标志：Y 时筛选 AWAITING_CONFIRM / AWAITING_FIX / RECHECKING；
+     * 与 status 并存时 status 优先。
+     */
+    private String activeFlag;
 
     public Long getIssueId() { return issueId; }
     public void setIssueId(Long issueId) { this.issueId = issueId; }
@@ -53,6 +66,8 @@ public class ReviewIssue extends BaseEntity
     public void setPrNumber(Integer prNumber) { this.prNumber = prNumber; }
     public String getFingerprint() { return fingerprint; }
     public void setFingerprint(String fingerprint) { this.fingerprint = fingerprint; }
+    public String getFamilyKey() { return familyKey; }
+    public void setFamilyKey(String familyKey) { this.familyKey = familyKey; }
     public Long getFirstTaskId() { return firstTaskId; }
     public void setFirstTaskId(Long firstTaskId) { this.firstTaskId = firstTaskId; }
     public Long getFirstRunId() { return firstRunId; }
@@ -93,6 +108,18 @@ public class ReviewIssue extends BaseEntity
     public void setClosedBy(String closedBy) { this.closedBy = closedBy; }
     public Date getClosedTime() { return closedTime; }
     public void setClosedTime(Date closedTime) { this.closedTime = closedTime; }
+    public Integer getMissedStreak() { return missedStreak; }
+    public void setMissedStreak(Integer missedStreak) { this.missedStreak = missedStreak; }
+    public String getLastSeenHeadSha() { return lastSeenHeadSha; }
+    public void setLastSeenHeadSha(String lastSeenHeadSha) { this.lastSeenHeadSha = lastSeenHeadSha; }
+    public Long getLastMissedRunId() { return lastMissedRunId; }
+    public void setLastMissedRunId(Long lastMissedRunId) { this.lastMissedRunId = lastMissedRunId; }
+    public Long getRecheckTaskId() { return recheckTaskId; }
+    public void setRecheckTaskId(Long recheckTaskId) { this.recheckTaskId = recheckTaskId; }
+    public Long getRecheckRunId() { return recheckRunId; }
+    public void setRecheckRunId(Long recheckRunId) { this.recheckRunId = recheckRunId; }
+    public String getRecheckCommitSha() { return recheckCommitSha; }
+    public void setRecheckCommitSha(String recheckCommitSha) { this.recheckCommitSha = recheckCommitSha; }
     public String getProjectName() { return projectName; }
     public void setProjectName(String projectName) { this.projectName = projectName; }
     public String getKeyword() { return keyword; }
@@ -101,4 +128,6 @@ public class ReviewIssue extends BaseEntity
     public void setBeginTime(String beginTime) { this.beginTime = beginTime; }
     public String getEndTime() { return endTime; }
     public void setEndTime(String endTime) { this.endTime = endTime; }
+    public String getActiveFlag() { return activeFlag; }
+    public void setActiveFlag(String activeFlag) { this.activeFlag = activeFlag; }
 }

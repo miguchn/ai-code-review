@@ -141,7 +141,7 @@ class ReviewTaskExecutionServiceImplTest
         ReviewTask saved = captor.getValue();
         org.junit.jupiter.api.Assertions.assertEquals(ReviewPipelineConstants.TASK_FAILED, saved.getTaskStatus());
         org.junit.jupiter.api.Assertions.assertEquals(ReviewPipelineConstants.FAILURE_UNKNOWN, saved.getFailureType());
-        verify(deliveryService, never()).deliverAfterSuccess(any(), any());
+        verify(deliveryService, never()).deliverAfterSuccess(any(), any(), any());
     }
 
     @Test
@@ -368,7 +368,7 @@ class ReviewTaskExecutionServiceImplTest
         assertTrue(run.getResultSummary().contains("无有效审查范围"));
         org.junit.jupiter.api.Assertions.assertNotNull(run.getScopeDecisionJson());
         assertTrue(run.getScopeDecisionJson().contains("package-lock.json"));
-        verify(deliveryService).deliverAfterSuccess(any(ReviewTask.class), any(ReviewTaskRun.class));
+        verify(deliveryService).deliverAfterSuccess(any(ReviewTask.class), any(ReviewTaskRun.class), any());
     }
 
     @Test
@@ -451,7 +451,7 @@ class ReviewTaskExecutionServiceImplTest
         org.junit.jupiter.api.Assertions.assertEquals(ReviewPipelineConstants.RUN_SUCCESS, run.getRunStatus());
         org.junit.jupiter.api.Assertions.assertEquals(ReviewPipelineConstants.CONCLUSION_WARN, run.getReviewConclusion(),
             "存量 CRITICAL 剔除后按新增 HIGH 评估应为警告");
-        org.junit.jupiter.api.Assertions.assertEquals(3, run.getFocusIssueCount(), "focusIssueCount 只计新增问题");
+        org.junit.jupiter.api.Assertions.assertEquals(1, run.getFocusIssueCount(), "focusIssueCount = NEW 中 CRITICAL/HIGH");
 
         String topIssues = run.getTopIssuesJson();
         org.junit.jupiter.api.Assertions.assertFalse(topIssues.contains("存量问题"), "存量问题应被剔除: " + topIssues);
@@ -466,7 +466,7 @@ class ReviewTaskExecutionServiceImplTest
         assertTrue(resultJson.contains("\"includedFiles\":3"), resultJson);
         assertTrue(resultJson.contains("\"excludedFiles\":1"), resultJson);
         assertTrue(resultJson.contains("\"expandedFiles\":2"), resultJson);
-        org.junit.jupiter.api.Assertions.assertEquals("1.1", run.getProtocolVersion());
+        org.junit.jupiter.api.Assertions.assertEquals("1.2", run.getProtocolVersion());
     }
 
     @Test
@@ -494,7 +494,7 @@ class ReviewTaskExecutionServiceImplTest
         String topIssues = run.getTopIssuesJson();
         assertTrue(topIssues.contains("存量问题"), "reportExisting=Y 时存量问题应保留: " + topIssues);
         assertTrue(topIssues.contains("\"origin\":\"EXISTING\""), topIssues);
-        org.junit.jupiter.api.Assertions.assertEquals(3, run.getFocusIssueCount(), "存量保留也不计 focusIssueCount");
+        org.junit.jupiter.api.Assertions.assertEquals(1, run.getFocusIssueCount(), "存量保留也不计 focusIssueCount");
         org.junit.jupiter.api.Assertions.assertEquals(ReviewPipelineConstants.CONCLUSION_WARN, run.getReviewConclusion(),
             "存量 CRITICAL 保留也不影响结论");
     }

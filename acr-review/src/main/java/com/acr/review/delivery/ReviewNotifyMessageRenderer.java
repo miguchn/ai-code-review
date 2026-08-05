@@ -5,8 +5,10 @@ import java.util.Date;
 import java.util.List;
 import com.acr.common.utils.DateUtils;
 import com.acr.common.utils.StringUtils;
+import com.acr.review.domain.ReviewIssueConstants;
 import com.acr.review.domain.result.ReviewScopeStats;
 import com.acr.review.domain.result.ReviewTopIssue;
+import com.acr.review.service.ReviewScoringConstants;
 
 /**
  * 将审查摘要渲染为 IM「迷你报告」Markdown（纯函数，无 IO）。
@@ -36,8 +38,9 @@ public final class ReviewNotifyMessageRenderer
 
         appendSubmissionInfo(sb, content);
 
-        List<ReviewTopIssue> issues = content.getTopIssues();
-        sb.append("\n**审查结果 (").append(issues.size()).append(")**\n\n");
+        List<ReviewTopIssue> allIssues = content.getTopIssues();
+        List<ReviewTopIssue> issues = content.displayTopIssues();
+        sb.append("\n**审查结果 (").append(allIssues.size()).append(")**\n\n");
         if (issues.isEmpty())
         {
             sb.append("本次审查未发现重点问题\n");
@@ -49,7 +52,12 @@ public final class ReviewNotifyMessageRenderer
             {
                 appendIssue(sb, index++, issue);
             }
+            if (allIssues.size() > ReviewScoringConstants.MAX_TOP_ISSUES)
+            {
+                sb.append("共 ").append(allIssues.size()).append(" 个问题，其余见问题台账\n");
+            }
         }
+        appendRecheckingSection(sb, content.getRecheckingTitles());
 
         sb.append("\n**范围统计**\n");
         appendScopeStats(sb, content.getScopeStats());
@@ -108,6 +116,40 @@ public final class ReviewNotifyMessageRenderer
             case "LOW" -> "💡";
             default -> "ℹ️";
         };
+    }
+
+    /** 疑似已修复段；装配异常时静默跳过。 */
+    static void appendRecheckingSection(StringBuilder sb, List<String> titles)
+    {
+        try
+        {
+            if (sb == null || titles == null || titles.isEmpty())
+            {
+                return;
+            }
+            int total = titles.size();
+            int limit = Math.min(total, ReviewIssueConstants.MAX_RECHECKING_TITLES_IN_DELIVERY);
+            StringBuilder joined = new StringBuilder();
+            for (int i = 0; i < limit; i++)
+            {
+                if (i > 0)
+                {
+                    joined.append(" / ");
+                }
+                joined.append(StringUtils.defaultIfEmpty(titles.get(i), ReviewIssueConstants.DEFAULT_TITLE));
+            }
+            if (total > limit)
+            {
+                joined.append("…");
+            }
+            sb.append("\n**疑似已修复（").append(total).append("）：")
+                .append(joined)
+                .append(" — 请前往问题台账复核**\n");
+        }
+        catch (Exception ignored)
+        {
+            // 不阻塞通知主体
+        }
     }
 
     private static void appendSubmissionInfo(StringBuilder sb, ReviewSummaryContent content)

@@ -45,6 +45,7 @@ const CARD_ICON = {
   ISSUE_AWAITING_CONFIRM: 'bug',
   ISSUE_EXISTING_CONFIRM: 'clipboard',
   ISSUE_AWAITING_FIX: 'edit',
+  ISSUE_RECHECKING: 'eye-open',
   HIGH_RISK_CONCLUSION: 'validCode',
   TASK_FAILED: 'job',
   DELIVERY_FAILED: 'message'
@@ -54,6 +55,7 @@ const CARD_TONE = {
   ISSUE_AWAITING_CONFIRM: 'info',
   ISSUE_EXISTING_CONFIRM: 'muted',
   ISSUE_AWAITING_FIX: 'warning',
+  ISSUE_RECHECKING: 'warning',
   HIGH_RISK_CONCLUSION: 'danger',
   TASK_FAILED: 'danger',
   DELIVERY_FAILED: 'warning'

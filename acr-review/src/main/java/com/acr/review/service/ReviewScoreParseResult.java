@@ -13,9 +13,11 @@ public final class ReviewScoreParseResult
     private final int newCount;
     private final int existingCount;
     private final int originUnverifiableCount;
+    /** 是否因超过 maxIssues 发生截断。 */
+    private final boolean issuesTruncated;
 
     private ReviewScoreParseResult(boolean success, ReviewScoreResult result, String errorMessage, String rawExcerpt,
-        int newCount, int existingCount, int originUnverifiableCount)
+        int newCount, int existingCount, int originUnverifiableCount, boolean issuesTruncated)
     {
         this.success = success;
         this.result = result;
@@ -24,23 +26,30 @@ public final class ReviewScoreParseResult
         this.newCount = newCount;
         this.existingCount = existingCount;
         this.originUnverifiableCount = originUnverifiableCount;
+        this.issuesTruncated = issuesTruncated;
     }
 
     public static ReviewScoreParseResult ok(ReviewScoreResult result, String rawExcerpt)
     {
-        return new ReviewScoreParseResult(true, result, null, rawExcerpt, 0, 0, 0);
+        return new ReviewScoreParseResult(true, result, null, rawExcerpt, 0, 0, 0, false);
     }
 
     public static ReviewScoreParseResult ok(ReviewScoreResult result, String rawExcerpt,
         int newCount, int existingCount, int originUnverifiableCount)
     {
+        return ok(result, rawExcerpt, newCount, existingCount, originUnverifiableCount, false);
+    }
+
+    public static ReviewScoreParseResult ok(ReviewScoreResult result, String rawExcerpt,
+        int newCount, int existingCount, int originUnverifiableCount, boolean issuesTruncated)
+    {
         return new ReviewScoreParseResult(true, result, null, rawExcerpt,
-            newCount, existingCount, originUnverifiableCount);
+            newCount, existingCount, originUnverifiableCount, issuesTruncated);
     }
 
     public static ReviewScoreParseResult fail(String errorMessage, String rawExcerpt)
     {
-        return new ReviewScoreParseResult(false, null, errorMessage, rawExcerpt, 0, 0, 0);
+        return new ReviewScoreParseResult(false, null, errorMessage, rawExcerpt, 0, 0, 0, false);
     }
 
     public boolean isSuccess()
@@ -76,5 +85,10 @@ public final class ReviewScoreParseResult
     public int getOriginUnverifiableCount()
     {
         return originUnverifiableCount;
+    }
+
+    public boolean isIssuesTruncated()
+    {
+        return issuesTruncated;
     }
 }

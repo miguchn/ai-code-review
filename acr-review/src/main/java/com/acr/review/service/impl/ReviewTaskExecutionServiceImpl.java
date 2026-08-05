@@ -18,6 +18,7 @@ import com.acr.common.utils.StringUtils;
 import com.acr.review.domain.GitCredential;
 import com.acr.review.domain.ReviewPipelineConstants;
 import com.acr.review.domain.ReviewProject;
+import com.acr.review.domain.ReviewRoundReconcileResult;
 import com.acr.review.domain.ReviewTask;
 import com.acr.review.domain.ReviewTaskRun;
 import com.acr.review.domain.result.ReviewScoreDimension;
@@ -870,41 +871,43 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         deliverQuietly(task, run);
     }
 
-    /** 投递失败不影响审查结论；服务内部已吞异常，此处再兜底一次。 */
+    /** 对账 → 评论 → IM；任一步失败不影响审查结论。 */
     private void deliverQuietly(ReviewTask task, ReviewTaskRun run)
     {
+        ReviewRoundReconcileResult reconcile = reconcileIssuesQuietly(task, run);
         try
         {
-            deliveryService.deliverAfterSuccess(task, run);
+            deliveryService.deliverAfterSuccess(task, run, reconcile);
         }
         catch (Exception ex)
         {
             log.warn("审查结果投递调用异常（不影响任务状态）, taskId={}", task.getTaskId(), ex);
         }
-        notifyQuietly(task, run);
-        materializeIssuesQuietly(task, run);
+        notifyQuietly(task, run, reconcile);
     }
 
-    /** 问题物化失败不影响任务状态。 */
-    private void materializeIssuesQuietly(ReviewTask task, ReviewTaskRun run)
+    /** 问题对账失败不影响任务状态；失败时评论/通知退化为不含复核段。 */
+    private ReviewRoundReconcileResult reconcileIssuesQuietly(ReviewTask task, ReviewTaskRun run)
     {
         try
         {
-            issueService.materializeAfterSuccess(task, run);
+            ReviewRoundReconcileResult result = issueService.reconcileAfterSuccess(task, run);
+            return result == null ? ReviewRoundReconcileResult.empty() : result;
         }
         catch (Exception ex)
         {
-            log.warn("问题台账物化调用异常（不影响任务状态）, taskId={}",
+            log.warn("问题台账对账调用异常（不影响任务状态）, taskId={}",
                 task == null ? null : task.getTaskId(), ex);
+            return ReviewRoundReconcileResult.empty();
         }
     }
 
     /** IM 通知失败不影响任务状态。 */
-    private void notifyQuietly(ReviewTask task, ReviewTaskRun run)
+    private void notifyQuietly(ReviewTask task, ReviewTaskRun run, ReviewRoundReconcileResult reconcile)
     {
         try
         {
-            deliveryService.deliverNotifyAfterTerminal(task, run);
+            deliveryService.deliverNotifyAfterTerminal(task, run, reconcile);
         }
         catch (Exception ex)
         {
@@ -948,7 +951,7 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         task.setFinishedTime(finished);
         task.setDurationMs(duration);
         taskMapper.updateTaskExecution(task);
-        notifyQuietly(task, run);
+        notifyQuietly(task, run, ReviewRoundReconcileResult.empty());
     }
 
     private Map<String, Integer> dimensionScoreMap(ReviewScoreResult result)
@@ -1053,7 +1056,7 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
             task.setFinishedTime(finished);
             task.setDurationMs(duration);
             taskMapper.updateTaskExecution(task);
-            notifyQuietly(task, run);
+            notifyQuietly(task, run, ReviewRoundReconcileResult.empty());
         }
     }
 

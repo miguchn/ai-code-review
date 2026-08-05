@@ -57,6 +57,7 @@ mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/NN_xxx.sql
 28. `28_delivery_menu_route_name.sql`：补齐「投递记录」菜单 `route_name`（缺失时路由名与前端组件名不一致，keep-alive 不缓存导致页面一直加载）。
 29. `29_multi_git_provider_access.sql`：多 Git Provider 数据层（凭据 `server_url`、项目/事件 `repository_full_path`、平台字典、投递渠道扩展、MR/PR 事件参数；须 utf8mb4）。
 30. `30_delivery_content_snapshot.sql`：投递正文快照（`review_delivery_record` 增 `content_snapshot` mediumtext 可空列，历史不回填；须 utf8mb4）。
+31. `31_issue_lifecycle_m8.sql`：M8 问题生命周期（`review_issue` 增 `family_key`/`missed_streak`/`last_seen_head_sha`/`last_missed_run_id`/`recheck_task_id`/`recheck_run_id`/`recheck_commit_sha` 七列与 `idx_issue_pr_family` 索引；RECHECKING 字典改「待复核」并去预留备注、auto_recheck 去预留备注；新增转复核阈值与协议清单上限两个参数；幂等；须 utf8mb4）。
 
 ## init-full.sql 维护规则
 

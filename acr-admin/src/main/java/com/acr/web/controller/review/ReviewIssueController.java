@@ -18,7 +18,6 @@ import com.acr.common.enums.BusinessType;
 import com.acr.review.delivery.ReviewDeliveryConstants;
 import com.acr.review.domain.ReviewCommentSyncResult;
 import com.acr.review.domain.ReviewIssue;
-import com.acr.review.domain.ReviewIssueDetail;
 import com.acr.review.service.IReviewIssueService;
 
 /** 问题台账 REST。 */
@@ -76,6 +75,14 @@ public class ReviewIssueController extends BaseController
             body = Map.of();
         }
         return success(toCommentSyncData(issueService.dismiss(issueId, body.get("dismissType"), body.get("resolveNote"))));
+    }
+
+    @PreAuthorize("@ss.hasPermi('review:issue:close')")
+    @Log(title = "问题重新打开", businessType = BusinessType.UPDATE)
+    @PutMapping("/{issueId}/reopen")
+    public AjaxResult reopen(@PathVariable Long issueId)
+    {
+        return success(toCommentSyncData(issueService.reopen(issueId)));
     }
 
     private static Map<String, Object> toCommentSyncData(ReviewCommentSyncResult sync)

@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 import com.acr.common.utils.StringUtils;
 import com.acr.review.domain.ReviewPipelineConstants;
 import com.acr.review.domain.ReviewProject;
+import com.acr.review.domain.ReviewRoundReconcileResult;
 import com.acr.review.domain.ReviewTask;
 import com.acr.review.domain.ReviewTaskRun;
 import com.acr.review.domain.result.ReviewScopeStats;
@@ -35,6 +36,12 @@ public class ReviewSummaryContentFactory
 
     public ReviewSummaryContent build(ReviewTask task, ReviewTaskRun run, ReviewProject project)
     {
+        return build(task, run, project, null);
+    }
+
+    public ReviewSummaryContent build(ReviewTask task, ReviewTaskRun run, ReviewProject project,
+                                      ReviewRoundReconcileResult reconcile)
+    {
         String conclusion = task == null ? null : task.getReviewConclusion();
         String headSha = shortSha(task == null ? null : task.getHeadSha());
         if (StringUtils.isEmpty(headSha) && run != null)
@@ -60,6 +67,7 @@ public class ReviewSummaryContentFactory
             .additions(task == null ? null : task.getAdditions())
             .deletions(task == null ? null : task.getDeletions())
             .topIssues(resolveTopIssues(run))
+            .recheckingTitles(reconcile == null ? List.of() : reconcile.recheckingTitles())
             .scopeStats(resolveScopeStats(run))
             .failureType(task == null ? null : task.getFailureType())
             .failureTypeLabel(failureTypeLabel(task == null ? null : task.getFailureType()))
@@ -160,7 +168,7 @@ public class ReviewSummaryContentFactory
         };
     }
 
-    static String shortSha(String sha)
+    public static String shortSha(String sha)
     {
         if (StringUtils.isEmpty(sha))
         {

@@ -4,6 +4,7 @@ import java.util.Date;
 import java.util.List;
 import com.acr.review.domain.result.ReviewScopeStats;
 import com.acr.review.domain.result.ReviewTopIssue;
+import com.acr.review.service.ReviewScoringConstants;
 
 /** 审查结论摘要共享内容模型（GitHub 评论与 IM 同源）。 */
 public final class ReviewSummaryContent
@@ -25,6 +26,8 @@ public final class ReviewSummaryContent
     private final Integer additions;
     private final Integer deletions;
     private final List<ReviewTopIssue> topIssues;
+    /** 本轮转待复核问题标题（疑似已修复段）。 */
+    private final List<String> recheckingTitles;
     private final ReviewScopeStats scopeStats;
     private final String prUrl;
     private final String detailUrl;
@@ -56,6 +59,7 @@ public final class ReviewSummaryContent
         this.additions = builder.additions;
         this.deletions = builder.deletions;
         this.topIssues = builder.topIssues == null ? List.of() : List.copyOf(builder.topIssues);
+        this.recheckingTitles = builder.recheckingTitles == null ? List.of() : List.copyOf(builder.recheckingTitles);
         this.scopeStats = builder.scopeStats;
         this.prUrl = builder.prUrl;
         this.detailUrl = builder.detailUrl;
@@ -88,6 +92,19 @@ public final class ReviewSummaryContent
     public Integer getAdditions() { return additions; }
     public Integer getDeletions() { return deletions; }
     public List<ReviewTopIssue> getTopIssues() { return topIssues; }
+
+    /** 展示层 Top N（总结评论 / IM）。 */
+    public List<ReviewTopIssue> displayTopIssues()
+    {
+        if (topIssues.isEmpty())
+        {
+            return topIssues;
+        }
+        int limit = ReviewScoringConstants.MAX_TOP_ISSUES;
+        return topIssues.size() <= limit ? topIssues : topIssues.subList(0, limit);
+    }
+
+    public List<String> getRecheckingTitles() { return recheckingTitles; }
     public ReviewScopeStats getScopeStats() { return scopeStats; }
     public String getPrUrl() { return prUrl; }
     public String getDetailUrl() { return detailUrl; }
@@ -125,6 +142,7 @@ public final class ReviewSummaryContent
         private Integer additions;
         private Integer deletions;
         private List<ReviewTopIssue> topIssues;
+        private List<String> recheckingTitles;
         private ReviewScopeStats scopeStats;
         private String prUrl;
         private String detailUrl;
@@ -151,6 +169,7 @@ public final class ReviewSummaryContent
         public Builder additions(Integer additions) { this.additions = additions; return this; }
         public Builder deletions(Integer deletions) { this.deletions = deletions; return this; }
         public Builder topIssues(List<ReviewTopIssue> topIssues) { this.topIssues = topIssues; return this; }
+        public Builder recheckingTitles(List<String> recheckingTitles) { this.recheckingTitles = recheckingTitles; return this; }
         public Builder scopeStats(ReviewScopeStats scopeStats) { this.scopeStats = scopeStats; return this; }
         public Builder prUrl(String prUrl) { this.prUrl = prUrl; return this; }
         public Builder detailUrl(String detailUrl) { this.detailUrl = detailUrl; return this; }

@@ -3,9 +3,12 @@ package com.acr.review.service;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 import org.junit.jupiter.api.Test;
 import com.acr.review.domain.ReviewPipelineConstants;
 import com.acr.review.domain.result.ReviewScoreResult;
+import com.acr.system.service.ISysConfigService;
 
 class ReviewScoreResultParserTest
 {
@@ -35,6 +38,7 @@ class ReviewScoreResultParserTest
         assertTrue(parsed.isSuccess());
         assertEquals(72, parsed.getResult().getTotalScore());
         assertEquals(0, parsed.getResult().getFocusIssueCount());
+        assertEquals("1.2", parsed.getResult().getProtocolVersion());
     }
 
     @Test
@@ -47,11 +51,11 @@ class ReviewScoreResultParserTest
     }
 
     @Test
-    void truncatesTopIssuesToThreeAndRewritesRank()
+    void keepsFullIssueListAndRecalculatesFocusCount()
     {
         String json = """
             {
-              "protocolVersion":"1.0",
+              "protocolVersion":"1.2",
               "scores":[
                 {"dimension":"CORRECTNESS","score":30,"maxScore":40,"reason":"ok"},
                 {"dimension":"SECURITY","score":20,"maxScore":30,"reason":"ok"},
@@ -74,11 +78,65 @@ class ReviewScoreResultParserTest
         ReviewScoreParseResult parsed = parser.parse(json);
         assertTrue(parsed.isSuccess());
         ReviewScoreResult result = parsed.getResult();
-        assertEquals(3, result.getTopIssues().size());
-        assertEquals(3, result.getFocusIssueCount());
+        assertEquals(4, result.getTopIssues().size());
+        assertEquals(2, result.getFocusIssueCount(), "focusIssueCount = NEW 中 CRITICAL/HIGH");
         assertEquals(1, result.getTopIssues().get(0).getRank());
         assertEquals("CRITICAL", result.getTopIssues().get(0).getSeverity());
         assertEquals(ReviewPipelineConstants.CONCLUSION_BLOCK, parser.resolveConclusion(result));
+        assertFalse(parsed.isIssuesTruncated());
+    }
+
+    @Test
+    void truncatesAtMaxIssuesAndMarksTruncated()
+    {
+        ISysConfigService config = mock(ISysConfigService.class);
+        when(config.selectConfigByKey(ReviewScoringConstants.CONFIG_MAX_ISSUES)).thenReturn("20");
+        ReviewScoreResultParser limited = new ReviewScoreResultParser(config);
+
+        StringBuilder issues = new StringBuilder();
+        for (int i = 1; i <= 21; i++)
+        {
+            if (i > 1)
+            {
+                issues.append(',');
+            }
+            issues.append("{\"rank\":").append(i)
+                .append(",\"severity\":\"LOW\",\"category\":\"style\",\"title\":\"t").append(i)
+                .append("\",\"description\":\"d\",\"filePath\":null,\"startLine\":null,\"endLine\":null,")
+                .append("\"evidence\":\"e\",\"suggestion\":\"s\"}");
+        }
+        String json = """
+            {
+              "protocolVersion":"1.2",
+              "scores":[
+                {"dimension":"CORRECTNESS","score":30,"maxScore":40,"reason":"ok"},
+                {"dimension":"SECURITY","score":20,"maxScore":30,"reason":"ok"},
+                {"dimension":"PRACTICE","score":15,"maxScore":20,"reason":"ok"},
+                {"dimension":"PERFORMANCE","score":4,"maxScore":5,"reason":"ok"},
+                {"dimension":"COMMIT_QUALITY","score":3,"maxScore":5,"reason":"ok"}
+              ],
+              "summary":"很多问题",
+              "topIssues":[%s],
+              "focusIssueCount":21,
+              "hasCriticalSecurityIssue":false
+            }
+            """.formatted(issues);
+        ReviewScoreParseResult parsed = limited.parse(json);
+        assertTrue(parsed.isSuccess());
+        assertEquals(20, parsed.getResult().getTopIssues().size());
+        assertTrue(parsed.isIssuesTruncated());
+        assertEquals(0, parsed.getResult().getFocusIssueCount());
+    }
+
+    @Test
+    void acceptsProtocolVersions101112()
+    {
+        for (String version : new String[] {"1.0", "1.1", "1.2"})
+        {
+            ReviewScoreParseResult parsed = parser.parse(validBase().replace("\"1.0\"", "\"" + version + "\""));
+            assertTrue(parsed.isSuccess(), version);
+            assertEquals("1.2", parsed.getResult().getProtocolVersion());
+        }
     }
 
     @Test
@@ -92,7 +150,6 @@ class ReviewScoreResultParserTest
     @Test
     void parsesMarkdownFencedJsonWithPreamble()
     {
-        // 模型常见输出：前导说明 + ```json 围栏
         String raw = "以下是审查结果：\n```json\n" + validBase() + "\n```";
         ReviewScoreParseResult parsed = parser.parse(raw);
         assertTrue(parsed.isSuccess());
@@ -102,7 +159,6 @@ class ReviewScoreResultParserTest
     @Test
     void parsesJsonFollowedByProseContainingBrace()
     {
-        // 尾随说明文字中含 }，不得截错边界
         String raw = validBase() + "\n注意：以上分数 } 仅供参考";
         ReviewScoreParseResult parsed = parser.parse(raw);
         assertTrue(parsed.isSuccess());
@@ -122,7 +178,7 @@ class ReviewScoreResultParserTest
     void failsWhenScoresMissing()
     {
         String raw = """
-            {"protocolVersion":"1.0","summary":"s","topIssues":[],"focusIssueCount":0,"hasCriticalSecurityIssue":false}
+            {"protocolVersion":"1.2","summary":"s","topIssues":[],"focusIssueCount":0,"hasCriticalSecurityIssue":false}
             """;
         ReviewScoreParseResult parsed = parser.parse(raw);
         assertFalse(parsed.isSuccess());
@@ -134,7 +190,7 @@ class ReviewScoreResultParserTest
     {
         String raw = """
             {
-              "protocolVersion":"1.0",
+              "protocolVersion":"1.2",
               "scores":[
                 {"dimension":"CORRECTNESS","score":30,"maxScore":40,"reason":"ok"},
                 {"dimension":"SECURITY","score":20,"maxScore":30,"reason":"ok"},
@@ -176,29 +232,24 @@ class ReviewScoreResultParserTest
             """;
     }
 
-    // ---------- v1.1 归属打标 ----------
+    // ---------- 归属打标 ----------
 
     @Test
-    void existingIssuesDoNotOccupyTop3Slots()
+    void existingIssuesDoNotBlockFullNewList()
     {
-        // 存量 CRITICAL 被剔除后，第 4 名的新增 LOW 必须递补进 Top 3，而不是被存量占位丢弃
-        ReviewScoreParseResult parsed = parser.parse(originFixtureJson("1.1", true), originClassifier(), false);
+        ReviewScoreParseResult parsed = parser.parse(originFixtureJson("1.2", true), originClassifier(), false);
         assertTrue(parsed.isSuccess());
         ReviewScoreResult result = parsed.getResult();
 
-        assertEquals("1.1", result.getProtocolVersion());
+        assertEquals("1.2", result.getProtocolVersion());
         assertEquals(3, result.getTopIssues().size());
-        assertEquals(3, result.getFocusIssueCount());
+        assertEquals(1, result.getFocusIssueCount(), "仅 HIGH 计入 focus");
         assertEquals("HIGH", result.getTopIssues().get(0).getSeverity());
         assertEquals("NEW", result.getTopIssues().get(0).getOrigin());
-        assertEquals("MEDIUM", result.getTopIssues().get(1).getSeverity());
-        assertEquals("LOW", result.getTopIssues().get(2).getSeverity());
         assertTrue(result.getTopIssues().stream().allMatch(i -> "NEW".equals(i.getOrigin())));
-        // 归属统计：新增 3（含 1 不可判定）、存量 1
         assertEquals(3, parsed.getNewCount());
         assertEquals(1, parsed.getExistingCount());
         assertEquals(1, parsed.getOriginUnverifiableCount());
-        // 旗标为真但唯一的 CRITICAL 是存量：不阻断；新增 HIGH → 警告
         assertEquals(ReviewPipelineConstants.CONCLUSION_WARN, parser.resolveConclusion(result));
     }
 
@@ -209,22 +260,18 @@ class ReviewScoreResultParserTest
         assertTrue(parsed.isSuccess());
         ReviewScoreResult result = parsed.getResult();
 
-        // 3 条新增（rank 1-3）+ 1 条存量标注保留（rank 4，仅信息展示）
         assertEquals(4, result.getTopIssues().size());
-        assertEquals(3, result.getFocusIssueCount());
+        assertEquals(1, result.getFocusIssueCount());
         com.acr.review.domain.result.ReviewTopIssue existing = result.getTopIssues().get(3);
         assertEquals("EXISTING", existing.getOrigin());
         assertEquals("CRITICAL", existing.getSeverity());
-        assertEquals(4, existing.getRank());
-        // 存量 CRITICAL 不影响结论：新增 HIGH → 警告
         assertEquals(ReviewPipelineConstants.CONCLUSION_WARN, parser.resolveConclusion(result));
     }
 
     @Test
     void existingCriticalAloneDoesNotBlockConclusion()
     {
-        // 旗标为真，但 CRITICAL 全部判为存量且剔除：结论按新增问题评估 → 通过
-        String json = originFixtureJson("1.1", true)
+        String json = originFixtureJson("1.2", true)
             .replace("\"severity\":\"HIGH\"", "\"severity\":\"MEDIUM\"");
         ReviewScoreParseResult parsed = parser.parse(json, originClassifier(), false);
         assertTrue(parsed.isSuccess());
@@ -232,33 +279,28 @@ class ReviewScoreResultParserTest
     }
 
     @Test
-    void v10ProtocolAcceptedAndTaggedAsV11()
+    void v10ProtocolAcceptedAndTaggedAsV12()
     {
-        // 模型偶发回写旧版本号：按兼容解析并正常打标，落库统一 1.1
         ReviewScoreParseResult parsed = parser.parse(originFixtureJson("1.0", false), originClassifier(), false);
         assertTrue(parsed.isSuccess());
-        assertEquals("1.1", parsed.getResult().getProtocolVersion());
+        assertEquals("1.2", parsed.getResult().getProtocolVersion());
         assertTrue(parsed.getResult().getTopIssues().stream().allMatch(i -> i.getOrigin() != null));
     }
 
     @Test
-    void noClassifierKeepsV10TruncationBehavior()
+    void noClassifierKeepsFullListWithoutOrigin()
     {
-        // 无分类器（决策降级）：维持 v1.0 行为——直接截断 Top 3、不打标、旗标即阻断
-        ReviewScoreParseResult parsed = parser.parse(originFixtureJson("1.1", true));
+        ReviewScoreParseResult parsed = parser.parse(originFixtureJson("1.2", true));
         assertTrue(parsed.isSuccess());
         ReviewScoreResult result = parsed.getResult();
-        assertEquals(3, result.getTopIssues().size());
+        assertEquals(4, result.getTopIssues().size());
         assertEquals("CRITICAL", result.getTopIssues().get(0).getSeverity());
         assertTrue(result.getTopIssues().stream().allMatch(i -> i.getOrigin() == null));
+        assertEquals(2, result.getFocusIssueCount(), "未打标时 CRITICAL+HIGH");
         assertEquals(0, parsed.getExistingCount());
         assertEquals(ReviewPipelineConstants.CONCLUSION_BLOCK, parser.resolveConclusion(result));
     }
 
-    /**
-     * 归属夹具：Main.java 右侧 hunk [10,14]、新增行 [12,12]。
-     * 问题依次为：存量 CRITICAL（行 50，hunk 外）、新增 HIGH（行 12）、不可判定 MEDIUM（未知文件）、邻近 LOW（行 14）。
-     */
     private String originFixtureJson(String protocolVersion, boolean criticalFlag)
     {
         return """

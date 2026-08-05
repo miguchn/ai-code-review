@@ -78,7 +78,7 @@ class WorkbenchServiceImplTest
             security.when(() -> SecurityUtils.hasPermi(any())).thenReturn(true);
             when(projectService.countReviewProjectList(any())).thenReturn(3);
             when(taskService.selectLatestTaskTime(any())).thenReturn(DateUtils.parseDate("2026-08-03 15:20:00"));
-            when(issueService.countIssueList(any())).thenReturn(4, 1, 2);
+            when(issueService.countIssueList(any())).thenReturn(4, 1, 2, 3);
             when(recordService.countReviewRecordList(any())).thenReturn(1);
             when(taskService.countReviewTaskList(any())).thenReturn(5);
             when(deliveryService.countDeliveryList(any())).thenReturn(0);
@@ -92,7 +92,7 @@ class WorkbenchServiceImplTest
 
             assertEquals(3, summary.getScope().getProjectCount());
             assertEquals("2026-08-03 15:20", summary.getScope().getLatestTaskTime());
-            assertEquals(6, summary.getCards().size());
+            assertEquals(7, summary.getCards().size());
             assertEquals(WorkbenchConstants.CARD_ISSUE_AWAITING_CONFIRM, summary.getCards().get(0).getType());
             assertEquals(4, summary.getCards().get(0).getCount());
             assertEquals(ReviewIssueConstants.ORIGIN_NEW, summary.getCards().get(0).getQuery().get("origin"));
@@ -103,9 +103,13 @@ class WorkbenchServiceImplTest
             assertEquals(WorkbenchConstants.CARD_ISSUE_AWAITING_FIX, summary.getCards().get(2).getType());
             assertEquals(2, summary.getCards().get(2).getCount());
             assertFalse(summary.getCards().get(2).getQuery().containsKey("origin"));
-            assertEquals(WorkbenchConstants.CARD_HIGH_RISK_CONCLUSION, summary.getCards().get(3).getType());
-            assertEquals(WorkbenchConstants.CARD_DELIVERY_FAILED, summary.getCards().get(5).getType());
-            assertEquals(0, summary.getCards().get(5).getCount());
+            assertEquals(WorkbenchConstants.CARD_ISSUE_RECHECKING, summary.getCards().get(3).getType());
+            assertEquals(3, summary.getCards().get(3).getCount());
+            assertEquals("修复待验证", summary.getCards().get(3).getSubtitle());
+            assertEquals(ReviewIssueConstants.STATUS_RECHECKING, summary.getCards().get(3).getQuery().get("status"));
+            assertEquals(WorkbenchConstants.CARD_HIGH_RISK_CONCLUSION, summary.getCards().get(4).getType());
+            assertEquals(WorkbenchConstants.CARD_DELIVERY_FAILED, summary.getCards().get(6).getType());
+            assertEquals(0, summary.getCards().get(6).getCount());
             assertEquals(5, summary.getToday().getNewTasks());
             assertEquals(4, summary.getToday().getSuccessTasks());
             assertEquals(1, summary.getToday().getFailedTasks());
@@ -171,13 +175,13 @@ class WorkbenchServiceImplTest
                 String perm = inv.getArgument(0);
                 return WorkbenchConstants.PERM_ISSUE_LIST.equals(perm);
             });
-            when(issueService.countIssueList(any())).thenReturn(3, 1, 2);
+            when(issueService.countIssueList(any())).thenReturn(3, 1, 2, 4);
             when(issueService.countClosedToday(any())).thenReturn(0);
 
             WorkbenchSummary summary = service.getSummary();
 
             ArgumentCaptor<ReviewIssue> captor = ArgumentCaptor.forClass(ReviewIssue.class);
-            verify(issueService, org.mockito.Mockito.times(3)).countIssueList(captor.capture());
+            verify(issueService, org.mockito.Mockito.times(4)).countIssueList(captor.capture());
             List<ReviewIssue> queries = captor.getAllValues();
             assertEquals(ReviewIssueConstants.STATUS_AWAITING_CONFIRM, queries.get(0).getStatus());
             assertEquals(ReviewIssueConstants.ORIGIN_NEW, queries.get(0).getOrigin());
@@ -185,8 +189,9 @@ class WorkbenchServiceImplTest
             assertEquals(ReviewIssueConstants.ORIGIN_EXISTING, queries.get(1).getOrigin());
             assertEquals(ReviewIssueConstants.STATUS_AWAITING_FIX, queries.get(2).getStatus());
             assertNull(queries.get(2).getOrigin());
+            assertEquals(ReviewIssueConstants.STATUS_RECHECKING, queries.get(3).getStatus());
 
-            assertEquals(3, summary.getCards().size());
+            assertEquals(4, summary.getCards().size());
             WorkbenchCard confirm = summary.getCards().get(0);
             assertEquals(3, confirm.getCount());
             assertEquals("AWAITING_CONFIRM", confirm.getQuery().get("status"));
@@ -195,6 +200,8 @@ class WorkbenchServiceImplTest
             WorkbenchCard existing = summary.getCards().get(1);
             assertEquals("AWAITING_CONFIRM", existing.getQuery().get("status"));
             assertEquals("EXISTING", existing.getQuery().get("origin"));
+            assertEquals(WorkbenchConstants.CARD_ISSUE_RECHECKING, summary.getCards().get(3).getType());
+            assertEquals(4, summary.getCards().get(3).getCount());
 
             WorkbenchCard fix = summary.getCards().get(2);
             assertEquals(2, fix.getCount());

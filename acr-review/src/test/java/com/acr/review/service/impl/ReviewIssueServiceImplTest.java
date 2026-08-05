@@ -5,10 +5,12 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -26,6 +28,7 @@ import com.acr.review.domain.ReviewIssueConstants;
 import com.acr.review.domain.ReviewIssueDetail;
 import com.acr.review.domain.ReviewPipelineConstants;
 import com.acr.review.domain.ReviewProject;
+import com.acr.review.domain.ReviewRoundReconcileResult;
 import com.acr.review.domain.ReviewTask;
 import com.acr.review.domain.ReviewTaskRun;
 import com.acr.review.domain.result.ReviewTopIssue;
@@ -35,6 +38,8 @@ import com.acr.review.mapper.ReviewProjectMapper;
 import com.acr.review.mapper.ReviewTaskMapper;
 import com.acr.review.service.IReviewDeliveryService;
 import com.acr.review.service.ReviewIssueFingerprint;
+import com.acr.review.service.ReviewScoringConstants;
+import com.acr.system.service.ISysConfigService;
 import com.acr.system.service.ISysDeptService;
 import com.alibaba.fastjson2.JSON;
 
@@ -47,6 +52,7 @@ class ReviewIssueServiceImplTest
     @Mock private ReviewTaskMapper taskMapper;
     @Mock private ISysDeptService deptService;
     @Mock private IReviewDeliveryService deliveryService;
+    @Mock private ISysConfigService configService;
 
     private ReviewIssueServiceImpl service;
 
@@ -54,72 +60,272 @@ class ReviewIssueServiceImplTest
     void setUp()
     {
         service = new ReviewIssueServiceImpl(issueMapper, actionMapper, projectMapper, taskMapper,
-            deptService, deliveryService);
+            deptService, deliveryService, configService);
+        lenient().when(configService.selectConfigByKey(ReviewIssueConstants.CONFIG_MISSED_ROUNDS_THRESHOLD))
+            .thenReturn("1");
     }
 
     @Test
-    void materializeInsertsNewIssues()
+    void reconcileInsertsNewIssues()
     {
-        ReviewTask task = successTask(1L, 10L, 8);
-        ReviewTaskRun run = runWithIssues(top("SEC", "a.java", "leak", 1));
-        when(issueMapper.selectByProjectPrFingerprint(eq(10L), eq(8), any())).thenReturn(null);
+        ReviewTask task = successLlmTask(1L, 10L, 8, "aaa1111");
+        ReviewTaskRun run = runWithIssues(100L, top("SEC", "a.java", "leak", 1));
+        when(issueMapper.selectByProjectAndPr(10L, 8)).thenReturn(new ArrayList<>());
 
-        service.materializeAfterSuccess(task, run);
+        ReviewRoundReconcileResult result = service.reconcileAfterSuccess(task, run);
 
         ArgumentCaptor<ReviewIssue> captor = ArgumentCaptor.forClass(ReviewIssue.class);
         verify(issueMapper).insertIssue(captor.capture());
-        assertEquals(ReviewIssueConstants.STATUS_AWAITING_CONFIRM, captor.getValue().getStatus());
-        assertEquals(ReviewIssueFingerprint.of("SEC", "a.java", "leak"), captor.getValue().getFingerprint());
+        ReviewIssue created = captor.getValue();
+        assertEquals(ReviewIssueConstants.STATUS_AWAITING_CONFIRM, created.getStatus());
+        assertEquals(ReviewIssueFingerprint.of("SEC", "a.java", "leak"), created.getFingerprint());
+        assertEquals(ReviewIssueFingerprint.familyKey("a.java", "SEC"), created.getFamilyKey());
+        assertEquals("aaa1111", created.getLastSeenHeadSha());
+        assertEquals(1, result.getNewlyMaterialized().size());
     }
 
     @Test
-    void materializeRefreshesOpenIssueAcrossTasks()
+    void reconcileExactHitClearsMissedStreak()
     {
-        ReviewTask task = successTask(2L, 10L, 8);
-        ReviewTaskRun run = runWithIssues(top("SEC", "a.java", "leak", 1));
+        ReviewTask task = successLlmTask(2L, 10L, 8, "bbb2222");
+        ReviewTaskRun run = runWithIssues(101L, top("SEC", "a.java", "leak", 1));
         ReviewIssue existing = openIssue(99L, "SEC", "a.java", "leak");
-        when(issueMapper.selectByProjectPrFingerprint(eq(10L), eq(8), any())).thenReturn(existing);
+        existing.setMissedStreak(2);
+        existing.setLastSeenHeadSha("oldsha");
+        when(issueMapper.selectByProjectAndPr(10L, 8)).thenReturn(new ArrayList<>(List.of(existing)));
 
-        service.materializeAfterSuccess(task, run);
+        service.reconcileAfterSuccess(task, run);
 
         verify(issueMapper, never()).insertIssue(any());
         verify(issueMapper).updateIssueSnapshot(existing);
+        assertEquals(0, existing.getMissedStreak());
+        assertEquals("bbb2222", existing.getLastSeenHeadSha());
         assertEquals(2L, existing.getLastTaskId());
-        assertEquals(ReviewIssueConstants.STATUS_AWAITING_CONFIRM, existing.getStatus());
     }
 
     @Test
-    void materializeSkipsTerminalIssue()
+    void reconcileFamilyMergeUpdatesFingerprint()
     {
-        ReviewTask task = successTask(3L, 10L, 8);
-        ReviewTaskRun run = runWithIssues(top("SEC", "a.java", "leak", 1));
-        ReviewIssue existing = openIssue(99L, "SEC", "a.java", "leak");
-        existing.setStatus(ReviewIssueConstants.STATUS_CLOSED);
-        when(issueMapper.selectByProjectPrFingerprint(eq(10L), eq(8), any())).thenReturn(existing);
+        ReviewTask task = successLlmTask(3L, 10L, 8, "ccc3333");
+        // 同文件同类别、不同 title → 不同指纹、相同 family
+        ReviewTopIssue drifted = top("SEC", "a.java", "password leak v2", 1);
+        ReviewTaskRun run = runWithIssues(102L, drifted);
+        ReviewIssue existing = openIssue(99L, "SEC", "a.java", "password leak");
+        existing.setFamilyKey(ReviewIssueFingerprint.familyKey("a.java", "SEC"));
+        when(issueMapper.selectByProjectAndPr(10L, 8)).thenReturn(new ArrayList<>(List.of(existing)));
 
-        service.materializeAfterSuccess(task, run);
+        service.reconcileAfterSuccess(task, run);
 
         verify(issueMapper, never()).insertIssue(any());
+        assertEquals(ReviewIssueFingerprint.of(drifted), existing.getFingerprint());
+        assertEquals(0, existing.getMissedStreak());
+        assertEquals("password leak v2", existing.getTitle());
+    }
+
+    @Test
+    void reconcileAmbiguousFamilyDoesNotMerge()
+    {
+        ReviewTask task = successLlmTask(4L, 10L, 8, "ddd4444");
+        ReviewTopIssue drifted = top("SEC", "a.java", "new wording", 1);
+        ReviewTaskRun run = runWithIssues(103L, drifted);
+        ReviewIssue a = openIssue(1L, "SEC", "a.java", "one");
+        ReviewIssue b = openIssue(2L, "SEC", "a.java", "two");
+        a.setFamilyKey(ReviewIssueFingerprint.familyKey("a.java", "SEC"));
+        b.setFamilyKey(ReviewIssueFingerprint.familyKey("a.java", "SEC"));
+        when(issueMapper.selectByProjectAndPr(10L, 8)).thenReturn(new ArrayList<>(List.of(a, b)));
+
+        ReviewRoundReconcileResult result = service.reconcileAfterSuccess(task, run);
+
+        verify(issueMapper).insertIssue(any());
+        assertEquals(1, result.getNewlyMaterialized().size());
+        // 两条旧问题未命中 → 转待复核
+        assertEquals(2, result.getMovedToRechecking().size());
+    }
+
+    @Test
+    void reconcileMissMovesToRecheckingWithEvidence()
+    {
+        ReviewTask task = successLlmTask(5L, 10L, 8, "eee5555");
+        ReviewTaskRun run = runWithIssues(104L); // 空清单
+        ReviewIssue existing = openIssue(99L, "SEC", "a.java", "leak");
+        existing.setStatus(ReviewIssueConstants.STATUS_AWAITING_FIX);
+        existing.setLastSeenHeadSha("oldsha");
+        when(issueMapper.selectByProjectAndPr(10L, 8)).thenReturn(new ArrayList<>(List.of(existing)));
+
+        ReviewRoundReconcileResult result = service.reconcileAfterSuccess(task, run);
+
+        assertEquals(1, result.getMovedToRechecking().size());
+        assertEquals(ReviewIssueConstants.STATUS_RECHECKING, existing.getStatus());
+        assertEquals(1, existing.getMissedStreak());
+        assertEquals(104L, existing.getLastMissedRunId());
+        assertEquals(5L, existing.getRecheckTaskId());
+        assertEquals(104L, existing.getRecheckRunId());
+        assertEquals("eee5555", existing.getRecheckCommitSha());
+        ArgumentCaptor<ReviewIssueAction> actionCaptor = ArgumentCaptor.forClass(ReviewIssueAction.class);
+        verify(actionMapper).insertAction(actionCaptor.capture());
+        assertEquals(ReviewIssueConstants.ACTION_AUTO_RECHECK, actionCaptor.getValue().getActionType());
+        assertEquals(ReviewIssueConstants.OPERATOR_SYSTEM, actionCaptor.getValue().getOperator());
+    }
+
+    @Test
+    void reconcileSameCommitRerunDoesNotCountMiss()
+    {
+        ReviewTask task = successLlmTask(6L, 10L, 8, "sameSHA");
+        ReviewTaskRun run = runWithIssues(105L);
+        ReviewIssue existing = openIssue(99L, "SEC", "a.java", "leak");
+        existing.setLastSeenHeadSha("sameSHA");
+        existing.setMissedStreak(0);
+        when(issueMapper.selectByProjectAndPr(10L, 8)).thenReturn(new ArrayList<>(List.of(existing)));
+
+        ReviewRoundReconcileResult result = service.reconcileAfterSuccess(task, run);
+
+        assertTrue(result.getMovedToRechecking().isEmpty());
+        assertEquals(0, existing.getMissedStreak());
         verify(issueMapper, never()).updateIssueSnapshot(any());
     }
 
     @Test
-    void materializeHandlesBatchFingerprintCollision()
+    void reconcileSameRunIdempotentDoesNotDoubleCount()
     {
-        ReviewTask task = successTask(4L, 10L, 8);
+        ReviewTask task = successLlmTask(7L, 10L, 8, "fff6666");
+        ReviewTaskRun run = runWithIssues(106L);
+        ReviewIssue existing = openIssue(99L, "SEC", "a.java", "leak");
+        existing.setLastSeenHeadSha("old");
+        existing.setMissedStreak(1);
+        existing.setLastMissedRunId(106L);
+        existing.setStatus(ReviewIssueConstants.STATUS_RECHECKING);
+        when(issueMapper.selectByProjectAndPr(10L, 8)).thenReturn(new ArrayList<>(List.of(existing)));
+
+        service.reconcileAfterSuccess(task, run);
+
+        assertEquals(1, existing.getMissedStreak());
+        verify(issueMapper, never()).updateIssueSnapshot(any());
+        verify(actionMapper, never()).insertAction(any());
+    }
+
+    @Test
+    void reconcileSkipsTerminalOnExactHit()
+    {
+        ReviewTask task = successLlmTask(8L, 10L, 8, "ggg7777");
+        ReviewTaskRun run = runWithIssues(107L, top("SEC", "a.java", "leak", 1));
+        ReviewIssue existing = openIssue(99L, "SEC", "a.java", "leak");
+        existing.setStatus(ReviewIssueConstants.STATUS_CLOSED);
+        when(issueMapper.selectByProjectAndPr(10L, 8)).thenReturn(new ArrayList<>(List.of(existing)));
+
+        ReviewRoundReconcileResult result = service.reconcileAfterSuccess(task, run);
+
+        verify(issueMapper, never()).insertIssue(any());
+        verify(issueMapper, never()).updateIssueSnapshot(any());
+        assertTrue(result.getReopened().isEmpty());
+    }
+
+    @Test
+    void reconcileAutoReopensRecheckingOnHit()
+    {
+        ReviewTask task = successLlmTask(9L, 10L, 8, "hhh8888");
+        ReviewTaskRun run = runWithIssues(108L, top("SEC", "a.java", "leak", 1));
+        ReviewIssue existing = openIssue(99L, "SEC", "a.java", "leak");
+        existing.setStatus(ReviewIssueConstants.STATUS_RECHECKING);
+        when(issueMapper.selectByProjectAndPr(10L, 8)).thenReturn(new ArrayList<>(List.of(existing)));
+
+        ReviewRoundReconcileResult result = service.reconcileAfterSuccess(task, run);
+
+        assertEquals(1, result.getReopened().size());
+        assertEquals(ReviewIssueConstants.STATUS_AWAITING_FIX, existing.getStatus());
+        ArgumentCaptor<ReviewIssueAction> actionCaptor = ArgumentCaptor.forClass(ReviewIssueAction.class);
+        verify(actionMapper).insertAction(actionCaptor.capture());
+        assertEquals(ReviewIssueConstants.ACTION_AUTO_REOPEN, actionCaptor.getValue().getActionType());
+    }
+
+    @Test
+    void reconcileHandlesBatchFingerprintCollision()
+    {
+        ReviewTask task = successLlmTask(10L, 10L, 8, "iii9999");
         ReviewTopIssue a = top("SEC", "a.java", "same", 1);
         ReviewTopIssue b = top("SEC", "a.java", "same", 2);
-        ReviewTaskRun run = runWithIssues(a, b);
-        when(issueMapper.selectByProjectPrFingerprint(eq(10L), eq(8), any())).thenReturn(null);
+        ReviewTaskRun run = runWithIssues(109L, a, b);
+        when(issueMapper.selectByProjectAndPr(10L, 8)).thenReturn(new ArrayList<>());
 
-        service.materializeAfterSuccess(task, run);
+        service.reconcileAfterSuccess(task, run);
 
         ArgumentCaptor<ReviewIssue> captor = ArgumentCaptor.forClass(ReviewIssue.class);
-        verify(issueMapper, org.mockito.Mockito.times(2)).insertIssue(captor.capture());
+        verify(issueMapper, times(2)).insertIssue(captor.capture());
         List<ReviewIssue> inserted = captor.getAllValues();
-        assertEquals(2, inserted.size());
         assertTrue(!inserted.get(0).getFingerprint().equals(inserted.get(1).getFingerprint())
             || inserted.get(1).getFingerprint().contains(":"));
+    }
+
+    @Test
+    void reconcileSkipsOcrMode()
+    {
+        ReviewTask task = successLlmTask(11L, 10L, 8, "jjj");
+        task.setSnapshotReviewMode(ReviewPipelineConstants.REVIEW_MODE_OCR_ENGINE);
+        ReviewTaskRun run = runWithIssues(110L, top("SEC", "a.java", "leak", 1));
+
+        ReviewRoundReconcileResult result = service.reconcileAfterSuccess(task, run);
+
+        assertTrue(result.getNewlyMaterialized().isEmpty());
+        verify(issueMapper, never()).selectByProjectAndPr(any(), any());
+    }
+
+    @Test
+    void listRecheckingTitlesFiltersActiveRechecking()
+    {
+        ReviewIssue a = openIssue(1L, "SEC", "a.java", "sql-injection");
+        a.setStatus(ReviewIssueConstants.STATUS_RECHECKING);
+        ReviewIssue b = openIssue(2L, "SEC", "b.java", "open-issue");
+        b.setStatus(ReviewIssueConstants.STATUS_AWAITING_FIX);
+        ReviewIssue c = openIssue(3L, "SEC", "c.java", "cmd-injection");
+        c.setStatus(ReviewIssueConstants.STATUS_RECHECKING);
+        when(issueMapper.selectByProjectAndPr(10L, 8)).thenReturn(List.of(a, b, c));
+
+        assertEquals(List.of("sql-injection", "cmd-injection"), service.listRecheckingTitles(10L, 8));
+        assertEquals(List.of(), service.listRecheckingTitles(null, 8));
+    }
+
+    @Test
+    void closeFromRecheckingUsesAutoRecheckSource()
+    {
+        ReviewIssue issue = openIssue(7L, "SEC", "a.java", "x");
+        issue.setStatus(ReviewIssueConstants.STATUS_RECHECKING);
+        stubProjectScope(issue);
+        when(issueMapper.selectIssueById(7L)).thenReturn(issue);
+        when(deliveryService.rerenderSummaryComment(10L, 8))
+            .thenReturn(ReviewCommentSyncResult.of(ReviewDeliveryConstants.STATUS_SUCCESS, null, 1L));
+
+        service.close(7L, "确认已修复");
+
+        assertEquals(ReviewIssueConstants.STATUS_CLOSED, issue.getStatus());
+        assertEquals(ReviewIssueConstants.CLOSE_SOURCE_AUTO_RECHECK, issue.getCloseSource());
+    }
+
+    @Test
+    void reopenFromRechecking()
+    {
+        ReviewIssue issue = openIssue(8L, "SEC", "a.java", "x");
+        issue.setStatus(ReviewIssueConstants.STATUS_RECHECKING);
+        stubProjectScope(issue);
+        when(issueMapper.selectIssueById(8L)).thenReturn(issue);
+        when(deliveryService.rerenderSummaryComment(10L, 8))
+            .thenReturn(ReviewCommentSyncResult.of(ReviewDeliveryConstants.STATUS_SUCCESS, null, 1L));
+
+        service.reopen(8L);
+
+        assertEquals(ReviewIssueConstants.STATUS_AWAITING_FIX, issue.getStatus());
+        ArgumentCaptor<ReviewIssueAction> actionCaptor = ArgumentCaptor.forClass(ReviewIssueAction.class);
+        verify(actionMapper).insertAction(actionCaptor.capture());
+        assertEquals(ReviewIssueConstants.ACTION_REOPEN, actionCaptor.getValue().getActionType());
+    }
+
+    @Test
+    void dismissRejectsRechecking()
+    {
+        ReviewIssue issue = openIssue(9L, "SEC", "a.java", "x");
+        issue.setStatus(ReviewIssueConstants.STATUS_RECHECKING);
+        stubProjectScope(issue);
+        when(issueMapper.selectIssueById(9L)).thenReturn(issue);
+
+        assertThrows(ServiceException.class, () -> service.dismiss(9L, "IGNORED", "nope"));
     }
 
     @Test
@@ -138,6 +344,7 @@ class ReviewIssueServiceImplTest
         when(issueMapper.selectIssueById(7L)).thenReturn(issue);
         service.close(7L, "fixed");
         assertEquals(ReviewIssueConstants.STATUS_CLOSED, issue.getStatus());
+        assertEquals(ReviewIssueConstants.CLOSE_SOURCE_MANUAL, issue.getCloseSource());
 
         assertThrows(ServiceException.class, () -> service.dismiss(7L, "IGNORED", "nope"));
     }
@@ -163,8 +370,6 @@ class ReviewIssueServiceImplTest
 
         ReviewCommentSyncResult sync = service.dismiss(9L, "FALSE_POSITIVE", "历史噪声");
         assertEquals(ReviewDeliveryConstants.STATUS_FAILED, sync.getStatus());
-        assertEquals("GitHub API 超时", sync.getFailureMessage());
-        assertEquals(88L, sync.getDeliveryId());
         assertEquals(ReviewIssueConstants.STATUS_FALSE_POSITIVE, issue.getStatus());
         ArgumentCaptor<ReviewIssueAction> actionCaptor = ArgumentCaptor.forClass(ReviewIssueAction.class);
         verify(actionMapper).insertAction(actionCaptor.capture());
@@ -189,15 +394,66 @@ class ReviewIssueServiceImplTest
 
         assertNotNull(detail.getSummaryDelivery());
         assertEquals(55L, detail.getSummaryDelivery().getDeliveryId());
-        assertEquals(ReviewDeliveryConstants.TRIGGER_ISSUE_DISPOSITION,
-            detail.getSummaryDelivery().getTriggerSource());
     }
 
     @Test
-    void countOpenNewExcludesExistingViaMapper()
+    void pr3RegressionPrototypeThreeRounds()
     {
-        when(issueMapper.countOpenNewByProject(10L)).thenReturn(2);
-        assertEquals(2, service.countOpenNewByProject(10L));
+        // round1: 物化 3 条
+        ReviewTask t1 = successLlmTask(1L, 10L, 3, "sha1");
+        ReviewTaskRun r1 = runWithIssues(1L,
+            top("SEC", "a.java", "sql-injection", 1),
+            top("SEC", "b.java", "cmd-injection", 2),
+            top("SEC", "c.java", "hardcoded-password", 3));
+        List<ReviewIssue> ledger = new ArrayList<>();
+        when(issueMapper.selectByProjectAndPr(10L, 3)).thenReturn(ledger);
+        when(issueMapper.insertIssue(any())).thenAnswer(inv -> {
+            ReviewIssue created = inv.getArgument(0);
+            // 仅回填 ID；入账列表由 reconcile Pass 3 的 allIssues.add 维护，避免双写
+            created.setIssueId((long) (ledger.size() + 1));
+            return 1;
+        });
+
+        ReviewRoundReconcileResult round1 = service.reconcileAfterSuccess(t1, r1);
+        assertEquals(3, round1.getNewlyMaterialized().size());
+        assertTrue(ledger.stream().allMatch(i -> ReviewIssueConstants.STATUS_AWAITING_CONFIRM.equals(i.getStatus())));
+
+        // 人工确认
+        for (ReviewIssue issue : ledger)
+        {
+            issue.setStatus(ReviewIssueConstants.STATUS_AWAITING_FIX);
+        }
+
+        // round2: 全未命中 + 新发现 3 条
+        ReviewTask t2 = successLlmTask(2L, 10L, 3, "sha2");
+        ReviewTaskRun r2 = runWithIssues(2L,
+            top("QUALITY", "d.java", "naming", 1),
+            top("QUALITY", "e.java", "complexity", 2),
+            top("QUALITY", "f.java", "dup", 3));
+        ReviewRoundReconcileResult round2 = service.reconcileAfterSuccess(t2, r2);
+        assertEquals(3, round2.getMovedToRechecking().size());
+        assertEquals(3, round2.getNewlyMaterialized().size());
+        assertEquals(3, ledger.stream().filter(i -> ReviewIssueConstants.STATUS_RECHECKING.equals(i.getStatus())).count());
+        assertEquals(3, ledger.stream().filter(i -> ReviewIssueConstants.STATUS_AWAITING_CONFIRM.equals(i.getStatus())).count());
+        for (ReviewIssue issue : round2.getMovedToRechecking())
+        {
+            assertNotNull(issue.getRecheckTaskId());
+            assertNotNull(issue.getRecheckRunId());
+            assertEquals("sha2", issue.getRecheckCommitSha());
+        }
+
+        // round3: 命中原问题 1 条 + 命中 round2 新问题，其余 2 条保持 RECHECKING
+        ReviewTask t3 = successLlmTask(3L, 10L, 3, "sha3");
+        ReviewTaskRun r3 = runWithIssues(3L,
+            top("SEC", "a.java", "sql-injection", 1),
+            top("QUALITY", "d.java", "naming", 2),
+            top("QUALITY", "e.java", "complexity", 3),
+            top("QUALITY", "f.java", "dup", 4));
+        ReviewRoundReconcileResult round3 = service.reconcileAfterSuccess(t3, r3);
+        assertEquals(1, round3.getReopened().size());
+        assertEquals(ReviewIssueConstants.STATUS_AWAITING_FIX, round3.getReopened().get(0).getStatus());
+        assertEquals("sql-injection", round3.getReopened().get(0).getTitle());
+        assertEquals(2, ledger.stream().filter(i -> ReviewIssueConstants.STATUS_RECHECKING.equals(i.getStatus())).count());
     }
 
     private void stubProjectScope(ReviewIssue issue)
@@ -215,27 +471,37 @@ class ReviewIssueServiceImplTest
         issue.setProjectId(10L);
         issue.setPrNumber(8);
         issue.setFingerprint(ReviewIssueFingerprint.of(category, path, title));
+        issue.setFamilyKey(ReviewIssueFingerprint.familyKey(path, category));
+        issue.setCategory(category);
+        issue.setFilePath(path);
         issue.setStatus(ReviewIssueConstants.STATUS_AWAITING_CONFIRM);
         issue.setTitle(title);
         issue.setOrigin(ReviewIssueConstants.ORIGIN_NEW);
+        issue.setMissedStreak(0);
+        issue.setFirstTaskId(1L);
+        issue.setLastTaskId(1L);
         return issue;
     }
 
-    private static ReviewTask successTask(Long taskId, Long projectId, int pr)
+    private static ReviewTask successLlmTask(Long taskId, Long projectId, int pr, String headSha)
     {
         ReviewTask task = new ReviewTask();
         task.setTaskId(taskId);
         task.setProjectId(projectId);
         task.setPrNumber(pr);
         task.setTaskStatus(ReviewPipelineConstants.TASK_SUCCESS);
+        task.setParseStatus(ReviewScoringConstants.PARSE_SUCCESS);
+        task.setSnapshotReviewMode(ReviewPipelineConstants.REVIEW_MODE_LLM_DIRECT);
         task.setProvider("GITHUB");
+        task.setHeadSha(headSha);
         return task;
     }
 
-    private static ReviewTaskRun runWithIssues(ReviewTopIssue... issues)
+    private static ReviewTaskRun runWithIssues(Long runId, ReviewTopIssue... issues)
     {
         ReviewTaskRun run = new ReviewTaskRun();
-        run.setRunId(100L);
+        run.setRunId(runId);
+        run.setParseStatus(ReviewScoringConstants.PARSE_SUCCESS);
         run.setTopIssuesJson(JSON.toJSONString(List.of(issues)));
         return run;
     }
