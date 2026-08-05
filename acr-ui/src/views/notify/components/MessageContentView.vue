@@ -11,8 +11,7 @@
 </template>
 
 <script setup>
-import { marked } from 'marked'
-import DOMPurify from 'dompurify'
+import { renderMarkdown } from '@/utils/markdown'
 
 const props = defineProps({
   /** 消息标题（纯文本） */
@@ -21,31 +20,13 @@ const props = defineProps({
   body: { type: String, default: '' }
 })
 
-marked.setOptions({
-  gfm: true,
-  breaks: true
-})
-
-// 链接统一新标签打开，并阻断 opener 引用
-DOMPurify.addHook('afterSanitizeAttributes', (node) => {
-  if (node.tagName === 'A') {
-    node.setAttribute('target', '_blank')
-    node.setAttribute('rel', 'noopener noreferrer')
-  }
-})
-
 const displayTitle = computed(() => {
   const value = props.title == null ? '' : String(props.title).trim()
   return value
 })
 
 const safeHtml = computed(() => {
-  const raw = props.body == null ? '' : String(props.body)
-  if (!raw.trim()) {
-    return ''
-  }
-  const html = marked.parse(raw, { async: false })
-  return DOMPurify.sanitize(typeof html === 'string' ? html : String(html))
+  return renderMarkdown(props.body)
 })
 </script>
 
