@@ -71,6 +71,11 @@ class ReviewIssueServiceImplTest
         ReviewTask task = successLlmTask(1L, 10L, 8, "aaa1111");
         ReviewTaskRun run = runWithIssues(100L, top("SEC", "a.java", "leak", 1));
         when(issueMapper.selectByProjectAndPr(10L, 8)).thenReturn(new ArrayList<>());
+        when(issueMapper.insertIssue(any())).thenAnswer(inv -> {
+            ReviewIssue created = inv.getArgument(0);
+            created.setIssueId(501L);
+            return 1;
+        });
 
         ReviewRoundReconcileResult result = service.reconcileAfterSuccess(task, run);
 
@@ -82,6 +87,16 @@ class ReviewIssueServiceImplTest
         assertEquals(ReviewIssueFingerprint.familyKey("a.java", "SEC"), created.getFamilyKey());
         assertEquals("aaa1111", created.getLastSeenHeadSha());
         assertEquals(1, result.getNewlyMaterialized().size());
+        ArgumentCaptor<ReviewIssueAction> actionCaptor = ArgumentCaptor.forClass(ReviewIssueAction.class);
+        verify(actionMapper).insertAction(actionCaptor.capture());
+        ReviewIssueAction detected = actionCaptor.getValue();
+        assertEquals(ReviewIssueConstants.ACTION_DETECTED, detected.getActionType());
+        assertEquals(501L, detected.getIssueId());
+        assertEquals(ReviewIssueConstants.OPERATOR_SYSTEM, detected.getOperator());
+        assertEquals(ReviewIssueConstants.STATUS_AWAITING_CONFIRM, detected.getFromStatus());
+        assertEquals(ReviewIssueConstants.STATUS_AWAITING_CONFIRM, detected.getToStatus());
+        assertTrue(detected.getResolveNote().contains("发现"));
+        assertTrue(detected.getResolveNote().contains("aaa1111"));
     }
 
     @Test
@@ -101,6 +116,15 @@ class ReviewIssueServiceImplTest
         assertEquals(0, existing.getMissedStreak());
         assertEquals("bbb2222", existing.getLastSeenHeadSha());
         assertEquals(2L, existing.getLastTaskId());
+        ArgumentCaptor<ReviewIssueAction> actionCaptor = ArgumentCaptor.forClass(ReviewIssueAction.class);
+        verify(actionMapper).insertAction(actionCaptor.capture());
+        ReviewIssueAction hit = actionCaptor.getValue();
+        assertEquals(ReviewIssueConstants.ACTION_ROUND_HIT, hit.getActionType());
+        assertEquals(99L, hit.getIssueId());
+        assertEquals(ReviewIssueConstants.STATUS_AWAITING_CONFIRM, hit.getFromStatus());
+        assertEquals(ReviewIssueConstants.STATUS_AWAITING_CONFIRM, hit.getToStatus());
+        assertTrue(hit.getResolveNote().contains("再次命中"));
+        assertTrue(hit.getResolveNote().contains("bbb2222"));
     }
 
     @Test
@@ -143,6 +167,34 @@ class ReviewIssueServiceImplTest
     }
 
     @Test
+    void reconcileMissBelowThresholdWritesRoundMiss()
+    {
+        when(configService.selectConfigByKey(ReviewIssueConstants.CONFIG_MISSED_ROUNDS_THRESHOLD))
+            .thenReturn("2");
+        ReviewTask task = successLlmTask(51L, 10L, 8, "miss1111");
+        ReviewTaskRun run = runWithIssues(151L); // 空清单
+        ReviewIssue existing = openIssue(99L, "SEC", "a.java", "leak");
+        existing.setStatus(ReviewIssueConstants.STATUS_AWAITING_FIX);
+        existing.setLastSeenHeadSha("oldsha");
+        existing.setMissedStreak(0);
+        when(issueMapper.selectByProjectAndPr(10L, 8)).thenReturn(new ArrayList<>(List.of(existing)));
+
+        ReviewRoundReconcileResult result = service.reconcileAfterSuccess(task, run);
+
+        assertTrue(result.getMovedToRechecking().isEmpty());
+        assertEquals(ReviewIssueConstants.STATUS_AWAITING_FIX, existing.getStatus());
+        assertEquals(1, existing.getMissedStreak());
+        ArgumentCaptor<ReviewIssueAction> actionCaptor = ArgumentCaptor.forClass(ReviewIssueAction.class);
+        verify(actionMapper).insertAction(actionCaptor.capture());
+        ReviewIssueAction miss = actionCaptor.getValue();
+        assertEquals(ReviewIssueConstants.ACTION_ROUND_MISS, miss.getActionType());
+        assertEquals(ReviewIssueConstants.STATUS_AWAITING_FIX, miss.getFromStatus());
+        assertEquals(ReviewIssueConstants.STATUS_AWAITING_FIX, miss.getToStatus());
+        assertTrue(miss.getResolveNote().contains("未命中"));
+        assertTrue(miss.getResolveNote().contains("连续未命中 1 次"));
+    }
+
+    @Test
     void reconcileMissMovesToRecheckingWithEvidence()
     {
         ReviewTask task = successLlmTask(5L, 10L, 8, "eee5555");
@@ -165,6 +217,8 @@ class ReviewIssueServiceImplTest
         verify(actionMapper).insertAction(actionCaptor.capture());
         assertEquals(ReviewIssueConstants.ACTION_AUTO_RECHECK, actionCaptor.getValue().getActionType());
         assertEquals(ReviewIssueConstants.OPERATOR_SYSTEM, actionCaptor.getValue().getOperator());
+        // 达阈值时只写 AUTO_RECHECK，不重复写 ROUND_MISS
+        verify(actionMapper, times(1)).insertAction(any());
     }
 
     @Test
@@ -235,6 +289,8 @@ class ReviewIssueServiceImplTest
         ArgumentCaptor<ReviewIssueAction> actionCaptor = ArgumentCaptor.forClass(ReviewIssueAction.class);
         verify(actionMapper).insertAction(actionCaptor.capture());
         assertEquals(ReviewIssueConstants.ACTION_AUTO_REOPEN, actionCaptor.getValue().getActionType());
+        // RECHECKING 被命中只写 AUTO_REOPEN，不重复写 ROUND_HIT
+        verify(actionMapper, times(1)).insertAction(any());
     }
 
     @Test

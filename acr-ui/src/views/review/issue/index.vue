@@ -309,7 +309,10 @@ const ACTION_TYPE_LABELS = {
   DISMISS: '忽略/误报',
   AUTO_RECHECK: '自动转复核',
   AUTO_REOPEN: '自动重开',
-  REOPEN: '重新打开'
+  REOPEN: '重新打开',
+  DETECTED: '发现',
+  ROUND_HIT: '再次命中',
+  ROUND_MISS: '未命中'
 }
 
 const issueList = ref([])

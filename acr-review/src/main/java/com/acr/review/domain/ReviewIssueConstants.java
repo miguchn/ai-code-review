@@ -17,6 +17,12 @@ public final class ReviewIssueConstants
     public static final String ACTION_AUTO_RECHECK = "AUTO_RECHECK";
     public static final String ACTION_AUTO_REOPEN = "AUTO_REOPEN";
     public static final String ACTION_REOPEN = "REOPEN";
+    /** 问题首次物化（发现）。 */
+    public static final String ACTION_DETECTED = "DETECTED";
+    /** 本轮审查再次命中既有问题。 */
+    public static final String ACTION_ROUND_HIT = "ROUND_HIT";
+    /** 本轮审查未命中且未达转复核阈值。 */
+    public static final String ACTION_ROUND_MISS = "ROUND_MISS";
 
     public static final String CLOSE_SOURCE_MANUAL = "manual";
     public static final String CLOSE_SOURCE_AUTO_RECHECK = "auto_recheck";

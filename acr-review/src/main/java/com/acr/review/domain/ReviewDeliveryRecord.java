@@ -40,6 +40,8 @@ public class ReviewDeliveryRecord extends BaseEntity
 
     /** 列表展示：项目名称。 */
     private String projectName;
+    /** 列表展示：业务系统名称。 */
+    private String businessSystemName;
     /** 查询条件：开始时间。 */
     private String beginTime;
     /** 查询条件：结束时间。 */
@@ -213,6 +215,16 @@ public class ReviewDeliveryRecord extends BaseEntity
     public void setProjectName(String projectName)
     {
         this.projectName = projectName;
+    }
+
+    public String getBusinessSystemName()
+    {
+        return businessSystemName;
+    }
+
+    public void setBusinessSystemName(String businessSystemName)
+    {
+        this.businessSystemName = businessSystemName;
     }
 
     public String getBeginTime()

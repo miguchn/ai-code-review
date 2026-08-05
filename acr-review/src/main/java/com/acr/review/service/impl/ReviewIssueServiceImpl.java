@@ -131,6 +131,9 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
             else
             {
                 issueMapper.updateIssueSnapshot(existing);
+                String status = existing.getStatus();
+                insertSystemAction(existing.getIssueId(), ReviewIssueConstants.ACTION_ROUND_HIT, status, status,
+                    roundHitNote(roundNo, headSha));
             }
             hitIssueIds.add(existing.getIssueId());
         }
@@ -188,6 +191,9 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
             else
             {
                 issueMapper.updateIssueSnapshot(target);
+                String status = target.getStatus();
+                insertSystemAction(target.getIssueId(), ReviewIssueConstants.ACTION_ROUND_HIT, status, status,
+                    roundHitNote(roundNo, headSha));
             }
             hitIssueIds.add(target.getIssueId());
             consumedRoundIndexes.add(i);
@@ -220,6 +226,9 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
             usedFingerprints.add(fp);
             ReviewIssue created = buildNewIssue(task, run, top, fp, headSha, ReviewIssueConstants.OPERATOR_SYSTEM);
             issueMapper.insertIssue(created);
+            String status = created.getStatus();
+            insertSystemAction(created.getIssueId(), ReviewIssueConstants.ACTION_DETECTED, status, status,
+                "第 " + roundNo + " 轮审查发现 · commit " + displayShortSha(headSha));
             allIssues.add(created);
             newlyMaterialized.add(created);
             hitIssueIds.add(created.getIssueId());
@@ -259,16 +268,17 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
                 issue.setRecheckRunId(runId);
                 issue.setRecheckCommitSha(headSha);
                 issueMapper.updateIssueSnapshot(issue);
-                String shortSha = ReviewSummaryContentFactory.shortSha(headSha);
                 insertSystemAction(issue.getIssueId(), ReviewIssueConstants.ACTION_AUTO_RECHECK, from,
                     ReviewIssueConstants.STATUS_RECHECKING,
-                    "第 " + roundNo + " 轮审查（commit " + (StringUtils.isEmpty(shortSha) ? "--" : shortSha)
-                        + "）未再命中");
+                    "第 " + roundNo + " 轮审查（commit " + displayShortSha(headSha) + "）未再命中");
                 movedToRechecking.add(issue);
             }
             else
             {
                 issueMapper.updateIssueSnapshot(issue);
+                String status = issue.getStatus();
+                insertSystemAction(issue.getIssueId(), ReviewIssueConstants.ACTION_ROUND_MISS, status, status,
+                    "第 " + roundNo + " 轮审查未命中 · 连续未命中 " + streak + " 次");
             }
         }
 
@@ -538,6 +548,17 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
         action.setResolveNote(note);
         action.setCreateTime(new Date());
         actionMapper.insertAction(action);
+    }
+
+    private static String roundHitNote(int roundNo, String headSha)
+    {
+        return "第 " + roundNo + " 轮审查再次命中 · commit " + displayShortSha(headSha);
+    }
+
+    private static String displayShortSha(String headSha)
+    {
+        String shortSha = ReviewSummaryContentFactory.shortSha(headSha);
+        return StringUtils.isEmpty(shortSha) ? "--" : shortSha;
     }
 
     private ReviewCommentSyncResult scheduleCommentRerender(ReviewIssue issue)
