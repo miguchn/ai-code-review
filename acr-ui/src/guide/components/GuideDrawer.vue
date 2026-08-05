@@ -4,7 +4,7 @@
     :size="drawerSize"
     :with-header="false"
     append-to-body
-    custom-class="guide-drawer"
+    class="guide-drawer"
     @closed="onClosed"
   >
     <div class="guide-drawer__inner">
@@ -57,9 +57,14 @@ import { GUIDE_GROUPS, GUIDE_DOCS, DEFAULT_DOC_ID, findDoc } from '../manifest'
 import useGuideStore from '@/store/modules/guide'
 import GuideContent from './GuideContent.vue'
 import useAppStore from '@/store/modules/app'
+import { useRoute } from 'vue-router'
 
 const guideStore = useGuideStore()
 const appStore = useAppStore()
+const route = useRoute()
+
+/* 抽屉为全局浮层：切 tab（路由变化）时关闭，避免跨页残留 */
+watch(() => route.fullPath, () => guideStore.close())
 
 const keyword = ref('')
 const openGroups = ref(GUIDE_GROUPS.map(g => g.key))
