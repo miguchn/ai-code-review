@@ -4,6 +4,10 @@ export function listIssue(query) {
   return request({ url: '/review/issue/list', method: 'get', params: query })
 }
 
+export function getIssueStats(query) {
+  return request({ url: '/review/issue/stats', method: 'get', params: query })
+}
+
 export function getIssue(issueId) {
   return request({ url: '/review/issue/' + issueId, method: 'get' })
 }
@@ -22,4 +26,8 @@ export function dismissIssue(issueId, data) {
 
 export function reopenIssue(issueId) {
   return request({ url: '/review/issue/' + issueId + '/reopen', method: 'put' })
+}
+
+export function batchDisposeIssue(data) {
+  return request({ url: '/review/issue/batch', method: 'post', data })
 }
