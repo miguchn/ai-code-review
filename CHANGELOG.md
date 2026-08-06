@@ -4,9 +4,9 @@
 
 ### 功能助手（M9）
 
-- 功能助手入口与抽屉：navbar「?」图标（tooltip「功能助手」）点击打开右侧抽屉；桌面 560px、移动端全宽（受全局抽屉 max-width 规则限制为视口减 32px）；标题/搜索/分组目录/内容区四段布局，目录默认全展开、内容区独立滚动；搜索按标题+关键词匹配并含无结果空态；路由（tab）切换自动关闭，避免跨页残留
+- 功能助手入口与抽屉：navbar「?」图标（tooltip「功能助手」）点击打开右侧抽屉；桌面 620px、移动端全宽（受全局抽屉 max-width 规则限制为视口减 32px）；标题/搜索/指引目录/常驻篇目栏/内容区五段布局——目录仅展开当前篇目所在分组、可整体折叠，篇目栏滚动时常驻显示「分组 / 篇名」（正文 H1 上移隐藏），正文标题层级拉开（h2 细分隔线）、首段「这篇帮你…」渲染为引言卡；内容区独立滚动；搜索按标题+关键词匹配并含无结果空态；路由（tab）切换自动关闭，避免跨页残留
 - 内置 14 篇指引（快速上手/平台接入指引/模型与引擎/提交注释规范/投递与通知/常见问题六组），`import.meta.glob` 原文懒加载，文件缺失降级「该文档暂未提供」；代码块附加复制按钮（clipboard API + execCommand 降级）、插图重写为构建期 URL；正文经公共 markdown 封装渲染
-- 三处配置页指引深链：项目/凭据页「查看接入指引 →」/「按平台查看凭据创建指引 →」按当前所选 Git 平台（GitHub/GitLab/Gitee/Gitea）打开对应平台篇，模型配置页「查看模型配置指引 →」直达模型配置篇；抽屉开合不重置表单已填内容
+- 三处配置页指引深链：项目/凭据页「查看接入指引 →」/「按平台查看凭据创建指引 →」按当前所选 Git 平台（GitHub/GitLab/Gitee/Gitea）打开对应平台篇，模型配置页「查看模型配置指引 →」直达模型配置篇；项目页链接收入 Git 平台表单项内，与校验错误提示不冲突；抽屉开合不重置表单已填内容
 - markdown 公共渲染封装 `src/utils/markdown.js` 收敛：marked（GFM+breaks）+ DOMPurify 消毒 + 链接统一新标签打开，hook 模块级注册一次；投递消息详情（MessageContentView）与功能助手共用，行为等价验证通过
 - 样式全部走主题 CSS 变量，浅/暗双主题自动适配（暗色下代码块边框、表格、引用块、选中目录项、复制按钮可辨）；验证矩阵逐项通过：分辨率 1440/1280/1024/800、明暗渲染、搜索、深链正文、keep-alive 不残留、复制按钮、表单回归、无 console 错误
 
@@ -19,6 +19,7 @@
 - 状态机开放 RECHECKING：人工「确认已修复并关闭」（close_source=auto_recheck）与「未修复，重新打开」（`PUT /review/issue/{issueId}/reopen`，复用 `review:issue:close` 权限）；确认/忽略对确认待复核保持拒绝；无新权限串、无新菜单
 - 台账默认「当前活跃」视图（activeFlag，与 status 筛选并存且 status 优先）；详情抽屉新增生命周期时间线（含系统动作）与复核证据块（含「疑似关联新发现问题」展示层查询）；工作台新增「待复核问题」卡片
 - 总结评论与 IM 迷你报告按全量清单渲染 Top3 与「共 N 个问题，其余见问题台账」；本轮触发复核时追加「疑似已修复（N）」段（≤3 标题省略），处置后评论重渲染时该段从当前台账派生、保持与台账一致，派生失败静默降级
+- 对账事件落库：物化写 DETECTED、命中写 ROUND_HIT、未命中未达阈值写 ROUND_MISS、达阈值仅 AUTO_RECHECK、复核重开仅 AUTO_REOPEN，同轮不重复；前端时间线事件映射补齐，from==to 事件展示保持兼容
 - 脚本 `sql/31_issue_lifecycle_m8.sql`（幂等）；后端测试与前端生产构建通过
 
 ### 工作台重设计
@@ -32,6 +33,7 @@
 ### 缺陷修复
 
 - 修复项目管理中 Webhook Secret 配置状态恒显示"未配置"：列表/详情 SQL 按安全设计不读取密文列，原 `fillWebhookView` 却用恒为空的密文字段判断配置状态；改为 `projectSelect` 直接输出布尔列 `webhook_secret_configured`（列表与详情同步修正），密文不出服务端的边界不变
+- 修复问题台账「当前活跃」视图列表接口 500：activeFlag 的 OGNL 比较中 `'Y'`/`'1'` 单字符字面量被解析为 Character，与 String 参数比较触发数字转换抛 NumberFormatException；改为 `.toString()` 比较后恢复
 
 ### 体验优化
 
@@ -43,6 +45,7 @@
 - `ReviewSummaryContent` 新增三字段：commitMessage（run.commitMessages 首行）/ summaryText（run.resultSummary）/ reviewTime（run.finishedTime）；渲染器保持纯函数不查库
 - 飞书新增「简化 Markdown → post 富文本」转换：标题 / 加粗标签 → 加粗段落、列表项 → 圆点段落、markdown 链接 → 链接元素，其余降级普通段落；仍不使用互动卡片
 - `review_delivery_record` 新增 `content_snapshot` 列（mediumtext、可空、历史不回填）：JSON `{"kind","channelType","title","body"}`，IM 与总结评论投递均落库，重试原地覆盖以最近一次为准；列表查询仅输出轻量布尔标记 `has_content_snapshot`，不拉取大字段
+- IM 通知与投递记录业务归属增强：通知新增归属行（业务系统 · 项目名/owner-repo 回退 · PR 带标题链接，失败消息同步），提交信息压缩为 3 行缩进、问题按严重级别分组（高/严重展开、中低压缩）、「见台账」指引句三分支互斥去重、总结截断 200 字；投递记录列表与详情增加业务系统/项目归属展示（join sys_business_system），详情接口补结构化归属字段、历史快照兼容
 - 新增「查看消息内容」端点 `GET /review/delivery/record/{deliveryId}/content`：复用 `review:delivery:list` 权限与列表同口径部门数据范围；投递记录列表增加「消息详情」抽屉（marked 渲染 + DOMPurify 消毒、主题 CSS 变量浅暗适配、链接新标签页打开），无快照行置灰并提示「较早投递未保留消息快照」
 - 脚本 `sql/30_delivery_content_snapshot.sql`；后端 378 例测试与前端生产构建通过
 
