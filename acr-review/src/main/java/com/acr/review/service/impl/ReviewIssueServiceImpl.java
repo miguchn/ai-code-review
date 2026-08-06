@@ -368,6 +368,38 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    public int closeActiveIssuesForPr(Long projectId, Integer prNumber, boolean merged)
+    {
+        if (projectId == null || prNumber == null)
+        {
+            return 0;
+        }
+        List<ReviewIssue> list = issueMapper.selectByProjectAndPr(projectId, prNumber);
+        if (list == null || list.isEmpty())
+        {
+            return 0;
+        }
+        String closeSource = merged
+            ? ReviewIssueConstants.CLOSE_SOURCE_PR_MERGED
+            : ReviewIssueConstants.CLOSE_SOURCE_PR_CLOSED;
+        String note = merged
+            ? "合并请求已合并，问题随之关闭"
+            : "合并请求已关闭，问题随之关闭";
+        int closed = 0;
+        for (ReviewIssue issue : list)
+        {
+            if (!ReviewIssueConstants.isActive(issue.getStatus()))
+            {
+                continue;
+            }
+            systemClose(issue, closeSource, note);
+            closed++;
+        }
+        return closed;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public ReviewCommentSyncResult dismiss(Long issueId, String dismissType, String resolveNote)
     {
         ReviewIssue issue = requireIssue(issueId);
@@ -657,6 +689,31 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
         action.setFromStatus(from);
         action.setToStatus(toStatus);
         action.setResolveNote(resolveNote);
+        action.setCreateTime(now);
+        actionMapper.insertAction(action);
+    }
+
+    /** PR 关闭联动：与人工关闭同处置列，operator 固定 system，不写评论重渲染。 */
+    private void systemClose(ReviewIssue issue, String closeSource, String note)
+    {
+        String from = issue.getStatus();
+        String operator = ReviewIssueConstants.OPERATOR_SYSTEM;
+        Date now = new Date();
+        issue.setStatus(ReviewIssueConstants.STATUS_CLOSED);
+        issue.setResolveNote(note);
+        issue.setCloseSource(closeSource);
+        issue.setClosedBy(operator);
+        issue.setClosedTime(now);
+        issue.setUpdateBy(operator);
+        issueMapper.updateIssueDisposition(issue);
+
+        ReviewIssueAction action = new ReviewIssueAction();
+        action.setIssueId(issue.getIssueId());
+        action.setOperator(operator);
+        action.setActionType(ReviewIssueConstants.ACTION_CLOSE);
+        action.setFromStatus(from);
+        action.setToStatus(ReviewIssueConstants.STATUS_CLOSED);
+        action.setResolveNote(note);
         action.setCreateTime(now);
         actionMapper.insertAction(action);
     }

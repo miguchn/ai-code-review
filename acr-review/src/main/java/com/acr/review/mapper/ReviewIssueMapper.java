@@ -9,10 +9,6 @@ public interface ReviewIssueMapper
 {
     ReviewIssue selectIssueById(Long issueId);
 
-    ReviewIssue selectByProjectPrFingerprint(@Param("projectId") Long projectId,
-                                             @Param("prNumber") Integer prNumber,
-                                             @Param("fingerprint") String fingerprint);
-
     List<ReviewIssue> selectIssueList(ReviewIssue query);
 
     List<ReviewIssue> selectByProjectAndPr(@Param("projectId") Long projectId,

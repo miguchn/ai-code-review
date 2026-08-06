@@ -137,6 +137,30 @@ class GitHubWebhookAdapterTest
             "{\"action\":\"opened\",\"repository\":{\"name\":\"r\",\"owner\":{\"login\":\"o\"}}}".getBytes(StandardCharsets.UTF_8)));
     }
 
+    @Test
+    void parsesClosedEventWithMergedFlag()
+    {
+        String closedMerged = PR_PAYLOAD
+            .replace("\"action\": \"opened\"", "\"action\": \"closed\"")
+            .replace("\"changed_files\": 3,", "\"changed_files\": 3,\n            \"merged\": true,");
+        GitPullRequestEvent mergedEvent = adapter.parsePullRequestEvent(
+            "pull_request", "d-close", closedMerged.getBytes(StandardCharsets.UTF_8));
+        assertNotNull(mergedEvent);
+        assertEquals("closed", mergedEvent.action());
+        assertTrue(mergedEvent.merged());
+        assertTrue(mergedEvent.isCloseLifecycle());
+
+        String closedOnly = PR_PAYLOAD
+            .replace("\"action\": \"opened\"", "\"action\": \"closed\"")
+            .replace("\"changed_files\": 3,", "\"changed_files\": 3,\n            \"merged\": false,");
+        GitPullRequestEvent closedEvent = adapter.parsePullRequestEvent(
+            "pull_request", "d-close2", closedOnly.getBytes(StandardCharsets.UTF_8));
+        assertNotNull(closedEvent);
+        assertEquals("closed", closedEvent.action());
+        assertFalse(closedEvent.merged());
+        assertTrue(closedEvent.isCloseLifecycle());
+    }
+
     private static WebhookRequestHeaders headers(String name, String value)
     {
         return WebhookRequestHeaders.of(Map.of(name, value));

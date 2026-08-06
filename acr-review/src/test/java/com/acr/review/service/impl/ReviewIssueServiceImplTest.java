@@ -625,6 +625,79 @@ class ReviewIssueServiceImplTest
     }
 
     @Test
+    void closeActiveIssuesForPrClosesAllActiveWithMergedSourceAndActions()
+    {
+        ReviewIssue confirm = openIssue(81L, "SEC", "a.java", "confirm");
+        ReviewIssue fix = openIssue(82L, "SEC", "b.java", "fix");
+        fix.setStatus(ReviewIssueConstants.STATUS_AWAITING_FIX);
+        ReviewIssue recheck = openIssue(83L, "SEC", "c.java", "recheck");
+        recheck.setStatus(ReviewIssueConstants.STATUS_RECHECKING);
+        when(issueMapper.selectByProjectAndPr(10L, 8)).thenReturn(List.of(confirm, fix, recheck));
+
+        int closed = service.closeActiveIssuesForPr(10L, 8, true);
+
+        assertEquals(3, closed);
+        assertEquals(ReviewIssueConstants.STATUS_CLOSED, confirm.getStatus());
+        assertEquals(ReviewIssueConstants.STATUS_CLOSED, fix.getStatus());
+        assertEquals(ReviewIssueConstants.STATUS_CLOSED, recheck.getStatus());
+        assertEquals(ReviewIssueConstants.CLOSE_SOURCE_PR_MERGED, confirm.getCloseSource());
+        assertEquals(ReviewIssueConstants.CLOSE_SOURCE_PR_MERGED, fix.getCloseSource());
+        assertEquals(ReviewIssueConstants.CLOSE_SOURCE_PR_MERGED, recheck.getCloseSource());
+        assertEquals(ReviewIssueConstants.OPERATOR_SYSTEM, confirm.getClosedBy());
+        assertEquals("合并请求已合并，问题随之关闭", confirm.getResolveNote());
+        verify(issueMapper, times(3)).updateIssueDisposition(any());
+        ArgumentCaptor<ReviewIssueAction> actionCaptor = ArgumentCaptor.forClass(ReviewIssueAction.class);
+        verify(actionMapper, times(3)).insertAction(actionCaptor.capture());
+        for (ReviewIssueAction action : actionCaptor.getAllValues())
+        {
+            assertEquals(ReviewIssueConstants.OPERATOR_SYSTEM, action.getOperator());
+            assertEquals(ReviewIssueConstants.ACTION_CLOSE, action.getActionType());
+            assertEquals(ReviewIssueConstants.STATUS_CLOSED, action.getToStatus());
+        }
+        assertEquals(ReviewIssueConstants.STATUS_AWAITING_CONFIRM, actionCaptor.getAllValues().get(0).getFromStatus());
+        assertEquals(ReviewIssueConstants.STATUS_AWAITING_FIX, actionCaptor.getAllValues().get(1).getFromStatus());
+        assertEquals(ReviewIssueConstants.STATUS_RECHECKING, actionCaptor.getAllValues().get(2).getFromStatus());
+        verify(deliveryService, never()).rerenderSummaryComment(anyLong(), any());
+    }
+
+    @Test
+    void closeActiveIssuesForPrUsesPrClosedSourceWhenNotMerged()
+    {
+        ReviewIssue issue = openIssue(84L, "SEC", "a.java", "open");
+        when(issueMapper.selectByProjectAndPr(10L, 8)).thenReturn(List.of(issue));
+
+        int closed = service.closeActiveIssuesForPr(10L, 8, false);
+
+        assertEquals(1, closed);
+        assertEquals(ReviewIssueConstants.CLOSE_SOURCE_PR_CLOSED, issue.getCloseSource());
+        assertEquals("合并请求已关闭，问题随之关闭", issue.getResolveNote());
+    }
+
+    @Test
+    void closeActiveIssuesForPrSkipsTerminalAndIsIdempotent()
+    {
+        ReviewIssue closed = openIssue(85L, "SEC", "a.java", "done");
+        closed.setStatus(ReviewIssueConstants.STATUS_CLOSED);
+        ReviewIssue ignored = openIssue(86L, "SEC", "b.java", "ignored");
+        ignored.setStatus(ReviewIssueConstants.STATUS_IGNORED);
+        when(issueMapper.selectByProjectAndPr(10L, 8)).thenReturn(List.of(closed, ignored));
+
+        assertEquals(0, service.closeActiveIssuesForPr(10L, 8, true));
+        verify(issueMapper, never()).updateIssueDisposition(any());
+        verify(actionMapper, never()).insertAction(any());
+    }
+
+    @Test
+    void closeActiveIssuesForPrReturnsZeroWhenNoIssues()
+    {
+        when(issueMapper.selectByProjectAndPr(10L, 8)).thenReturn(List.of());
+        assertEquals(0, service.closeActiveIssuesForPr(10L, 8, false));
+        assertEquals(0, service.closeActiveIssuesForPr(null, 8, false));
+        assertEquals(0, service.closeActiveIssuesForPr(10L, null, true));
+        verify(issueMapper, never()).updateIssueDisposition(any());
+    }
+
+    @Test
     void pr3RegressionPrototypeThreeRounds()
     {
         // round1: 物化 3 条

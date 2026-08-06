@@ -121,9 +121,10 @@ public class GitHubWebhookAdapter implements GitWebhookAdapter
             return null;
         }
         String repositoryFullPath = ownerLogin + "/" + repoName;
+        boolean merged = Boolean.TRUE.equals(pr.getBoolean("merged"));
         return new GitPullRequestEvent(deliveryId, root.getString("action"), ownerLogin, repoName,
             repositoryFullPath, prNumber, pr.getString("title"), headRef, baseRef, baseSha, headSha,
-            prAuthor, additions, deletions, changedFiles);
+            prAuthor, additions, deletions, changedFiles, merged);
     }
 
     /** 供 verify 与单测复用：校验 X-Hub-Signature-256 头。 */

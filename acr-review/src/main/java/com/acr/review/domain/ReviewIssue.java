@@ -60,6 +60,11 @@ public class ReviewIssue extends BaseEntity
      * 与 status 并存时 status 优先。
      */
     private String pendingOnly;
+    /**
+     * 终态筛选：Y 时筛选 CLOSED / IGNORED / FALSE_POSITIVE；
+     * 与 status 并存时 status 优先。
+     */
+    private String closedFlag;
 
     /** 当前阶段进入时间（最后一次状态变更；无则回退 create_time）。 */
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
@@ -141,6 +146,8 @@ public class ReviewIssue extends BaseEntity
     public void setActiveFlag(String activeFlag) { this.activeFlag = activeFlag; }
     public String getPendingOnly() { return pendingOnly; }
     public void setPendingOnly(String pendingOnly) { this.pendingOnly = pendingOnly; }
+    public String getClosedFlag() { return closedFlag; }
+    public void setClosedFlag(String closedFlag) { this.closedFlag = closedFlag; }
     public Date getStageEnteredTime() { return stageEnteredTime; }
     public void setStageEnteredTime(Date stageEnteredTime) { this.stageEnteredTime = stageEnteredTime; }
 }

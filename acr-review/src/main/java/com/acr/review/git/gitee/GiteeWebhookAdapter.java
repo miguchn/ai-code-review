@@ -218,9 +218,10 @@ public class GiteeWebhookAdapter implements GitWebhookAdapter
             return null;
         }
         String repositoryFullPath = ownerLogin + "/" + repoName;
+        boolean merged = "merge".equals(mappedAction);
         return new GitPullRequestEvent(deliveryId, mappedAction, ownerLogin, repoName,
             repositoryFullPath, prNumber, pr.getString("title"), headRef, baseRef, baseSha, headSha,
-            prAuthor, additions, deletions, changedFiles);
+            prAuthor, additions, deletions, changedFiles, merged);
     }
 
     /** 供 verify 与单测复用：校验 X-Gitee-Token 头（密码或签名模式）。 */

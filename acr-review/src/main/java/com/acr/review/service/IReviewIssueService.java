@@ -32,6 +32,15 @@ public interface IReviewIssueService
     /** 关闭 → CLOSED；RECHECKING 关闭时 close_source=auto_recheck。 */
     ReviewCommentSyncResult close(Long issueId, String resolveNote);
 
+    /**
+     * PR 关闭/合并时批量关闭名下活跃问题（AWAITING_CONFIRM / AWAITING_FIX / RECHECKING）。
+     * 终态行不碰；operator=system；不触发评论重渲染。
+     *
+     * @param merged true 表示已合并（closeSource=pr_merged），false 为关闭未合并（pr_closed）
+     * @return 实际关闭条数
+     */
+    int closeActiveIssuesForPr(Long projectId, Integer prNumber, boolean merged);
+
     /** 忽略/误报；dismissType=IGNORED|FALSE_POSITIVE；resolveNote 必填；RECHECKING 拒绝。 */
     ReviewCommentSyncResult dismiss(Long issueId, String dismissType, String resolveNote);
 

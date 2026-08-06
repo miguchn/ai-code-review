@@ -75,6 +75,9 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <if test="(status == null or status == '') and pendingOnly != null and (pendingOnly == 'Y'.toString() or pendingOnly == '1'.toString() or pendingOnly == 'true')">
             and i.status in ('AWAITING_CONFIRM', 'RECHECKING')
         </if>
+        <if test="(status == null or status == '') and closedFlag != null and (closedFlag == 'Y'.toString() or closedFlag == '1'.toString() or closedFlag == 'true')">
+            and i.status in ('CLOSED', 'IGNORED', 'FALSE_POSITIVE')
+        </if>
         <if test="severity != null and severity != ''">
             and i.severity = #{severity}
         </if>
@@ -98,21 +101,6 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     <select id="selectIssueById" resultMap="ReviewIssueResult">
         <include refid="selectColumns" />
         where i.issue_id = #{issueId}
-        limit 1
-    </select>
-
-    <select id="selectByProjectPrFingerprint" resultMap="ReviewIssueResult">
-        select issue_id, project_id, provider, pr_number, fingerprint, family_key,
-               first_task_id, first_run_id, last_task_id, last_run_id, issue_rank,
-               severity, category, title, description, file_path, start_line, end_line,
-               evidence, suggestion, origin, status, resolve_note, close_source,
-               closed_by, closed_time, missed_streak, last_seen_head_sha, last_missed_run_id,
-               recheck_task_id, recheck_run_id, recheck_commit_sha,
-               create_by, create_time, update_by, update_time
-        from review_issue
-        where project_id = #{projectId}
-          and pr_number = #{prNumber}
-          and fingerprint = #{fingerprint}
         limit 1
     </select>
 

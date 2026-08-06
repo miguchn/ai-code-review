@@ -160,8 +160,10 @@ public class GiteaWebhookAdapter implements GitWebhookAdapter
             return null;
         }
 
+        boolean merged = Boolean.TRUE.equals(pr.getBoolean("merged")) || "merged".equals(action);
         return new GitPullRequestEvent(deliveryId, action, ownerLogin, repoName, fullName, prNumber,
-            pr.getString("title"), headRef, baseRef, baseSha, headSha, prAuthor, additions, deletions, changedFiles);
+            pr.getString("title"), headRef, baseRef, baseSha, headSha, prAuthor, additions, deletions, changedFiles,
+            merged);
     }
 
     /** 供单测复用：校验 X-Gitea-Signature（HMAC-SHA256 hex）。 */
