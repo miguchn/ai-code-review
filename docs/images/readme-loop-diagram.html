@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>AI Code Review 治理闭环示意图</title>
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    width: 1200px; height: 675px;
+    font-family: "SF Pro Text", "PingFang SC", "Helvetica Neue", sans-serif;
+    background: linear-gradient(160deg, #eef6f0 0%, #f3f5f7 45%, #e8edf2 100%);
+    color: #1f2937;
+    overflow: hidden;
+  }
+  .canvas { position: relative; width: 1200px; height: 675px; }
+  .title {
+    position: absolute; top: 34px; left: 0; right: 0;
+    text-align: center; font-size: 24px; font-weight: 700; letter-spacing: 1px;
+  }
+  .title .sub {
+    display: block; margin-top: 8px;
+    font-size: 13px; font-weight: 400; color: #6b7280; letter-spacing: 0;
+  }
+  .node {
+    position: absolute; width: 272px; height: 118px;
+    background: #ffffff; border: 1px solid #e5e7eb; border-radius: 14px;
+    box-shadow: 0 8px 22px rgba(15, 23, 42, 0.07);
+    padding: 16px 18px 14px 18px;
+  }
+  .node .head { display: flex; align-items: center; gap: 10px; }
+  .badge {
+    width: 26px; height: 26px; border-radius: 50%;
+    background: #16a34a; color: #fff;
+    display: grid; place-items: center;
+    font-size: 14px; font-weight: 700; flex: none;
+  }
+  .node h3 { font-size: 17px; font-weight: 700; }
+  .node p { margin: 9px 0 0 36px; font-size: 12.5px; line-height: 1.55; color: #6b7280; }
+  .chips { margin: 9px 0 0 36px; display: flex; gap: 5px; flex-wrap: wrap; }
+  .chip {
+    font-size: 10.5px; color: #166534; background: #f0fdf4;
+    border: 1px solid #bbf7d0; border-radius: 999px; padding: 2px 8px;
+  }
+  .center-note {
+    position: absolute; left: 428px; top: 296px; width: 344px;
+    text-align: center; font-size: 13px; line-height: 1.7; color: #374151;
+    background: rgba(255,255,255,0.72); border: 1px dashed #9ca3af;
+    border-radius: 12px; padding: 12px 16px;
+  }
+  .center-note b { color: #16a34a; }
+  svg.arrows { position: absolute; inset: 0; }
+</style>
+</head>
+<body>
+<div class="canvas">
+  <div class="title">审查 · 回写 · 通知 · 处置 · 复核 —— 一条闭环
+    <span class="sub">MR/PR 变更进入 ACR 后，每个结论都可追踪、可行动、可复核</span>
+  </div>
+
+  <div class="node" style="left:76px; top:132px;">
+    <div class="head"><span class="badge">1</span><h3>合并请求事件</h3></div>
+    <div class="chips" style="margin-left:0;">
+      <span class="chip">GitHub</span><span class="chip">GitLab</span>
+      <span class="chip">Gitee</span><span class="chip">Gitea</span>
+    </div>
+  </div>
+
+  <div class="node" style="left:464px; top:132px;">
+    <div class="head"><span class="badge">2</span><h3>可信 Webhook</h3></div>
+    <p>分平台验签 · Delivery 幂等去重<br/>按仓库路径匹配项目与目标分支</p>
+  </div>
+
+  <div class="node" style="left:852px; top:132px;">
+    <div class="head"><span class="badge">3</span><h3>审查执行</h3></div>
+    <p>双引擎可选：大模型直审<br/>open-code-review · Diff 范围策略<br/>建单冻结快照</p>
+  </div>
+
+  <div class="node" style="left:852px; top:452px;">
+    <div class="head"><span class="badge">4</span><h3>结论回写</h3></div>
+    <p>MR/PR 总结评论幂等回写<br/>复审原地更新，不刷屏</p>
+  </div>
+
+  <div class="node" style="left:464px; top:452px;">
+    <div class="head"><span class="badge">5</span><h3>IM 分级通知</h3></div>
+    <div class="chips">
+      <span class="chip">钉钉</span><span class="chip">企业微信</span><span class="chip">飞书</span>
+    </div>
+  </div>
+
+  <div class="node" style="left:76px; top:452px;">
+    <div class="head"><span class="badge">6</span><h3>问题台账</h3></div>
+    <p>确认 / 关闭 / 忽略 / 误报闭环<br/>动作流水 · 处置后重渲染评论</p>
+  </div>
+
+  <div class="center-note">
+    代码平台仍是合并事实源<br/>ACR 负责<b>治理闭环</b>：发现 → 触达 → 处置 → 复核
+  </div>
+
+  <svg class="arrows" width="1200" height="675" viewBox="0 0 1200 675">
+    <defs>
+      <marker id="ah" markerWidth="10" markerHeight="8" refX="8" refY="4" orient="auto">
+        <path d="M0,0 L9,4 L0,8 Z" fill="#16a34a"></path>
+      </marker>
+      <marker id="ahg" markerWidth="10" markerHeight="8" refX="8" refY="4" orient="auto">
+        <path d="M0,0 L9,4 L0,8 Z" fill="#9ca3af"></path>
+      </marker>
+    </defs>
+    <!-- 1 -> 2 -->
+    <line x1="350" y1="191" x2="452" y2="191" stroke="#16a34a" stroke-width="2.5" marker-end="url(#ah)"/>
+    <!-- 2 -> 3 -->
+    <line x1="738" y1="191" x2="840" y2="191" stroke="#16a34a" stroke-width="2.5" marker-end="url(#ah)"/>
+    <!-- 3 -> 4 -->
+    <line x1="988" y1="252" x2="988" y2="440" stroke="#16a34a" stroke-width="2.5" marker-end="url(#ah)"/>
+    <!-- 4 -> 5 -->
+    <line x1="850" y1="511" x2="748" y2="511" stroke="#16a34a" stroke-width="2.5" marker-end="url(#ah)"/>
+    <!-- 5 -> 6 -->
+    <line x1="462" y1="511" x2="360" y2="511" stroke="#16a34a" stroke-width="2.5" marker-end="url(#ah)"/>
+    <!-- 6 -> 1 整改推送触发复核（虚线回流） -->
+    <path d="M 212 452 C 212 380, 212 330, 212 262" fill="none" stroke="#9ca3af" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#ahg)"/>
+    <text x="238" y="360" font-size="12.5" fill="#6b7280">整改推送触发复核</text>
+    <text x="238" y="378" font-size="12.5" fill="#6b7280">评论原地更新</text>
+  </svg>
+</div>
+</body>
+</html>
