@@ -100,7 +100,7 @@ function legacyCopy(text, done) {
 .guide-content {
   color: var(--text-regular);
   font-size: 14px;
-  line-height: 1.65;
+  line-height: 1.75;
 }
 
 .guide-content__state {
@@ -110,34 +110,63 @@ function legacyCopy(text, done) {
   text-align: center;
 }
 
-/* 标题/段落/列表/行内代码/引用块样式照搬 MessageContentView.vue 的 .markdown-body 规则，选择器改为 .guide-content__body :deep(...) */
-.guide-content__body :deep(h1),
+/* 篇名 H1 已上移到抽屉常驻篇目栏，正文内隐藏（仅当它是正文第一个元素时） */
+.guide-content__body :deep(h1:first-child) {
+  display: none;
+}
+
+/* 篇名后的「这篇帮你…」首段渲染为浅底引言卡 */
+.guide-content__body :deep(h1:first-child + p) {
+  margin: 0 0 20px;
+  padding: 10px 14px;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  background: var(--neutral-content);
+  color: var(--text-secondary);
+}
+
+/* 标题层级：绝对字号 + 段前距 + h2 细分隔线，与正文明确分区 */
 .guide-content__body :deep(h2),
 .guide-content__body :deep(h3),
 .guide-content__body :deep(h4) {
-  margin: 1em 0 0.5em;
   color: var(--text-primary);
   font-weight: 600;
-  line-height: 1.35;
+  line-height: 1.4;
 }
 
-.guide-content__body :deep(h1) { font-size: 1.35em; }
-.guide-content__body :deep(h2) { font-size: 1.2em; }
-.guide-content__body :deep(h3) { font-size: 1.1em; }
-.guide-content__body :deep(h4) { font-size: 1em; }
+.guide-content__body :deep(h2) {
+  margin: 28px 0 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-light);
+  font-size: 16px;
+}
+
+.guide-content__body :deep(h3) {
+  margin: 22px 0 8px;
+  font-size: 15px;
+}
+
+.guide-content__body :deep(h4) {
+  margin: 16px 0 6px;
+  font-size: 14px;
+}
 
 .guide-content__body :deep(p) {
-  margin: 0.55em 0;
+  margin: 0.7em 0;
 }
 
 .guide-content__body :deep(ul),
 .guide-content__body :deep(ol) {
-  margin: 0.55em 0;
+  margin: 0.7em 0;
   padding-left: 1.4em;
 }
 
 .guide-content__body :deep(li) {
-  margin: 0.25em 0;
+  margin: 0.4em 0;
+}
+
+.guide-content__body :deep(li::marker) {
+  color: var(--text-assist);
 }
 
 .guide-content__body :deep(strong) {
@@ -161,53 +190,57 @@ function legacyCopy(text, done) {
   background: var(--neutral-code);
   color: var(--text-regular);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.92em;
+  font-size: 0.9em;
 }
 
 .guide-content__body :deep(pre) {
-  margin: 0.75em 0;
+  margin: 0.85em 0;
   padding: 12px 14px;
   border: 1px solid var(--border-light);
   border-radius: 8px;
   background: var(--neutral-code);
+  font-size: 13px;
+  line-height: 1.6;
   overflow-x: auto;
 }
 
 .guide-content__body :deep(pre code) {
   padding: 0;
   background: transparent;
+  font-size: inherit;
 }
 
 .guide-content__body :deep(hr) {
-  margin: 1em 0;
+  margin: 1.5em 0;
   border: none;
   border-top: 1px solid var(--divider);
 }
 
 .guide-content__body :deep(blockquote) {
-  margin: 0.75em 0;
-  padding: 0.2em 0 0.2em 0.9em;
+  margin: 0.85em 0;
+  padding: 4px 0 4px 12px;
   border-left: 3px solid var(--brand-border);
   color: var(--text-secondary);
 }
 
-/* 追加：表格 / 代码块复制按钮 / 图片（均为运行时 DOM，需 :deep 命中） */
+/* 表格 / 代码块复制按钮 / 图片（均为运行时 DOM，需 :deep 命中） */
 .guide-content__body :deep(table) {
   width: 100%;
-  margin: 0.75em 0;
+  margin: 0.85em 0;
   border-collapse: collapse;
-  font-size: 0.95em;
+  font-size: 13px;
 }
 .guide-content__body :deep(th),
 .guide-content__body :deep(td) {
-  padding: 6px 10px;
+  padding: 8px 12px;
   border: 1px solid var(--border-light);
   text-align: left;
 }
 .guide-content__body :deep(thead th) {
-  background: var(--neutral-card);
+  background: var(--neutral-content);
   color: var(--text-primary);
   font-weight: 600;
+  white-space: nowrap;
 }
 .guide-content__body :deep(.code-block) {
   position: relative;
