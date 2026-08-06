@@ -58,7 +58,8 @@ class ReviewCommentBodyRendererTest
         assertTrue(body.contains("| 任务 | #42 · `abcdef1` |"));
         assertTrue(body.contains("**[高][新增]** 空指针风险 — `src/A.java` L12-14"));
         assertTrue(body.contains("**[中][存量]** 旧风格问题 — `src/B.java` L3"));
-        assertTrue(body.contains("纳入 3 · 排除 2 · 扩展 1 · 新增问题 2 · 存量 1"));
+        assertTrue(body.contains("本次新增 2 个问题 · 存量 1 个"));
+        assertTrue(body.contains("审查文件：纳入 3 个 · 扩展 1 个"));
         assertTrue(body.contains(ReviewDeliveryConstants.COMMENT_MARKER));
         assertEquals(ReviewDeliveryConstants.COMMENT_MARKER,
             body.substring(body.lastIndexOf("<!--")).trim());

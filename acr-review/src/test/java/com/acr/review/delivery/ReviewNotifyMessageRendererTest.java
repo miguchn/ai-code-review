@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import com.acr.review.domain.ReviewPipelineConstants;
 import com.acr.review.domain.result.ReviewScopeStats;
@@ -62,7 +63,8 @@ class ReviewNotifyMessageRendererTest
 
         assertTrue(body.startsWith("### ⚠️ AI Code Review · 建议修改 · 78/100"));
         assertTrue(body.contains(
-            "**长寿官网系统 · Demo 项目 · [PR #4 Fix login exception handling](https://github.com/acme/demo/pull/4)**"));
+            "**长寿官网系统 · Demo 项目 · [PR #4](https://github.com/acme/demo/pull/4)**"));
+        assertTrue(body.contains("Fix login exception handling"));
 
         assertTrue(body.contains("**提交信息**"));
         assertTrue(body.contains("   - 提交人: miguchn · "));
@@ -78,7 +80,8 @@ class ReviewNotifyMessageRendererTest
         assertTrue(body.contains("   💡 在发送逻辑中增加 try-catch，失败时重试。"));
         assertFalse(body.contains("发送过程中可能抛出异常"));
 
-        assertTrue(body.contains("**范围**：纳入 3 · 排除 2 · 扩展 1 · 新增 2 · 存量 1"));
+        assertTrue(body.contains("**范围**：本次新增 2 个问题 · 存量 1 个"));
+        assertTrue(body.contains("审查文件：纳入 3 个 · 扩展 1 个"));
         assertFalse(body.contains("**范围统计**"));
 
         assertTrue(body.contains("**总结**"));
@@ -242,7 +245,8 @@ class ReviewNotifyMessageRendererTest
         String body = ReviewNotifyMessageRenderer.renderFailed(content);
 
         assertTrue(body.startsWith("### ❌ AI Code Review · 执行失败"));
-        assertTrue(body.contains("**支付中台 · 结算服务 · PR #8 重构用户登录校验**"));
+        assertTrue(body.contains("**支付中台 · 结算服务 · PR #8**"));
+        assertTrue(body.contains("重构用户登录校验"));
         assertTrue(body.contains("**提交信息**"));
         assertTrue(body.contains("   - 提交人: zhangsan · "));
         assertTrue(body.contains("   - 分支: dev → main"));
@@ -398,13 +402,13 @@ class ReviewNotifyMessageRendererTest
     }
 
     @Test
-    void formatPrSegmentIncludesTitleAndLink()
+    void formatPrSegmentUsesNumberOnlyAndTitleOnSeparateLine()
     {
         assertEquals(
-            "[PR #5 feat: 新增用户数据访问层](https://github.com/miguchn/webhook-test/pull/5)",
+            "[PR #5](https://github.com/miguchn/webhook-test/pull/5)",
             ReviewNotifyMessageRenderer.formatPrSegment(
                 5, "feat: 新增用户数据访问层", "https://github.com/miguchn/webhook-test/pull/5"));
-        assertEquals("PR #5 feat: 新增用户数据访问层",
+        assertEquals("PR #5",
             ReviewNotifyMessageRenderer.formatPrSegment(5, "feat: 新增用户数据访问层", null));
         assertEquals("[PR #5](https://example.com/pull/5)",
             ReviewNotifyMessageRenderer.formatPrSegment(5, null, "https://example.com/pull/5"));
@@ -423,8 +427,13 @@ class ReviewNotifyMessageRendererTest
             .topIssues(List.of())
             .build();
         assertEquals(
-            "**官微后端 · miguchn/webhook-test · [PR #5 feat: 新增用户数据访问层](https://github.com/miguchn/webhook-test/pull/5)**",
+            "**官微后端 · miguchn/webhook-test · [PR #5](https://github.com/miguchn/webhook-test/pull/5)**",
             ReviewNotifyMessageRenderer.formatAttributionLine(content));
+
+        String body = ReviewNotifyMessageRenderer.renderSuccess(content);
+        assertTrue(body.contains(
+            "**官微后端 · miguchn/webhook-test · [PR #5](https://github.com/miguchn/webhook-test/pull/5)**\n"
+                + "feat: 新增用户数据访问层\n"));
     }
 
     @Test
@@ -443,9 +452,11 @@ class ReviewNotifyMessageRendererTest
             .build();
 
         String body = ReviewNotifyMessageRenderer.renderSuccess(content);
-        assertTrue(body.contains("共 4 个问题，其余（中 1 · 低 1）详见问题台账"));
+        // 展开 1 严重；其余 3 = 中 1 + 低 2（含被截断的低危）
+        assertTrue(body.contains("共 4 个问题，其余 3 个（中 1 · 低 2）详见问题台账"));
         assertFalse(body.contains("**其他问题"));
         assertEquals(1, body.lines().filter(line -> line.contains("详见问题台账")).count());
+        assertOverflowInvariant(1, 3, 4, Map.of("中", 1, "低", 2));
     }
 
     @Test
@@ -464,10 +475,37 @@ class ReviewNotifyMessageRendererTest
             .build();
 
         String body = ReviewNotifyMessageRenderer.renderSuccess(content);
-        assertTrue(body.contains("共 4 个问题，其余详见问题台账"));
+        // 展示窗展开 2 严重 + 1 高；其余 1 = 被截断的高危
+        assertTrue(body.contains("共 4 个问题，其余 1 个（高 1）详见问题台账"));
         assertFalse(body.contains("**其他问题"));
-        assertFalse(body.contains("其余（"));
         assertEquals(1, body.lines().filter(line -> line.contains("详见问题台账")).count());
+        assertOverflowInvariant(3, 1, 4, Map.of("高", 1));
+    }
+
+    @Test
+    void overflowRemainderUsesFullIssueListNotDisplayWindow()
+    {
+        // 验收：6 条 = 1 高 + 2 中 + 3 低；展开 1 高 → 其余 5（中 2 · 低 3）
+        List<ReviewTopIssue> issues = List.of(
+            issue("HIGH", "高危问题"),
+            issue("MEDIUM", "中等问题 A"),
+            issue("MEDIUM", "中等问题 B"),
+            issue("LOW", "低问题 A"),
+            issue("LOW", "低问题 B"),
+            issue("LOW", "低问题 C"));
+
+        ReviewSummaryContent content = ReviewSummaryContent.builder()
+            .conclusionLabel("建议修改")
+            .totalScore(50)
+            .topIssues(issues)
+            .build();
+
+        String body = ReviewNotifyMessageRenderer.renderSuccess(content);
+        assertTrue(body.contains("**⚠️ 高 (1)**"));
+        assertTrue(body.contains("1. 高危问题"));
+        assertTrue(body.contains("共 6 个问题，其余 5 个（中 2 · 低 3）详见问题台账"));
+        assertFalse(body.contains("**其他问题"));
+        assertOverflowInvariant(1, 5, 6, Map.of("中", 2, "低", 3));
     }
 
     @Test
@@ -487,6 +525,15 @@ class ReviewNotifyMessageRendererTest
         assertFalse(body.contains("共 "));
         assertFalse(body.contains("其余详见问题台账"));
         assertEquals(1, body.lines().filter(line -> line.contains("详见问题台账")).count());
+    }
+
+    /** 溢出不变量：expanded + remainder == total，且明细各项之和 == remainder。 */
+    private static void assertOverflowInvariant(int expandedCount, int remainderCount, int total,
+                                                Map<String, Integer> detailParts)
+    {
+        assertEquals(total, expandedCount + remainderCount);
+        int detailSum = detailParts.values().stream().mapToInt(Integer::intValue).sum();
+        assertEquals(remainderCount, detailSum);
     }
 
     private static ReviewTopIssue issue(String severity, String title)

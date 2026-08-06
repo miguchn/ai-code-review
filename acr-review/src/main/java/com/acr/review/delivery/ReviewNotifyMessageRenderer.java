@@ -142,16 +142,25 @@ public final class ReviewNotifyMessageRenderer
         }
     }
 
-    /** 归属行：业务系统 · 项目(或 owner/repo) · PR #n */
+    /**
+     * 归属块：第一行加粗「系统 · 项目 · PR #n」；第二行 PR 标题（空则省略）。
+     */
     static void appendAttributionLine(StringBuilder sb, ReviewSummaryContent content)
     {
         String line = formatAttributionLine(content);
-        if (StringUtils.isNotEmpty(line))
+        if (StringUtils.isEmpty(line))
         {
-            sb.append(line).append("\n\n");
+            return;
         }
+        sb.append(line).append('\n');
+        if (content != null && StringUtils.isNotEmpty(content.getPrTitle()))
+        {
+            sb.append(content.getPrTitle().trim()).append('\n');
+        }
+        sb.append('\n');
     }
 
+    /** 归属首行（加粗）：业务系统 · 项目(或 owner/repo) · PR #n；不含 PR 标题。 */
     static String formatAttributionLine(ReviewSummaryContent content)
     {
         if (content == null)
@@ -184,7 +193,8 @@ public final class ReviewNotifyMessageRenderer
     }
 
     /**
-     * PR 段：label = "PR #" + n，标题非空时追加；有 prUrl 时包装为 Markdown 链接。
+     * PR 段：链接文案仅为 "PR #" + n（不含标题）；有 prUrl 时包装为 Markdown 链接。
+     * {@code prTitle} 保留参数以兼容调用方，但不参与链接文案。
      */
     static String formatPrSegment(Integer prNumber, String prTitle, String prUrl)
     {
@@ -192,16 +202,12 @@ public final class ReviewNotifyMessageRenderer
         {
             return null;
         }
-        StringBuilder label = new StringBuilder("PR #").append(prNumber);
-        if (StringUtils.isNotEmpty(prTitle))
-        {
-            label.append(' ').append(prTitle.trim());
-        }
+        String label = "PR #" + prNumber;
         if (StringUtils.isNotEmpty(prUrl))
         {
             return "[" + label + "](" + prUrl.trim() + ")";
         }
-        return label.toString();
+        return label;
     }
 
     /** 项目名优先；空则回退 owner/repo。 */
@@ -248,6 +254,8 @@ public final class ReviewNotifyMessageRenderer
 
         Map<String, List<ReviewTopIssue>> grouped = groupBySeverity(issues);
         int index = 1;
+        int expandedCount = 0;
+        Map<String, Integer> expandedBySeverity = new LinkedHashMap<>();
         for (String severity : SEVERITY_ORDER)
         {
             List<ReviewTopIssue> bucket = grouped.get(severity);
@@ -263,6 +271,8 @@ public final class ReviewNotifyMessageRenderer
                 for (ReviewTopIssue issue : bucket)
                 {
                     appendExpandedIssue(sb, index++, issue);
+                    expandedCount++;
+                    expandedBySeverity.merge(severity, 1, Integer::sum);
                 }
             }
         }
@@ -270,16 +280,14 @@ public final class ReviewNotifyMessageRenderer
         int otherCount = countOtherIssues(grouped);
         boolean hasOverflow = allIssues.size() > ReviewScoringConstants.MAX_TOP_ISSUES;
         boolean hasCompressed = otherCount > 0;
-        // 行动指引句只出现一次：溢出+压缩 / 仅溢出 / 仅压缩，三分支互斥
-        if (hasOverflow && hasCompressed)
+        // 行动指引句只出现一次：溢出（明细取全量剩余）/ 仅压缩，两分支互斥
+        if (hasOverflow)
         {
-            sb.append("共 ").append(allIssues.size()).append(" 个问题，其余（")
-                .append(formatOtherIssuesSummary(grouped))
+            int remainderCount = allIssues.size() - expandedCount;
+            sb.append("共 ").append(allIssues.size()).append(" 个问题，其余 ")
+                .append(remainderCount).append(" 个（")
+                .append(formatRemainderSummary(allIssues, expandedBySeverity))
                 .append("）详见问题台账\n");
-        }
-        else if (hasOverflow)
-        {
-            sb.append("共 ").append(allIssues.size()).append(" 个问题，其余详见问题台账\n");
         }
         else if (hasCompressed)
         {
@@ -355,6 +363,34 @@ public final class ReviewNotifyMessageRenderer
         parts.add(label + " " + bucket.size());
     }
 
+    /**
+     * 溢出剩余明细：全量问题除去已展开项后的严重度分布（严重/高/中/低/其他，只列非零）。
+     */
+    private static String formatRemainderSummary(List<ReviewTopIssue> allIssues,
+                                                 Map<String, Integer> expandedBySeverity)
+    {
+        Map<String, List<ReviewTopIssue>> allGrouped = groupBySeverity(allIssues);
+        List<String> parts = new ArrayList<>();
+        for (String severity : SEVERITY_ORDER)
+        {
+            List<ReviewTopIssue> bucket = allGrouped.get(severity);
+            int total = bucket == null ? 0 : bucket.size();
+            int expanded = expandedBySeverity.getOrDefault(severity, 0);
+            int rem = total - expanded;
+            if (rem > 0)
+            {
+                parts.add(ReviewCommentBodyRenderer.severityLabel(severity) + " " + rem);
+            }
+        }
+        List<ReviewTopIssue> otherBucket = allGrouped.get(SEVERITY_OTHER);
+        int otherRem = otherBucket == null ? 0 : otherBucket.size();
+        if (otherRem > 0)
+        {
+            parts.add("其他 " + otherRem);
+        }
+        return parts.isEmpty() ? EMPTY : String.join(" · ", parts);
+    }
+
     private static void appendExpandedIssue(StringBuilder sb, int index, ReviewTopIssue issue)
     {
         String title = StringUtils.defaultIfEmpty(issue.getTitle(), "未命名问题");
@@ -408,17 +444,13 @@ public final class ReviewNotifyMessageRenderer
 
     private static void appendScopeStatsInline(StringBuilder sb, ReviewScopeStats stats)
     {
-        if (stats == null)
+        String body = ReviewCommentBodyRenderer.formatScopeStatsBody(stats);
+        if (body == null)
         {
             sb.append(EMPTY).append('\n');
             return;
         }
-        sb.append("纳入 ").append(n(stats.getIncludedFiles()))
-            .append(" · 排除 ").append(n(stats.getExcludedFiles()))
-            .append(" · 扩展 ").append(n(stats.getExpandedFiles()))
-            .append(" · 新增 ").append(n(stats.getNewCount()))
-            .append(" · 存量 ").append(n(stats.getExistingCount()))
-            .append('\n');
+        sb.append(body).append('\n');
     }
 
     private static void appendActionLinks(StringBuilder sb, ReviewSummaryContent content, boolean includePr)
@@ -451,11 +483,6 @@ public final class ReviewNotifyMessageRenderer
     private static String displayOrEmpty(String value)
     {
         return StringUtils.isEmpty(value) ? EMPTY : value.trim();
-    }
-
-    private static String n(Integer value)
-    {
-        return value == null ? EMPTY : String.valueOf(value);
     }
 
     /** 压平换行后截断，超长追加省略号 … */

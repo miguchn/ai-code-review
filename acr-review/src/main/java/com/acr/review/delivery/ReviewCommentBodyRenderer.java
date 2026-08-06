@@ -172,36 +172,53 @@ public final class ReviewCommentBodyRenderer
 
     static String formatScopeStats(ReviewScopeStats stats)
     {
-        if (stats == null)
+        String body = formatScopeStatsBody(stats);
+        if (body == null)
         {
             return "范围统计：—";
         }
-        List<String> parts = new java.util.ArrayList<>();
+        return body;
+    }
+
+    /**
+     * 白话范围正文：问题结论行 + 审查文件行；无可展示内容时返回 null。
+     * IM / PR 评论共用，前缀由调用方自行添加。
+     */
+    static String formatScopeStatsBody(ReviewScopeStats stats)
+    {
+        if (stats == null)
+        {
+            return null;
+        }
+        List<String> lines = new java.util.ArrayList<>();
+        if (stats.getNewCount() != null)
+        {
+            StringBuilder issueLine = new StringBuilder();
+            issueLine.append("本次新增 ").append(stats.getNewCount()).append(" 个问题");
+            if (stats.getExistingCount() != null && stats.getExistingCount() > 0)
+            {
+                issueLine.append(" · 存量 ").append(stats.getExistingCount()).append(" 个");
+            }
+            lines.add(issueLine.toString());
+        }
+        List<String> fileParts = new java.util.ArrayList<>();
         if (stats.getIncludedFiles() != null)
         {
-            parts.add("纳入 " + stats.getIncludedFiles());
-        }
-        if (stats.getExcludedFiles() != null)
-        {
-            parts.add("排除 " + stats.getExcludedFiles());
+            fileParts.add("纳入 " + stats.getIncludedFiles() + " 个");
         }
         if (stats.getExpandedFiles() != null)
         {
-            parts.add("扩展 " + stats.getExpandedFiles());
+            fileParts.add("扩展 " + stats.getExpandedFiles() + " 个");
         }
-        if (stats.getNewCount() != null)
+        if (!fileParts.isEmpty())
         {
-            parts.add("新增问题 " + stats.getNewCount());
+            lines.add("审查文件：" + String.join(" · ", fileParts));
         }
-        if (stats.getExistingCount() != null)
+        if (lines.isEmpty())
         {
-            parts.add("存量 " + stats.getExistingCount());
+            return null;
         }
-        if (parts.isEmpty())
-        {
-            return "范围统计：—";
-        }
-        return String.join(" · ", parts);
+        return String.join("\n", lines);
     }
 
     private static void appendIssue(StringBuilder sb, int index, ReviewTopIssue issue)
