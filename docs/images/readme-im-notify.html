@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>IM 分级通知卡片样例</title>
+  <style>
+    :root {
+      --bg: #f3f5f7;
+      --card: #ffffff;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --border: #e5e7eb;
+      --link: #16a34a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 32px 20px;
+      background: linear-gradient(160deg, #eef6f0 0%, #f3f5f7 45%, #e8edf2 100%);
+      font-family: "SF Pro Text", "PingFang SC", "Helvetica Neue", sans-serif;
+      color: var(--text);
+    }
+    .frame {
+      max-width: 560px;
+      margin: 0 auto;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+      overflow: hidden;
+    }
+    .channel {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border);
+      background: #fafbfc;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .dot {
+      width: 28px; height: 28px; border-radius: 8px;
+      background: #07c160; color: #fff;
+      display: grid; place-items: center; font-weight: 700; font-size: 12px;
+    }
+    .body {
+      padding: 18px 20px 22px;
+      font-size: 14px;
+      line-height: 1.65;
+    }
+    h3 {
+      margin: 0 0 12px;
+      font-size: 16px;
+      font-weight: 700;
+      line-height: 1.35;
+    }
+    .attr {
+      margin: 0 0 14px;
+      font-weight: 700;
+    }
+    .sec {
+      margin: 14px 0 6px;
+      font-weight: 700;
+    }
+    ul {
+      margin: 0;
+      padding-left: 1.2em;
+    }
+    li { margin: 2px 0; }
+    .issue-group { margin: 14px 0 4px; font-weight: 700; }
+    .issue {
+      margin: 6px 0 10px;
+      padding-left: 0;
+    }
+    .issue .meta {
+      margin: 2px 0 0 1.1em;
+      color: #374151;
+    }
+    .other, .recheck, .scope {
+      margin: 12px 0;
+    }
+    .summary {
+      margin: 12px 0 4px;
+      font-weight: 700;
+    }
+    .summary-text { margin: 0 0 14px; color: #374151; }
+    .links a {
+      color: var(--link);
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .links a:hover { text-decoration: underline; }
+    .sep { color: var(--muted); margin: 0 6px; }
+    .caption {
+      max-width: 560px;
+      margin: 14px auto 0;
+      color: var(--muted);
+      font-size: 12px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <div class="channel">
+      <div class="dot">微</div>
+      <div>
+        <div style="color:#111;font-weight:600">AI Code Review</div>
+        <div>企业微信 · 机器人通知</div>
+      </div>
+    </div>
+    <div class="body">
+      <h3>🚨 AI Code Review · 高风险 · 19/100</h3>
+      <div class="attr">长寿官网系统 · miguchn/webhook-test · PR #5</div>
+
+      <div class="sec">提交信息</div>
+      <ul>
+        <li>提交人: miguchn · 2026-08-05 15:41</li>
+        <li>分支: acr-m8-lifecycle-20260805 → main</li>
+        <li>Commit: feat: add new user data access layer UserDao (integration test…)</li>
+      </ul>
+
+      <div class="issue-group">🚨 严重 (2)</div>
+      <div class="issue">
+        1. SQL injection vulnerability embedded in change intent
+        <div class="meta">📍 src/main/java/com/example/dao/UserDao.java</div>
+        <div class="meta">💡 All database access must use parameterized queries, concatenation of user input is forbidden…</div>
+      </div>
+      <div class="issue">
+        2. Hardcoded credentials introduced in change intent
+        <div class="meta">📍 src/main/java/com/example/dao/UserDao.java</div>
+        <div class="meta">💡 Remove all hardcoded credentials and switch to reading from a key management service or environment variables…</div>
+      </div>
+
+      <div class="issue-group">⚠️ 高 (1)</div>
+      <div class="issue">
+        3. Merging vulnerability-embedded integration code into the main branch
+        <div class="meta">💡 Merging known-insecure code into main is not allowed…</div>
+      </div>
+
+      <div class="other"><strong>其他问题 (2)</strong>：中 1 · 低 1，详见问题台账</div>
+      <div class="recheck"><strong>疑似已修复（4）</strong>：sql-injection / hardcode-secret / … — 请前往问题台账复核</div>
+      <div class="scope"><strong>范围</strong>：纳入 1 · 排除 0 · 扩展 0 · 新增 5 · 存量 0</div>
+
+      <div class="summary">总结</div>
+      <p class="summary-text">本次变更在 UserDao 引入高风险写法，建议先阻断合入并清理凭据与拼接 SQL。</p>
+
+      <div class="links">
+        <a href="#">查看合并请求</a><span class="sep">·</span><a href="#">查看审查详情</a>
+      </div>
+    </div>
+  </div>
+  <p class="caption">卡片样式样例 · 通知内容对应上述 PR #5 真实运行（钉钉 / 企微 / 飞书交集语法）</p>
+</body>
+</html>

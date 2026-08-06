@@ -3,7 +3,7 @@
 </div>
 
 <div align="center">
-  <em>Turns AI code review from "one-off comments" into an enterprise governance loop — 4 git platforms × dual engines × Chinese IM × issue ledger.</em>
+  <h3>Turns AI code review from "one-off comments" into an enterprise governance loop — 4 git platforms × dual engines × Chinese IM × issue ledger.</h3>
 </div>
 
 > **See the real thing first (30 seconds)**: [this public PR](https://github.com/miguchn/acr-demo/pull/1) deliberately keeps typical flaws such as SQL injection and hardcoded credentials. The review comment on the PR was written back automatically by a real run of this platform — not a screenshot; open it and browse it yourself.
@@ -57,11 +57,15 @@ Your git platform remains the system of record for merging; ACR owns the governa
 
 ## Screenshots from a Real Run
 
-All screenshots below are from a real environment; the demo data comes from [the public demo repository above](https://github.com/miguchn/acr-demo/pull/1).
+All screenshots below are from a real environment (the IM notification card is a style sample rendered from the real run); the demo data comes from [the public demo repository above](https://github.com/miguchn/acr-demo/pull/1).
 
 **Summary comment written back to the PR** (high-risk conclusion, top-3 issues, scope stats; full text on the public PR):
 
 <p align="center"><img src="docs/images/readme-pr-comment.png" alt="PR summary comment write-back" width="720" /></p>
+
+**Tiered IM notifications** (WeCom card style sample; content mirrors the real run of PR #5 above): after each run the conclusion is pushed to people and groups by risk level — key issues, recheck reminders for suspected fixes, and scope stats in one card; DingTalk / WeCom / Feishu:
+
+<p align="center"><img src="docs/images/readme-im-notify.png" alt="Tiered IM notification card sample" width="560" /></p>
 
 **Issue ledger** (severity badges, stage, round trail, origin; one-click filters on the summary bar):
 

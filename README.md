@@ -3,7 +3,7 @@
 </div>
 
 <div align="center">
-  <em>把 AI 代码审查从「一次性评论」变成「企业治理闭环」——四大代码平台 × 双引擎 × 中文 IM × 问题台账。</em>
+  <h3>把 AI 代码审查从「一次性评论」变成「企业治理闭环」——四大代码平台 × 双引擎 × 中文 IM × 问题台账。</h3>
 </div>
 
 > **先看真东西（30 秒）**：[这个公开 PR](https://github.com/miguchn/acr-demo/pull/1) 故意保留了 SQL 注入、硬编码凭据等典型问题，PR 里的审查评论是本平台真实运行后自动回写的总结评论——不是截图，可以打开自己翻。
@@ -57,11 +57,15 @@
 
 ## 真实运行截图
 
-以下均为真实环境截图，演示数据来自[上述公开 demo 仓库](https://github.com/miguchn/acr-demo/pull/1)。
+以下均为真实环境截图（IM 通知卡片为样式样例，内容来自真实运行），演示数据来自[上述公开 demo 仓库](https://github.com/miguchn/acr-demo/pull/1)。
 
 **PR 总结评论回写**（高风险结论、Top 3 重点问题、范围统计；公开 PR 可看全文）：
 
 <p align="center"><img src="docs/images/readme-pr-comment.png" alt="PR 总结评论回写" width="720" /></p>
+
+**IM 分级通知**（企微卡片样式样例，内容对应上述 PR #5 真实运行）：审查完成后按风险分级推送到人与群，重点问题、疑似已修复复核提醒、范围统计一卡直达；钉钉 / 企微 / 飞书三渠道：
+
+<p align="center"><img src="docs/images/readme-im-notify.png" alt="IM 分级通知卡片样例" width="560" /></p>
 
 **问题台账**（严重度徽章、阶段、轮次轨迹、归属，总览条一键筛选）：
 
