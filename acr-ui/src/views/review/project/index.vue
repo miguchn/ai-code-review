@@ -124,17 +124,19 @@
               </el-col>
               <el-col :span="12">
                 <el-form-item label="Git 平台" prop="provider">
-                  <el-tooltip :disabled="!form.projectId" content="项目保存后平台不可更换" placement="top">
-                    <span class="provider-select-wrap">
-                      <el-select v-model="form.provider" placeholder="请选择平台" :disabled="!!form.projectId" @change="handleProviderChange">
-                        <el-option v-for="item in gitProviderOptions" :key="item.value" :label="item.label" :value="item.value" />
-                      </el-select>
-                    </span>
-                  </el-tooltip>
+                  <div class="form-control-block">
+                    <el-tooltip :disabled="!form.projectId" content="项目保存后平台不可更换" placement="top">
+                      <span class="provider-select-wrap">
+                        <el-select v-model="form.provider" placeholder="请选择平台" :disabled="!!form.projectId" @change="handleProviderChange">
+                          <el-option v-for="item in gitProviderOptions" :key="item.value" :label="item.label" :value="item.value" />
+                        </el-select>
+                      </span>
+                    </el-tooltip>
+                    <div class="guide-deep-link">
+                      <el-button link type="primary" size="small" @click="openPlatformGuide">查看接入指引 →</el-button>
+                    </div>
+                  </div>
                 </el-form-item>
-                <div class="guide-deep-link">
-                  <el-button link type="primary" size="small" @click="openPlatformGuide">查看接入指引 →</el-button>
-                </div>
               </el-col>
             </el-row>
             <el-row :gutter="16">
@@ -1173,7 +1175,7 @@ Promise.all([loadOptions(), loadNotifyChannelOptions(), getList()])
 }
 
 .guide-deep-link {
-  margin: -8px 0 10px;
+  margin-top: 6px;
   line-height: 22px;
 }
 </style>
