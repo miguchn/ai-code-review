@@ -12,6 +12,7 @@ import com.acr.review.git.GitProviderCodes;
 import com.acr.review.git.GitPullRequestDiffFetcher;
 import com.acr.review.git.GitPullRequestDiffResult;
 import com.acr.review.git.GitRepositoryCoordinates;
+import com.acr.review.git.HttpResponseBodies;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
@@ -176,16 +177,6 @@ public class GiteePullRequestDiffFetcher implements GitPullRequestDiffFetcher
 
     private static String readBodyCapped(Response response) throws IOException
     {
-        okhttp3.ResponseBody body = response.body();
-        if (body == null)
-        {
-            return "";
-        }
-        try (okio.BufferedSource source = body.source())
-        {
-            okio.Buffer buffer = new okio.Buffer();
-            source.read(buffer, MAX_DIFF_BYTES);
-            return buffer.readString(java.nio.charset.StandardCharsets.UTF_8);
-        }
+        return HttpResponseBodies.readCapped(response, MAX_DIFF_BYTES);
     }
 }

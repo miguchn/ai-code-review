@@ -10,6 +10,7 @@ import com.acr.review.git.GitAccessContext;
 import com.acr.review.git.GitPullRequestDiffFetcher;
 import com.acr.review.git.GitPullRequestDiffResult;
 import com.acr.review.git.GitRepositoryCoordinates;
+import com.acr.review.git.HttpResponseBodies;
 import okhttp3.HttpUrl;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -142,16 +143,6 @@ public class GitHubPullRequestDiffFetcher implements GitPullRequestDiffFetcher
     /** 有界读取响应体：超出上限的部分直接丢弃，防止超大 Diff 耗尽堆内存。 */
     private static String readBodyCapped(Response response) throws IOException
     {
-        okhttp3.ResponseBody body = response.body();
-        if (body == null)
-        {
-            return "";
-        }
-        try (okio.BufferedSource source = body.source())
-        {
-            okio.Buffer buffer = new okio.Buffer();
-            source.read(buffer, MAX_DIFF_BYTES);
-            return buffer.readString(java.nio.charset.StandardCharsets.UTF_8);
-        }
+        return HttpResponseBodies.readCapped(response, MAX_DIFF_BYTES);
     }
 }

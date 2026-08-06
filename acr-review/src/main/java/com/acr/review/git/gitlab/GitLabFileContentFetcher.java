@@ -12,6 +12,7 @@ import com.acr.review.git.GitAccessContext;
 import com.acr.review.git.GitFileContentFetcher;
 import com.acr.review.git.GitFileContentResult;
 import com.acr.review.git.GitRepositoryCoordinates;
+import com.acr.review.git.HttpResponseBodies;
 import okhttp3.HttpUrl;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -129,15 +130,8 @@ public class GitLabFileContentFetcher implements GitFileContentFetcher
         {
             return GitFileContentResult.fail("FILE_TOO_LARGE");
         }
-        try (okio.BufferedSource source = body.source())
-        {
-            okio.Buffer buffer = new okio.Buffer();
-            long read = source.read(buffer, ReviewPipelineConstants.MAX_EXPANDED_FILE_BYTES + 1L);
-            if (read > ReviewPipelineConstants.MAX_EXPANDED_FILE_BYTES || !source.exhausted())
-            {
-                return GitFileContentResult.fail("FILE_TOO_LARGE");
-            }
-            return GitFileContentResult.ok(buffer.readString(StandardCharsets.UTF_8));
-        }
+        return HttpResponseBodies.readWithinLimit(body, ReviewPipelineConstants.MAX_EXPANDED_FILE_BYTES)
+            .map(GitFileContentResult::ok)
+            .orElseGet(() -> GitFileContentResult.fail("FILE_TOO_LARGE"));
     }
 }

@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -27,7 +29,7 @@ class GitHubPullRequestDiffFetcherTest
     {
         server = new MockWebServer();
         server.start();
-        fetcher = new GitHubPullRequestDiffFetcher(server.url("/").toString(), 1000, 1000);
+        fetcher = new GitHubPullRequestDiffFetcher(server.url("/").toString(), 5000, 10000);
         repository = new GitRepositoryCoordinates("openai", "codex", "https://github.com/openai/codex");
     }
 
@@ -100,12 +102,29 @@ class GitHubPullRequestDiffFetcherTest
     void capsOversizedDiffBody()
     {
         // 超过读取上限的响应体必须被截断，不能全量进内存
-        String huge = "x".repeat(ReviewPipelineConstants.MAX_DIFF_CHARS * 3);
+        long maxDiffBytes = ReviewPipelineConstants.MAX_DIFF_CHARS * 2L;
+        String huge = "x".repeat((int) (maxDiffBytes + 100));
         server.enqueue(new MockResponse().setResponseCode(200).setBody(huge));
 
         GitPullRequestDiffResult result = fetcher.fetchDiff(repository, ACCESS, "abc1234", "def5678");
 
         assertTrue(result.success());
-        assertTrue(result.diffContent().length() <= ReviewPipelineConstants.MAX_DIFF_CHARS * 2);
+        assertEquals(maxDiffBytes, result.diffContent().getBytes(StandardCharsets.UTF_8).length);
+    }
+
+    @Test
+    void assemblesThrottledDiffBodyBelowCap()
+    {
+        // 模拟 TCP 分包：body 大于单包但小于 cap，必须取回完整内容（旧 read 单次上游读会截尾）
+        String body = "y".repeat(3_000);
+        server.enqueue(new MockResponse()
+            .setResponseCode(200)
+            .setBody(body)
+            .throttleBody(1024, 50, TimeUnit.MILLISECONDS));
+
+        GitPullRequestDiffResult result = fetcher.fetchDiff(repository, ACCESS, "abc1234", "def5678");
+
+        assertTrue(result.success());
+        assertEquals(body, result.diffContent());
     }
 }

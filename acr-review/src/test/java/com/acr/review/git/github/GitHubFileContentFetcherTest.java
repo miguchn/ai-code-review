@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.IOException;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,7 +29,7 @@ class GitHubFileContentFetcherTest
     {
         server = new MockWebServer();
         server.start();
-        fetcher = new GitHubFileContentFetcher(server.url("/").toString(), 1000, 1000);
+        fetcher = new GitHubFileContentFetcher(server.url("/").toString(), 5000, 10000);
         repository = new GitRepositoryCoordinates("openai", "codex", "https://github.com/openai/codex");
     }
 
@@ -73,6 +74,21 @@ class GitHubFileContentFetcherTest
 
         assertFalse(result.success());
         assertEquals("FILE_TOO_LARGE", result.failureReason());
+    }
+
+    @Test
+    void assemblesThrottledBodyBelowCap()
+    {
+        String body = "cfg:\n  key: " + "z".repeat(2_500) + "\n";
+        server.enqueue(new MockResponse()
+            .setResponseCode(200)
+            .setBody(body)
+            .throttleBody(1024, 50, TimeUnit.MILLISECONDS));
+
+        GitFileContentResult result = fetcher.fetchFileContent(repository, SHORT_ACCESS, "app.yml", "def5678");
+
+        assertTrue(result.success());
+        assertEquals(body, result.content());
     }
 
     @Test
