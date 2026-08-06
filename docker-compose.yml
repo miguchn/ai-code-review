@@ -1,0 +1,87 @@
+# AI Code Review — 试用级一键启动
+# 用法：
+#   cp .env.example .env   # 填入 ACR_CREDENTIAL_MASTER_KEY
+#   docker compose up -d --build
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: acr-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: ai_code_review
+    volumes:
+      - acr-mysql-data:/var/lib/mysql
+      - ./sql/init-full.sql:/docker-entrypoint-initdb.d/01-init-full.sql:ro
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_general_ci
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-root}"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+  redis:
+    image: redis:7
+    container_name: acr-redis
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis}
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:-redis}"]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    container_name: acr-backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      ACR_CREDENTIAL_MASTER_KEY: ${ACR_CREDENTIAL_MASTER_KEY:?Set ACR_CREDENTIAL_MASTER_KEY in .env (openssl rand -base64 32)}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis}
+      # 试用环境允许连接本机/内网兼容模型服务（可按需关闭）
+      ACR_LLM_ALLOW_HTTP: ${ACR_LLM_ALLOW_HTTP:-true}
+      ACR_LLM_ALLOW_PRIVATE_ENDPOINTS: ${ACR_LLM_ALLOW_PRIVATE_ENDPOINTS:-true}
+      ACR_WEBHOOK_CALLBACK_URL: ${ACR_WEBHOOK_CALLBACK_URL:-http://127.0.0.1}
+    command: ["--spring.profiles.active=docker"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 90s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+    container_name: acr-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "80:80"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  acr-mysql-data:

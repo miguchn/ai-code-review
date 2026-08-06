@@ -1,0 +1,55 @@
+# 试用 / Docker Compose 环境（与 application-dev 同语义，数据源与 Redis 指向 compose 服务名）
+server:
+  port: 8080
+
+spring:
+  datasource:
+    type: com.alibaba.druid.pool.DruidDataSource
+    driverClassName: com.mysql.cj.jdbc.Driver
+    druid:
+      master:
+        url: jdbc:mysql://mysql:3306/ai_code_review?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true
+        username: root
+        password: ${MYSQL_ROOT_PASSWORD:root}
+      slave:
+        enabled: false
+        url:
+        username:
+        password:
+      initialSize: 5
+      minIdle: 10
+      maxActive: 20
+      maxWait: 60000
+      connectTimeout: 30000
+      socketTimeout: 60000
+      timeBetweenEvictionRunsMillis: 60000
+      minEvictableIdleTimeMillis: 300000
+      maxEvictableIdleTimeMillis: 900000
+      validationQuery: SELECT 1 FROM DUAL
+      testWhileIdle: true
+      testOnBorrow: false
+      testOnReturn: false
+  data:
+    redis:
+      host: redis
+      port: 6379
+      database: 0
+      password: ${REDIS_PASSWORD:redis}
+      timeout: 10s
+      lettuce:
+        pool:
+          min-idle: 0
+          max-idle: 8
+          max-active: 8
+          max-wait: -1ms
+  devtools:
+    restart:
+      enabled: false
+
+logging:
+  level:
+    com.acr: info
+    org.springframework: warn
+
+acr:
+  profile: /tmp/acr/uploadPath

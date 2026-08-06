@@ -1,0 +1,27 @@
+# AI Code Review — backend (multi-stage, trial / compose)
+FROM maven:3.9-eclipse-temurin-17 AS build
+WORKDIR /build
+
+COPY pom.xml .
+COPY acr-admin acr-admin
+COPY acr-common acr-common
+COPY acr-framework acr-framework
+COPY acr-system acr-system
+COPY acr-review acr-review
+COPY acr-quartz acr-quartz
+
+RUN mvn -q clean package -DskipTests
+
+FROM eclipse-temurin:17-jre
+WORKDIR /app
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /tmp/acr/uploadPath
+
+COPY --from=build /build/acr-admin/target/acr-admin.jar /app/acr-admin.jar
+
+EXPOSE 8080
+
+ENTRYPOINT ["java", "-jar", "/app/acr-admin.jar"]
