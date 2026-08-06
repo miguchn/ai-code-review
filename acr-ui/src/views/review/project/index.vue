@@ -124,13 +124,18 @@
               </el-col>
               <el-col :span="12">
                 <el-form-item label="Git 平台" prop="provider">
-                  <el-tooltip :disabled="!form.projectId" content="项目保存后平台不可更换" placement="top">
-                    <span class="provider-select-wrap">
-                      <el-select v-model="form.provider" placeholder="请选择平台" :disabled="!!form.projectId" @change="handleProviderChange">
-                        <el-option v-for="item in gitProviderOptions" :key="item.value" :label="item.label" :value="item.value" />
-                      </el-select>
-                    </span>
-                  </el-tooltip>
+                  <div class="form-control-block">
+                    <el-tooltip :disabled="!form.projectId" content="项目保存后平台不可更换" placement="top">
+                      <span class="provider-select-wrap">
+                        <el-select v-model="form.provider" placeholder="请选择平台" :disabled="!!form.projectId" @change="handleProviderChange">
+                          <el-option v-for="item in gitProviderOptions" :key="item.value" :label="item.label" :value="item.value" />
+                        </el-select>
+                      </span>
+                    </el-tooltip>
+                    <div class="guide-deep-link">
+                      <el-button link type="primary" size="small" @click="openPlatformGuide">查看接入指引 →</el-button>
+                    </div>
+                  </div>
                 </el-form-item>
               </el-col>
             </el-row>
@@ -471,6 +476,7 @@ import {
 import { listGitCredential } from '@/api/review/credential'
 import { listNotifyChannel } from '@/api/review/notifyChannel'
 import { GIT_PROVIDER_FALLBACK } from '@/constants/gitProviders'
+import useGuideStore from '@/store/modules/guide'
 
 const { proxy } = getCurrentInstance()
 const router = useRouter()
@@ -1041,6 +1047,13 @@ function syncTagType(status) {
   return { SUCCESS: 'success', FAILED: 'danger', UNSYNCED: 'info' }[status] || 'info'
 }
 
+const guideStore = useGuideStore()
+const PLATFORM_GUIDE_DOC = { github: 'platform-github', gitlab: 'platform-gitlab', gitee: 'platform-gitee', gitea: 'platform-gitea' }
+
+function openPlatformGuide() {
+  guideStore.open(PLATFORM_GUIDE_DOC[(form.value.provider || '').toLowerCase()] || null)
+}
+
 Promise.all([loadOptions(), loadNotifyChannelOptions(), getList()])
 </script>
 
@@ -1159,5 +1172,10 @@ Promise.all([loadOptions(), loadNotifyChannelOptions(), getList()])
   .field-actions--split { flex-direction: column; }
   .field-actions__links { white-space: normal; }
   .repository-summary { grid-template-columns: 1fr; }
+}
+
+.guide-deep-link {
+  margin-top: 6px;
+  line-height: 22px;
 }
 </style>

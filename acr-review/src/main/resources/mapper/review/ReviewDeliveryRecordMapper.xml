@@ -10,6 +10,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="runId" column="run_id" />
         <result property="projectId" column="project_id" />
         <result property="projectName" column="project_name" />
+        <result property="businessSystemName" column="business_system_name" />
         <result property="provider" column="provider" />
         <result property="channel" column="channel" />
         <result property="prNumber" column="pr_number" />
@@ -28,13 +29,15 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     </resultMap>
 
     <sql id="selectColumns">
-        select rdr.delivery_id, rdr.task_id, rdr.run_id, rdr.project_id, p.project_name, rdr.provider, rdr.channel, rdr.pr_number,
+        select rdr.delivery_id, rdr.task_id, rdr.run_id, rdr.project_id, p.project_name,
+               bs.system_name as business_system_name, rdr.provider, rdr.channel, rdr.pr_number,
                rdr.idempotency_key, rdr.external_id, rdr.delivery_status, rdr.failure_message,
                rdr.attempt_count, rdr.last_attempt_time, rdr.trigger_source,
                (case when rdr.content_snapshot is not null then 1 else 0 end) as has_content_snapshot,
                rdr.create_by, rdr.create_time, rdr.update_by, rdr.update_time
         from review_delivery_record rdr
         left join review_project p on p.project_id = rdr.project_id
+        left join sys_business_system bs on bs.system_id = p.business_system_id
         left join sys_dept d on d.dept_id = p.dept_id
         left join sys_user owner on owner.user_id = p.owner_user_id
     </sql>
@@ -116,6 +119,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         select count(1)
         from review_delivery_record rdr
         left join review_project p on p.project_id = rdr.project_id
+        left join sys_business_system bs on bs.system_id = p.business_system_id
         left join sys_dept d on d.dept_id = p.dept_id
         left join sys_user owner on owner.user_id = p.owner_user_id
         where 1 = 1

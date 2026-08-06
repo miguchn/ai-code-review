@@ -38,7 +38,13 @@ The main loop:
 
 **Project & credential setup → webhook event intake → review execution → summary comment writeback → IM notification → issue disposition → workbench**
 
-It focuses on: **uncontrollable review coverage** (reliable webhooks, idempotent tasks, failure recovery), **results that are hard to reach or act on** (writeback to the code platform, tiered notification, confirm/fix/appeal loops), **ungoverned rules and models** (versioned review policies, encrypted keys, tracked degradation), **unmeasurable quality** (unified coverage/latency/valid-issue metrics), and **weak enterprise security and audit** (org/business-system/project data isolation with audit trails).
+### It focuses on: 
+
+- **uncontrollable review coverage** (reliable webhooks, idempotent tasks, failure recovery)
+- **results that are hard to reach or act on** (writeback to the code platform, tiered notification, confirm/fix/appeal loops)
+- **ungoverned rules and models** (versioned review policies, encrypted keys, tracked degradation)
+- **unmeasurable quality** (unified coverage/latency/valid-issue metrics),
+- **weak enterprise security and audit** (org/business-system/project data isolation with audit trails).
 
 It does not replace the Git platform, generic project or defect management, BI/APM, or human approval, and it does not provide individual performance rankings.
 

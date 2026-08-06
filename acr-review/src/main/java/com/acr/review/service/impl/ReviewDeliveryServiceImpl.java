@@ -424,7 +424,7 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
     public Map<String, Object> selectDeliveryContent(Long deliveryId)
     {
         // 与列表同数据范围：先按投递记录所属项目做部门校验
-        selectDeliveryById(deliveryId);
+        ReviewDeliveryRecord record = selectDeliveryById(deliveryId);
         String snapshot = deliveryMapper.selectContentSnapshotById(deliveryId);
         if (StringUtils.isEmpty(snapshot))
         {
@@ -437,7 +437,11 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
             {
                 return Collections.emptyMap();
             }
-            return new HashMap<>(parsed);
+            Map<String, Object> content = new HashMap<>(parsed);
+            // 结构化归属字段：历史快照正文无归属行时，详情弹窗仍可展示系统/项目
+            content.put("businessSystemName", record == null ? null : record.getBusinessSystemName());
+            content.put("projectName", record == null ? null : record.getProjectName());
+            return content;
         }
         catch (Exception ex)
         {

@@ -82,6 +82,13 @@ public class ReviewSummaryContentFactory
             builder.prUrl(buildMergeRequestUrl(project, task == null ? null : task.getPrNumber()));
         }
 
+        builder.projectName(firstNonEmpty(
+                project == null ? null : project.getProjectName(),
+                task == null ? null : task.getProjectName()))
+            .businessSystemName(firstNonEmpty(
+                project == null ? null : project.getBusinessSystemName(),
+                task == null ? null : task.getBusinessSystemName()));
+
         builder.detailUrl(buildDetailUrl(task));
         return builder.build();
     }
@@ -363,5 +370,18 @@ public class ReviewSummaryContentFactory
     private static Integer firstNonNull(Integer a, Integer b)
     {
         return a != null ? a : b;
+    }
+
+    private static String firstNonEmpty(String a, String b)
+    {
+        if (StringUtils.isNotEmpty(a))
+        {
+            return a.trim();
+        }
+        if (StringUtils.isNotEmpty(b))
+        {
+            return b.trim();
+        }
+        return null;
     }
 }

@@ -65,7 +65,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <if test="status != null and status != ''">
             and i.status = #{status}
         </if>
-        <if test="(status == null or status == '') and activeFlag != null and (activeFlag == 'Y' or activeFlag == '1' or activeFlag == 'true')">
+        <if test="(status == null or status == '') and activeFlag != null and (activeFlag == 'Y'.toString() or activeFlag == '1'.toString() or activeFlag == 'true')">
             and i.status in ('AWAITING_CONFIRM', 'AWAITING_FIX', 'RECHECKING')
         </if>
         <if test="severity != null and severity != ''">

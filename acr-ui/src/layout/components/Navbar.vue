@@ -28,6 +28,8 @@
           <size-select id="size-select" class="right-menu-item hover-effect" />
         </el-tooltip>
 
+        <guide-entry id="guide-entry" />
+
         <el-tooltip content="消息通知" effect="dark" placement="bottom">
           <header-notice id="header-notice" class="right-menu-item hover-effect" />
         </el-tooltip>
@@ -75,6 +77,7 @@ import useLockStore from '@/store/modules/lock'
 import useSettingsStore from '@/store/modules/settings'
 import HeaderNotice from './HeaderNotice'
 import EnvTag from '@/components/EnvTag'
+import GuideEntry from '@/guide/components/GuideEntry.vue'
 
 const route = useRoute()
 const router = useRouter()

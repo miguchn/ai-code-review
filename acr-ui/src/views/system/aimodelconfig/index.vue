@@ -97,6 +97,9 @@
 
       <el-dialog :title="title" v-model="open" width="640px" append-to-body class="model-config-dialog" destroy-on-close>
          <el-form ref="modelRef" :model="form" :rules="rules" label-width="100px" class="model-config-form">
+            <div class="guide-deep-link">
+               <el-button link type="primary" size="small" @click="guideStore.open('model-config')">查看模型配置指引 →</el-button>
+            </div>
             <div class="form-section-title">基础配置</div>
             <el-form-item label="配置名称" prop="modelName">
                <el-input v-model="form.modelName" placeholder="如: DeepSeek 生产" maxlength="64" />
@@ -209,8 +212,10 @@
 <script setup name="SysAiModelConfig">
 import { listAiModelConfig, getAiModelConfig, delAiModelConfig, addAiModelConfig, updateAiModelConfig, enableAiModel, setDefaultModel, testAiModelConnection, testAiModelCall, listLlmProviders } from "@/api/system/aiModelConfig"
 import { LLM_PROVIDER_FALLBACK, LLM_ADVANCED_DEFAULTS, providerIconUrl, providerLabel, syncProviderFields } from "@/constants/llmProviders"
+import useGuideStore from '@/store/modules/guide'
 
 const { proxy } = getCurrentInstance()
+const guideStore = useGuideStore()
 
 const providerOptions = ref([...LLM_PROVIDER_FALLBACK])
 const modelList = ref([])
@@ -499,6 +504,10 @@ getList()
    word-break: break-all;
    font-size: 12px;
    color: var(--el-text-color-secondary);
+}
+.guide-deep-link {
+   margin: -8px 0 10px;
+   line-height: 22px;
 }
 </style>
 

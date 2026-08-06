@@ -20,6 +20,10 @@ public final class ReviewSummaryContent
     private final String prAuthor;
     private final String repositoryOwner;
     private final String repositoryName;
+    /** 企业内部项目名称（归属行优先展示；空则回退 owner/repo）。 */
+    private final String projectName;
+    /** 业务系统名称（归属行首段；空则整段省略）。 */
+    private final String businessSystemName;
     private final String sourceBranch;
     private final String targetBranch;
     private final Integer changedFiles;
@@ -53,6 +57,8 @@ public final class ReviewSummaryContent
         this.prAuthor = builder.prAuthor;
         this.repositoryOwner = builder.repositoryOwner;
         this.repositoryName = builder.repositoryName;
+        this.projectName = builder.projectName;
+        this.businessSystemName = builder.businessSystemName;
         this.sourceBranch = builder.sourceBranch;
         this.targetBranch = builder.targetBranch;
         this.changedFiles = builder.changedFiles;
@@ -86,6 +92,8 @@ public final class ReviewSummaryContent
     public String getPrAuthor() { return prAuthor; }
     public String getRepositoryOwner() { return repositoryOwner; }
     public String getRepositoryName() { return repositoryName; }
+    public String getProjectName() { return projectName; }
+    public String getBusinessSystemName() { return businessSystemName; }
     public String getSourceBranch() { return sourceBranch; }
     public String getTargetBranch() { return targetBranch; }
     public Integer getChangedFiles() { return changedFiles; }
@@ -136,6 +144,8 @@ public final class ReviewSummaryContent
         private String prAuthor;
         private String repositoryOwner;
         private String repositoryName;
+        private String projectName;
+        private String businessSystemName;
         private String sourceBranch;
         private String targetBranch;
         private Integer changedFiles;
@@ -163,6 +173,8 @@ public final class ReviewSummaryContent
         public Builder prAuthor(String prAuthor) { this.prAuthor = prAuthor; return this; }
         public Builder repositoryOwner(String repositoryOwner) { this.repositoryOwner = repositoryOwner; return this; }
         public Builder repositoryName(String repositoryName) { this.repositoryName = repositoryName; return this; }
+        public Builder projectName(String projectName) { this.projectName = projectName; return this; }
+        public Builder businessSystemName(String businessSystemName) { this.businessSystemName = businessSystemName; return this; }
         public Builder sourceBranch(String sourceBranch) { this.sourceBranch = sourceBranch; return this; }
         public Builder targetBranch(String targetBranch) { this.targetBranch = targetBranch; return this; }
         public Builder changedFiles(Integer changedFiles) { this.changedFiles = changedFiles; return this; }

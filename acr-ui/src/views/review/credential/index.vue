@@ -78,6 +78,9 @@
 
     <el-dialog :title="title" v-model="open" width="600px" append-to-body>
       <el-form ref="credentialRef" :model="form" :rules="rules" label-width="100px">
+        <div class="guide-deep-link">
+          <el-button link type="primary" size="small" @click="openPlatformGuide">按平台查看凭据创建指引 →</el-button>
+        </div>
         <el-form-item label="凭据名称" prop="credentialName">
           <el-input v-model="form.credentialName" placeholder="如：GitLab 试点仓库只读凭据" />
         </el-form-item>
@@ -126,6 +129,7 @@
 <script setup name="ReviewCredential">
 import { listGitCredential, getGitCredential, addGitCredential, updateGitCredential, delGitCredential, testGitCredential } from '@/api/review/credential'
 import { GIT_PROVIDER_FALLBACK, requiresServerUrl } from '@/constants/gitProviders'
+import useGuideStore from '@/store/modules/guide'
 
 const { proxy } = getCurrentInstance()
 const { review_git_provider } = proxy.useDict('review_git_provider')
@@ -280,6 +284,13 @@ function handleTest(row) {
 function checkStatusText(status) { return { SUCCESS: '连接正常', FAILED: '连接失败', UNTESTED: '未检测' }[status] || '未检测' }
 function checkTagType(status) { return { SUCCESS: 'success', FAILED: 'danger', UNTESTED: 'info' }[status] || 'info' }
 
+const guideStore = useGuideStore()
+const PLATFORM_GUIDE_DOC = { github: 'platform-github', gitlab: 'platform-gitlab', gitee: 'platform-gitee', gitea: 'platform-gitea' }
+
+function openPlatformGuide() {
+  guideStore.open(PLATFORM_GUIDE_DOC[(form.value.provider || '').toLowerCase()] || null)
+}
+
 getList()
 </script>
 
@@ -299,5 +310,9 @@ getList()
   font-size: 12px;
   font-weight: 400;
   line-height: 20px;
+}
+.guide-deep-link {
+  margin: -8px 0 10px;
+  line-height: 22px;
 }
 </style>

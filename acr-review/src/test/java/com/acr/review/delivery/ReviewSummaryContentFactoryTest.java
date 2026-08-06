@@ -25,6 +25,8 @@ class ReviewSummaryContentFactoryTest
         Date finished = new Date(1_700_000_000_000L);
         run.setFinishedTime(finished);
         ReviewProject project = project("GITHUB", "https://github.com/acme/demo", "acme", "demo");
+        project.setProjectName("Demo 项目");
+        project.setBusinessSystemName("长寿官网系统");
 
         ReviewSummaryContent content = new ReviewSummaryContentFactory(mock(ISysConfigService.class))
             .build(task, run, project);
@@ -32,6 +34,8 @@ class ReviewSummaryContentFactoryTest
         assertEquals("Fix login", content.getCommitMessage());
         assertEquals("整体风险可控", content.getSummaryText());
         assertEquals(finished, content.getReviewTime());
+        assertEquals("Demo 项目", content.getProjectName());
+        assertEquals("长寿官网系统", content.getBusinessSystemName());
     }
 
     @Test

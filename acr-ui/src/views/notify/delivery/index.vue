@@ -37,6 +37,10 @@
       <el-table-column label="最后尝试时间" width="170">
         <template #default="scope">{{ formatDateTime(scope.row.lastAttemptTime) }}</template>
       </el-table-column>
+      <el-table-column label="业务系统" prop="businessSystemName" min-width="130" :show-overflow-tooltip="true"
+        class-name="col-business-system" label-class-name="col-business-system">
+        <template #default="scope">{{ emptyDash(scope.row.businessSystemName) }}</template>
+      </el-table-column>
       <el-table-column label="项目名称" prop="projectName" min-width="150" :show-overflow-tooltip="true" />
       <el-table-column label="投递渠道" width="140">
         <template #default="scope">
@@ -96,6 +100,9 @@
       @closed="resetMessageDetail"
     >
       <div v-loading="messageLoading" class="delivery-message-drawer__body">
+        <div v-if="!messageLoading" class="delivery-message-drawer__attribution">
+          业务系统 {{ emptyDash(messageBusinessSystemName) }} | 项目 {{ emptyDash(messageProjectName) }}
+        </div>
         <MessageContentView
           v-if="!messageLoading"
           :title="messageTitle"
@@ -133,6 +140,8 @@ const messageDrawerVisible = ref(false)
 const messageLoading = ref(false)
 const messageTitle = ref('')
 const messageBody = ref('')
+const messageBusinessSystemName = ref('')
+const messageProjectName = ref('')
 
 const queryParams = ref({
   pageNum: 1,
@@ -143,6 +152,12 @@ const queryParams = ref({
   prNumber: undefined,
   taskId: undefined
 })
+
+function emptyDash(value) {
+  if (value == null) return '—'
+  const text = String(value).trim()
+  return text ? text : '—'
+}
 
 function hasContentSnapshot(row) {
   const flag = row && row.hasContentSnapshot
@@ -185,10 +200,18 @@ function openMessageDetail(row) {
   messageLoading.value = true
   messageTitle.value = ''
   messageBody.value = ''
+  messageBusinessSystemName.value = row.businessSystemName || ''
+  messageProjectName.value = row.projectName || ''
   getDeliveryContent(row.deliveryId).then(response => {
     const data = response.data || {}
     messageTitle.value = data.title || ''
     messageBody.value = data.body || ''
+    if (data.businessSystemName != null) {
+      messageBusinessSystemName.value = data.businessSystemName
+    }
+    if (data.projectName != null) {
+      messageProjectName.value = data.projectName
+    }
   }).catch(() => {
     messageTitle.value = ''
     messageBody.value = ''
@@ -200,6 +223,8 @@ function openMessageDetail(row) {
 function resetMessageDetail() {
   messageTitle.value = ''
   messageBody.value = ''
+  messageBusinessSystemName.value = ''
+  messageProjectName.value = ''
   messageLoading.value = false
 }
 
@@ -238,5 +263,18 @@ function applyRouteQuery() {
 .op-btn-wrap { display: inline-flex; }
 .delivery-message-drawer__body {
   min-height: 160px;
+}
+.delivery-message-drawer__attribution {
+  margin: 0 0 12px;
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+@media (max-width: 1200px) {
+  :deep(th.col-business-system),
+  :deep(td.col-business-system) {
+    display: none !important;
+  }
 }
 </style>

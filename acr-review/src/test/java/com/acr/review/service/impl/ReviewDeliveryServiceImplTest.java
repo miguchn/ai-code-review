@@ -118,6 +118,8 @@ class ReviewDeliveryServiceImplTest
         ReviewDeliveryRecord record = new ReviewDeliveryRecord();
         record.setDeliveryId(77L);
         record.setProjectId(3L);
+        record.setProjectName("Demo 项目");
+        record.setBusinessSystemName("长寿官网系统");
         when(deliveryMapper.selectDeliveryById(77L)).thenReturn(record);
         when(projectMapper.selectReviewProjectById(3L)).thenReturn(project());
         when(deliveryMapper.selectContentSnapshotById(77L)).thenReturn(
@@ -129,6 +131,8 @@ class ReviewDeliveryServiceImplTest
         assertEquals("FEISHU_BOT", content.get("channelType"));
         assertEquals("t", content.get("title"));
         assertEquals("b", content.get("body"));
+        assertEquals("长寿官网系统", content.get("businessSystemName"));
+        assertEquals("Demo 项目", content.get("projectName"));
         verify(deptService).checkDeptDataScope(1L);
     }
 

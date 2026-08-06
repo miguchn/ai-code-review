@@ -36,6 +36,9 @@ public final class ReviewDeliveryConstants
     /** IM 单条问题建议最大字符数（压平换行后截断）。 */
     public static final int IM_MAX_SUGGESTION_CHARS = 120;
 
+    /** IM 总结文本最大字符数（压平换行后截断）。 */
+    public static final int IM_MAX_SUMMARY_CHARS = 200;
+
     /** 企微 markdown 正文最大字节数。 */
     public static final int WECOM_MAX_MARKDOWN_BYTES = 4096;
 
