@@ -26,6 +26,10 @@ public final class ReviewIssueConstants
 
     public static final String CLOSE_SOURCE_MANUAL = "manual";
     public static final String CLOSE_SOURCE_AUTO_RECHECK = "auto_recheck";
+    /** PR 合并后联动关闭。 */
+    public static final String CLOSE_SOURCE_PR_MERGED = "pr_merged";
+    /** PR 关闭（未合并）后联动关闭。 */
+    public static final String CLOSE_SOURCE_PR_CLOSED = "pr_closed";
 
     public static final String ORIGIN_NEW = "NEW";
     public static final String ORIGIN_EXISTING = "EXISTING";

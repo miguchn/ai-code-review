@@ -1,7 +1,7 @@
 -- ============================================================================
 -- AI Code Review 一次性初始化脚本（仅适用于全新环境）
 --
--- 本脚本是 sql/01_core_schema.sql … sql/31_issue_lifecycle_m8.sql
+-- 本脚本是 sql/01_core_schema.sql … sql/32_issue_pr_close_source.sql
 -- 全部执行完成后的最终状态（表结构 + 初始化数据），新环境一条命令即可完成初始化：
 --
 --   mysql --default-character-set=utf8mb4 -u root -p < sql/init-full.sql
@@ -15,7 +15,7 @@
 -- 4. 初始管理员为 admin / admin123，首次登录后请立即修改密码。
 -- 5. 新增编号增量脚本后必须同步重新生成本脚本（生成方式见 sql/README.md）。
 --
--- 生成日期：2026-08-05；基线：feature/m8-issue-lifecycle（已含 01-31 全部增量脚本）
+-- 生成日期：2026-08-06；基线：feature/m8.1-issue-lifecycle-view（已含 01-32 全部增量脚本）
 -- ============================================================================
 
 CREATE DATABASE IF NOT EXISTS `ai_code_review` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
@@ -1320,6 +1320,8 @@ INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value
 INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (154,6,'待复核','RECHECKING','review_issue_status','','primary','N','0','admin','2026-08-03 08:08:26','admin','2026-08-05 06:49:55','');
 INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (155,1,'人工','manual','review_issue_close_source','','primary','Y','0','admin','2026-08-03 08:08:26','',NULL,'');
 INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (156,2,'自动复核','auto_recheck','review_issue_close_source','','info','N','0','admin','2026-08-03 08:08:26','admin','2026-08-05 06:49:55','');
+INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (169,3,'随 PR 合并关闭','pr_merged','review_issue_close_source','','success','N','0','admin','2026-08-06 00:00:00','',NULL,'');
+INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (170,4,'随 PR 关闭','pr_closed','review_issue_close_source','','info','N','0','admin','2026-08-06 00:00:00','',NULL,'');
 INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (157,1,'新增','NEW','review_issue_origin','','success','Y','0','admin','2026-08-03 08:08:26','',NULL,'');
 INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (158,2,'存量','EXISTING','review_issue_origin','','info','N','0','admin','2026-08-03 08:08:26','',NULL,'');
 INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (159,1,'任务回写','TASK_SUCCESS','review_delivery_trigger_source','','primary','N','0','admin','2026-08-03 09:15:27','',NULL,'');

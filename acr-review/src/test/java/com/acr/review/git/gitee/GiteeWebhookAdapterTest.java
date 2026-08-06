@@ -204,6 +204,20 @@ class GiteeWebhookAdapterTest
             "Merge Request Hook", "d-1", mergePayload.getBytes(StandardCharsets.UTF_8));
         assertNotNull(event);
         assertEquals("merge", event.action());
+        assertTrue(event.merged());
+        assertTrue(event.isCloseLifecycle());
+    }
+
+    @Test
+    void parsesCloseActionAsCloseLifecycle()
+    {
+        String closePayload = PR_PAYLOAD.replace("\"action\": \"open\"", "\"action\": \"close\"");
+        GitPullRequestEvent event = adapter.parsePullRequestEvent(
+            "Merge Request Hook", "d-1", closePayload.getBytes(StandardCharsets.UTF_8));
+        assertNotNull(event);
+        assertEquals("close", event.action());
+        assertFalse(event.merged());
+        assertTrue(event.isCloseLifecycle());
     }
 
     @Test

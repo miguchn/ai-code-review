@@ -24,11 +24,12 @@ import com.acr.review.git.WebhookRequestHeaders;
 import com.acr.review.mapper.ReviewProjectMapper;
 import com.acr.review.mapper.ReviewWebhookEventMapper;
 import com.acr.review.security.CredentialCryptoService;
+import com.acr.review.service.IReviewIssueService;
 import com.acr.review.service.IReviewTaskCreateService;
 import com.acr.review.service.IReviewWebhookService;
 import com.acr.system.service.ISysConfigService;
 
-/** Git Webhook 事件接入：验签、项目匹配、分支判断、幂等、建单。 */
+/** Git Webhook 事件接入：验签、项目匹配、分支判断、幂等、建单；PR 关闭联动问题关闭。 */
 @Service
 public class ReviewWebhookServiceImpl implements IReviewWebhookService
 {
@@ -41,6 +42,7 @@ public class ReviewWebhookServiceImpl implements IReviewWebhookService
     private final CredentialCryptoService cryptoService;
     private final ISysConfigService configService;
     private final IReviewTaskCreateService taskCreateService;
+    private final IReviewIssueService issueService;
     private final int maxPayloadBytes;
 
     public ReviewWebhookServiceImpl(ReviewWebhookEventMapper eventMapper,
@@ -49,6 +51,7 @@ public class ReviewWebhookServiceImpl implements IReviewWebhookService
                                     CredentialCryptoService cryptoService,
                                     ISysConfigService configService,
                                     IReviewTaskCreateService taskCreateService,
+                                    IReviewIssueService issueService,
                                     @Value("${review.webhook.max-payload-bytes:262144}") int maxPayloadBytes)
     {
         this.eventMapper = eventMapper;
@@ -57,6 +60,7 @@ public class ReviewWebhookServiceImpl implements IReviewWebhookService
         this.cryptoService = cryptoService;
         this.configService = configService;
         this.taskCreateService = taskCreateService;
+        this.issueService = issueService;
         this.maxPayloadBytes = maxPayloadBytes;
     }
 
@@ -185,6 +189,23 @@ public class ReviewWebhookServiceImpl implements IReviewWebhookService
             return WebhookHandleResult.ok("合并请求载荷解析失败，已记录");
         }
         fillPrFields(event, prEvent);
+
+        // PR 关闭/合并联动：独立于 enabled-actions / 审查启用 / 目标分支，不创建评审任务。
+        if (prEvent.isCloseLifecycle())
+        {
+            boolean merged = prEvent.merged()
+                || "merge".equals(prEvent.action())
+                || "merged".equals(prEvent.action());
+            int closedCount = issueService.closeActiveIssuesForPr(
+                project.getProjectId(), prEvent.prNumber(), merged);
+            log.info("PR 关闭联动问题关闭, provider={}, projectId={}, prNumber={}, merged={}, closedCount={}",
+                event.getProvider(), project.getProjectId(), prEvent.prNumber(), merged, closedCount);
+            String message = "合并请求 #" + prEvent.prNumber()
+                + (merged ? " 已合并" : " 已关闭")
+                + "，联动关闭 " + closedCount + " 条问题";
+            finishEventWithProject(event, project, "ACCEPTED", message);
+            return WebhookHandleResult.ok(message);
+        }
 
         List<String> enabledActions = configValues(prEventsConfigKey(event.getProvider()), DEFAULT_PR_EVENTS);
         if (prEvent.action() == null || !enabledActions.contains(prEvent.action()))

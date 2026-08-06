@@ -6,6 +6,7 @@ import java.util.Map;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -18,6 +19,8 @@ import com.acr.common.enums.BusinessType;
 import com.acr.review.delivery.ReviewDeliveryConstants;
 import com.acr.review.domain.ReviewCommentSyncResult;
 import com.acr.review.domain.ReviewIssue;
+import com.acr.review.domain.ReviewIssueBatchRequest;
+import com.acr.review.domain.ReviewIssueBatchResult;
 import com.acr.review.service.IReviewIssueService;
 
 /** 问题台账 REST。 */
@@ -39,6 +42,13 @@ public class ReviewIssueController extends BaseController
         startPage();
         List<ReviewIssue> list = issueService.selectIssueList(query);
         return getDataTable(list);
+    }
+
+    @PreAuthorize("@ss.hasPermi('review:issue:list')")
+    @GetMapping("/stats")
+    public AjaxResult stats(ReviewIssue query)
+    {
+        return success(issueService.selectIssueStats(query));
     }
 
     @PreAuthorize("@ss.hasPermi('review:issue:query')")
@@ -83,6 +93,21 @@ public class ReviewIssueController extends BaseController
     public AjaxResult reopen(@PathVariable Long issueId)
     {
         return success(toCommentSyncData(issueService.reopen(issueId)));
+    }
+
+    @PreAuthorize("@ss.hasAnyPermi('review:issue:confirm,review:issue:close')")
+    @Log(title = "问题批量处置", businessType = BusinessType.UPDATE)
+    @PostMapping("/batch")
+    public AjaxResult batch(@RequestBody ReviewIssueBatchRequest request)
+    {
+        ReviewIssueBatchResult result = issueService.batchDispose(request);
+        if (result.hasFailures())
+        {
+            return AjaxResult.error("部分问题不满足处置条件").put("failures", result.getFailures());
+        }
+        Map<String, Object> data = toCommentSyncData(result.getCommentSync());
+        data.put("successCount", result.getSuccessCount());
+        return success(data);
     }
 
     private static Map<String, Object> toCommentSyncData(ReviewCommentSyncResult sync)

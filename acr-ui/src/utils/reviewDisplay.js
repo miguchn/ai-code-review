@@ -67,6 +67,30 @@ export function formatDateTime(value) {
   return value ? parseTime(value) : '—'
 }
 
+/**
+ * 阶段滞留时长：当前时间 − stageEnteredTime。
+ * <24h 显示「n小时」，≥24h 显示「n天」；无效时间返回空串。
+ */
+export function formatStageDuration(stageEnteredTime) {
+  if (stageEnteredTime == null || stageEnteredTime === '') return ''
+  let start
+  if (stageEnteredTime instanceof Date) {
+    start = stageEnteredTime
+  } else if (typeof stageEnteredTime === 'number') {
+    start = new Date(stageEnteredTime)
+  } else {
+    // 兼容后端 yyyy-MM-dd HH:mm:ss（Safari 需替换空格）
+    start = new Date(String(stageEnteredTime).replace(/-/g, '/'))
+  }
+  if (Number.isNaN(start.getTime())) return ''
+  const ms = Date.now() - start.getTime()
+  if (ms < 0) return '不到1小时'
+  const hours = Math.floor(ms / (1000 * 60 * 60))
+  if (hours < 1) return '不到1小时'
+  if (hours < 24) return hours + '小时'
+  return Math.floor(hours / 24) + '天'
+}
+
 export function formatDuration(ms) {
   if (ms == null) return '—'
   if (ms < 1000) return ms + ' ms'

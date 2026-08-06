@@ -164,8 +164,9 @@ public class GitLabWebhookAdapter implements GitWebhookAdapter
             return null;
         }
 
+        boolean merged = "merge".equals(action);
         return new GitPullRequestEvent(deliveryId, action, owner, repository, pathWithNamespace, iid, title,
-            sourceBranch, targetBranch, baseSha, headSha, author, null, null, null);
+            sourceBranch, targetBranch, baseSha, headSha, author, null, null, null, merged);
     }
 
     /** 供单测复用：判断 object_kind 形式的 MR 事件。 */

@@ -163,6 +163,26 @@ class GitLabWebhookAdapterTest
         assertNull(adapter.parsePullRequestEvent("push", "d-1", MR_PAYLOAD.getBytes(StandardCharsets.UTF_8)));
     }
 
+    @Test
+    void parsesCloseAndMergeActions()
+    {
+        String closePayload = MR_PAYLOAD.replace("\"action\": \"open\"", "\"action\": \"close\"");
+        GitPullRequestEvent closeEvent = adapter.parsePullRequestEvent(
+            "Merge Request Hook", "d-close", closePayload.getBytes(StandardCharsets.UTF_8));
+        assertNotNull(closeEvent);
+        assertEquals("close", closeEvent.action());
+        assertFalse(closeEvent.merged());
+        assertTrue(closeEvent.isCloseLifecycle());
+
+        String mergePayload = MR_PAYLOAD.replace("\"action\": \"open\"", "\"action\": \"merge\"");
+        GitPullRequestEvent mergeEvent = adapter.parsePullRequestEvent(
+            "Merge Request Hook", "d-merge", mergePayload.getBytes(StandardCharsets.UTF_8));
+        assertNotNull(mergeEvent);
+        assertEquals("merge", mergeEvent.action());
+        assertTrue(mergeEvent.merged());
+        assertTrue(mergeEvent.isCloseLifecycle());
+    }
+
     private static WebhookRequestHeaders headers(String name, String value)
     {
         return WebhookRequestHeaders.of(Map.of(name, value));

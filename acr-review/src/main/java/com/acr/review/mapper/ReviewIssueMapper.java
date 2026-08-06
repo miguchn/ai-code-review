@@ -3,14 +3,11 @@ package com.acr.review.mapper;
 import java.util.List;
 import org.apache.ibatis.annotations.Param;
 import com.acr.review.domain.ReviewIssue;
+import com.acr.review.domain.ReviewIssueStats;
 
 public interface ReviewIssueMapper
 {
     ReviewIssue selectIssueById(Long issueId);
-
-    ReviewIssue selectByProjectPrFingerprint(@Param("projectId") Long projectId,
-                                             @Param("prNumber") Integer prNumber,
-                                             @Param("fingerprint") String fingerprint);
 
     List<ReviewIssue> selectIssueList(ReviewIssue query);
 
@@ -30,4 +27,7 @@ public interface ReviewIssueMapper
 
     /** 今日关闭问题数（status=CLOSED 且 DATE(closed_time)=CURDATE()）。 */
     int countClosedToday(ReviewIssue query);
+
+    /** 状态总览计数（与列表同 DataScope，不含列表筛选条件）。 */
+    ReviewIssueStats selectIssueStats(ReviewIssue query);
 }

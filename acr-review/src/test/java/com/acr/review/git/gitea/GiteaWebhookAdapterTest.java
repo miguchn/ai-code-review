@@ -151,6 +151,20 @@ class GiteaWebhookAdapterTest
             "{\"action\":\"opened\",\"repository\":{\"name\":\"r\",\"full_name\":\"o/r\"}}".getBytes(StandardCharsets.UTF_8)));
     }
 
+    @Test
+    void parsesClosedEventWithMergedFlag()
+    {
+        String closedMerged = PR_PAYLOAD
+            .replace("\"action\": \"opened\"", "\"action\": \"closed\"")
+            .replace("\"changed_files\": 3,", "\"changed_files\": 3,\n            \"merged\": true,");
+        GitPullRequestEvent event = adapter.parsePullRequestEvent(
+            "pull_request", "d-close", closedMerged.getBytes(StandardCharsets.UTF_8));
+        assertNotNull(event);
+        assertEquals("closed", event.action());
+        assertTrue(event.merged());
+        assertTrue(event.isCloseLifecycle());
+    }
+
     private static WebhookRequestHeaders headers(String name, String value)
     {
         return WebhookRequestHeaders.of(Map.of(name, value));

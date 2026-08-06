@@ -3,6 +3,7 @@ package com.acr.review.service.impl;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -24,6 +25,7 @@ import com.acr.review.git.WebhookRequestHeaders;
 import com.acr.review.mapper.ReviewProjectMapper;
 import com.acr.review.mapper.ReviewWebhookEventMapper;
 import com.acr.review.security.CredentialCryptoService;
+import com.acr.review.service.IReviewIssueService;
 import com.acr.review.service.IReviewTaskCreateService;
 import com.acr.system.service.ISysConfigService;
 
@@ -43,6 +45,7 @@ class ReviewWebhookServiceImplTest
     private CredentialCryptoService cryptoService;
     private ISysConfigService configService;
     private IReviewTaskCreateService taskCreateService;
+    private IReviewIssueService issueService;
     private ReviewWebhookServiceImpl service;
 
     @BeforeEach
@@ -55,8 +58,9 @@ class ReviewWebhookServiceImplTest
         cryptoService = mock(CredentialCryptoService.class);
         configService = mock(ISysConfigService.class);
         taskCreateService = mock(IReviewTaskCreateService.class);
+        issueService = mock(IReviewIssueService.class);
         service = new ReviewWebhookServiceImpl(eventMapper, projectMapper, adapterRegistry,
-            cryptoService, configService, taskCreateService, 262144);
+            cryptoService, configService, taskCreateService, issueService, 262144);
 
         when(adapterRegistry.requireWebhookAdapter("GITHUB")).thenReturn(webhookAdapter);
         when(webhookAdapter.resolveDeliveryId(any(), eq(PAYLOAD))).thenReturn("d-1");
@@ -173,13 +177,56 @@ class ReviewWebhookServiceImplTest
         when(cryptoService.decryptWebhookSecret("cipher")).thenReturn("secret");
         when(webhookAdapter.verify(eq("secret"), eq(PAYLOAD), any())).thenReturn(true);
         when(webhookAdapter.parsePullRequestEvent("pull_request", "d-1", PAYLOAD))
-            .thenReturn(new GitPullRequestEvent("d-1", "closed", "miguchn", "demo", 12, "t",
+            .thenReturn(new GitPullRequestEvent("d-1", "edited", "miguchn", "demo", 12, "t",
                 "feature/login", "dev", PR_EVENT.baseSha(), PR_EVENT.headSha()));
 
         WebhookHandleResult result = service.handleGitHubWebhook("pull_request", "d-1", "sig", PAYLOAD);
 
         assertEquals(200, result.httpStatus());
         verify(eventMapper).updateProcessResult(argMatchesStatus("IGNORED"));
+        verify(taskCreateService, never()).createTaskFromEvent(any(), any(), any());
+        verify(issueService, never()).closeActiveIssuesForPr(any(), any(), anyBoolean());
+    }
+
+    @Test
+    void closesActiveIssuesOnPrClosedWithoutCreatingTask()
+    {
+        when(projectMapper.selectByFullPath("GITHUB", "miguchn/demo", null)).thenReturn(enabledProject());
+        when(cryptoService.decryptWebhookSecret("cipher")).thenReturn("secret");
+        when(webhookAdapter.verify(eq("secret"), eq(PAYLOAD), any())).thenReturn(true);
+        when(webhookAdapter.parsePullRequestEvent("pull_request", "d-1", PAYLOAD))
+            .thenReturn(new GitPullRequestEvent("d-1", "closed", "miguchn", "demo", "miguchn/demo", 12, "t",
+                "feature/login", "dev", PR_EVENT.baseSha(), PR_EVENT.headSha(), null, null, null, null, false));
+        when(issueService.closeActiveIssuesForPr(1L, 12, false)).thenReturn(3);
+
+        WebhookHandleResult result = service.handleGitHubWebhook("pull_request", "d-1", "sig", PAYLOAD);
+
+        assertEquals(200, result.httpStatus());
+        assertTrue(result.message().contains("联动关闭 3 条问题"));
+        verify(issueService).closeActiveIssuesForPr(1L, 12, false);
+        verify(taskCreateService, never()).createTaskFromEvent(any(), any(), any());
+        verify(eventMapper).updateProcessResult(argMatchesStatus("ACCEPTED"));
+        verify(configService, never()).selectConfigByKey(any());
+    }
+
+    @Test
+    void closesActiveIssuesOnPrMergedIndependentOfReviewEnabled()
+    {
+        ReviewProject project = enabledProject();
+        project.setPrReviewEnabled("1");
+        when(projectMapper.selectByFullPath("GITHUB", "miguchn/demo", null)).thenReturn(project);
+        when(cryptoService.decryptWebhookSecret("cipher")).thenReturn("secret");
+        when(webhookAdapter.verify(eq("secret"), eq(PAYLOAD), any())).thenReturn(true);
+        when(webhookAdapter.parsePullRequestEvent("pull_request", "d-1", PAYLOAD))
+            .thenReturn(new GitPullRequestEvent("d-1", "closed", "miguchn", "demo", "miguchn/demo", 12, "t",
+                "feature/login", "main", PR_EVENT.baseSha(), PR_EVENT.headSha(), null, null, null, null, true));
+        when(issueService.closeActiveIssuesForPr(1L, 12, true)).thenReturn(0);
+
+        WebhookHandleResult result = service.handleGitHubWebhook("pull_request", "d-1", "sig", PAYLOAD);
+
+        assertEquals(200, result.httpStatus());
+        assertTrue(result.message().contains("已合并"));
+        verify(issueService).closeActiveIssuesForPr(1L, 12, true);
         verify(taskCreateService, never()).createTaskFromEvent(any(), any(), any());
     }
 
