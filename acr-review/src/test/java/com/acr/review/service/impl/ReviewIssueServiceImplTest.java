@@ -1,29 +1,39 @@
 package com.acr.review.service.impl;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.LongStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
+import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 import com.acr.common.exception.ServiceException;
+import com.acr.common.utils.SecurityUtils;
 import com.acr.review.delivery.ReviewDeliveryConstants;
 import com.acr.review.domain.ReviewCommentSyncResult;
 import com.acr.review.domain.ReviewDeliveryRecord;
 import com.acr.review.domain.ReviewIssue;
 import com.acr.review.domain.ReviewIssueAction;
+import com.acr.review.domain.ReviewIssueBatchRequest;
+import com.acr.review.domain.ReviewIssueBatchResult;
 import com.acr.review.domain.ReviewIssueConstants;
 import com.acr.review.domain.ReviewIssueDetail;
 import com.acr.review.domain.ReviewPipelineConstants;
@@ -453,6 +463,168 @@ class ReviewIssueServiceImplTest
     }
 
     @Test
+    void batchConfirmAllAwaitingConfirmTransitionsAndRerendersOnce()
+    {
+        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class))
+        {
+            security.when(() -> SecurityUtils.hasPermi(any())).thenReturn(true);
+            ReviewIssue a = openIssue(21L, "SEC", "a.java", "one");
+            ReviewIssue b = openIssue(22L, "SEC", "b.java", "two");
+            stubProjectScope(a);
+            stubProjectScope(b);
+            when(issueMapper.selectIssueById(21L)).thenReturn(a);
+            when(issueMapper.selectIssueById(22L)).thenReturn(b);
+            when(deliveryService.rerenderSummaryComment(10L, 8))
+                .thenReturn(ReviewCommentSyncResult.of(ReviewDeliveryConstants.STATUS_SUCCESS, null, 1L));
+
+            ReviewIssueBatchRequest req = batchRequest(ReviewIssueConstants.ACTION_CONFIRM, List.of(21L, 22L));
+            ReviewIssueBatchResult result = service.batchDispose(req);
+
+            assertFalse(result.hasFailures());
+            assertEquals(2, result.getSuccessCount());
+            assertEquals(ReviewIssueConstants.STATUS_AWAITING_FIX, a.getStatus());
+            assertEquals(ReviewIssueConstants.STATUS_AWAITING_FIX, b.getStatus());
+            verify(issueMapper, times(2)).updateIssueDisposition(any());
+            verify(deliveryService, times(1)).rerenderSummaryComment(10L, 8);
+            assertEquals(ReviewDeliveryConstants.STATUS_SUCCESS, result.getCommentSync().getStatus());
+        }
+    }
+
+    @Test
+    void batchRejectsWhenPreconditionFailsWithoutUpdating()
+    {
+        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class))
+        {
+            security.when(() -> SecurityUtils.hasPermi(any())).thenReturn(true);
+            ReviewIssue ok = openIssue(31L, "SEC", "a.java", "ok");
+            ReviewIssue closed = openIssue(32L, "SEC", "b.java", "done");
+            closed.setStatus(ReviewIssueConstants.STATUS_CLOSED);
+            stubProjectScope(ok);
+            stubProjectScope(closed);
+            when(issueMapper.selectIssueById(31L)).thenReturn(ok);
+            when(issueMapper.selectIssueById(32L)).thenReturn(closed);
+
+            ReviewIssueBatchResult result = service.batchDispose(
+                batchRequest(ReviewIssueConstants.ACTION_CONFIRM, List.of(31L, 32L)));
+
+            assertTrue(result.hasFailures());
+            assertEquals(1, result.getFailures().size());
+            assertEquals(32L, result.getFailures().get(0).get("issueId"));
+            verify(issueMapper, never()).updateIssueDisposition(any());
+            verify(deliveryService, never()).rerenderSummaryComment(anyLong(), any());
+        }
+    }
+
+    @Test
+    void batchRejectsWhenDeptOutOfScope()
+    {
+        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class))
+        {
+            security.when(() -> SecurityUtils.hasPermi(any())).thenReturn(true);
+            ReviewIssue a = openIssue(41L, "SEC", "a.java", "in-scope");
+            ReviewIssue b = openIssue(42L, "SEC", "b.java", "out-of-scope");
+            b.setProjectId(99L);
+            stubProjectScope(a);
+            ReviewProject out = new ReviewProject();
+            out.setProjectId(99L);
+            out.setDeptId(9L);
+            when(projectMapper.selectReviewProjectById(99L)).thenReturn(out);
+            when(issueMapper.selectIssueById(41L)).thenReturn(a);
+            when(issueMapper.selectIssueById(42L)).thenReturn(b);
+            lenient().doNothing().when(deptService).checkDeptDataScope(1L);
+            doThrow(new ServiceException("没有权限访问部门数据！")).when(deptService).checkDeptDataScope(9L);
+
+            ReviewIssueBatchResult result = service.batchDispose(
+                batchRequest(ReviewIssueConstants.ACTION_CONFIRM, List.of(41L, 42L)));
+
+            assertTrue(result.hasFailures());
+            assertEquals(42L, result.getFailures().get(0).get("issueId"));
+            verify(deptService).checkDeptDataScope(9L);
+            verify(issueMapper, never()).updateIssueDisposition(any());
+        }
+    }
+
+    @Test
+    void batchCloseMixedStatusesUsesCorrectCloseSource()
+    {
+        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class))
+        {
+            security.when(() -> SecurityUtils.hasPermi(any())).thenReturn(true);
+            ReviewIssue fix = openIssue(51L, "SEC", "a.java", "fix");
+            fix.setStatus(ReviewIssueConstants.STATUS_AWAITING_FIX);
+            ReviewIssue recheck = openIssue(52L, "SEC", "b.java", "recheck");
+            recheck.setStatus(ReviewIssueConstants.STATUS_RECHECKING);
+            stubProjectScope(fix);
+            stubProjectScope(recheck);
+            when(issueMapper.selectIssueById(51L)).thenReturn(fix);
+            when(issueMapper.selectIssueById(52L)).thenReturn(recheck);
+            when(deliveryService.rerenderSummaryComment(10L, 8))
+                .thenReturn(ReviewCommentSyncResult.of(ReviewDeliveryConstants.STATUS_SUCCESS, null, 1L));
+
+            ReviewIssueBatchResult result = service.batchDispose(
+                batchRequest(ReviewIssueConstants.ACTION_CLOSE, List.of(51L, 52L)));
+
+            assertFalse(result.hasFailures());
+            assertEquals(2, result.getSuccessCount());
+            ArgumentCaptor<ReviewIssue> captor = ArgumentCaptor.forClass(ReviewIssue.class);
+            verify(issueMapper, times(2)).updateIssueDisposition(captor.capture());
+            List<ReviewIssue> updated = captor.getAllValues();
+            assertEquals(ReviewIssueConstants.CLOSE_SOURCE_MANUAL, updated.get(0).getCloseSource());
+            assertEquals(ReviewIssueConstants.CLOSE_SOURCE_AUTO_RECHECK, updated.get(1).getCloseSource());
+        }
+    }
+
+    @Test
+    void batchDismissRequiresNoteAndRejectsRechecking()
+    {
+        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class))
+        {
+            security.when(() -> SecurityUtils.hasPermi(any())).thenReturn(true);
+            ReviewIssueBatchRequest missingNote = batchRequest(ReviewIssueConstants.ACTION_DISMISS, List.of(61L));
+            missingNote.setDismissType(ReviewIssueConstants.STATUS_IGNORED);
+            assertThrows(ServiceException.class, () -> service.batchDispose(missingNote));
+
+            ReviewIssue recheck = openIssue(62L, "SEC", "b.java", "recheck");
+            recheck.setStatus(ReviewIssueConstants.STATUS_RECHECKING);
+            stubProjectScope(recheck);
+            when(issueMapper.selectIssueById(62L)).thenReturn(recheck);
+            ReviewIssueBatchRequest withRecheck = batchRequest(ReviewIssueConstants.ACTION_DISMISS, List.of(62L));
+            withRecheck.setDismissType(ReviewIssueConstants.STATUS_IGNORED);
+            withRecheck.setResolveNote("批量忽略");
+            ReviewIssueBatchResult result = service.batchDispose(withRecheck);
+            assertTrue(result.hasFailures());
+            assertEquals(62L, result.getFailures().get(0).get("issueId"));
+            verify(issueMapper, never()).updateIssueDisposition(any());
+        }
+    }
+
+    @Test
+    void batchRejectsEmptyOrOverLimitIssueIds()
+    {
+        assertThrows(ServiceException.class, () ->
+            service.batchDispose(batchRequest(ReviewIssueConstants.ACTION_CONFIRM, List.of())));
+        assertThrows(ServiceException.class, () ->
+            service.batchDispose(batchRequest(ReviewIssueConstants.ACTION_CONFIRM, null)));
+
+        List<Long> tooMany = LongStream.rangeClosed(1, 201).boxed().collect(Collectors.toList());
+        assertThrows(ServiceException.class, () ->
+            service.batchDispose(batchRequest(ReviewIssueConstants.ACTION_CONFIRM, tooMany)));
+    }
+
+    @Test
+    void batchCloseRejectedWithoutClosePermission()
+    {
+        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class))
+        {
+            security.when(() -> SecurityUtils.hasPermi("review:issue:close")).thenReturn(false);
+
+            assertThrows(ServiceException.class, () ->
+                service.batchDispose(batchRequest(ReviewIssueConstants.ACTION_CLOSE, List.of(71L))));
+            verify(issueMapper, never()).updateIssueDisposition(any());
+        }
+    }
+
+    @Test
     void pr3RegressionPrototypeThreeRounds()
     {
         // round1: 物化 3 条
@@ -510,6 +682,14 @@ class ReviewIssueServiceImplTest
         assertEquals(ReviewIssueConstants.STATUS_AWAITING_FIX, round3.getReopened().get(0).getStatus());
         assertEquals("sql-injection", round3.getReopened().get(0).getTitle());
         assertEquals(2, ledger.stream().filter(i -> ReviewIssueConstants.STATUS_RECHECKING.equals(i.getStatus())).count());
+    }
+
+    private static ReviewIssueBatchRequest batchRequest(String action, List<Long> issueIds)
+    {
+        ReviewIssueBatchRequest req = new ReviewIssueBatchRequest();
+        req.setAction(action);
+        req.setIssueIds(issueIds);
+        return req;
     }
 
     private void stubProjectScope(ReviewIssue issue)

@@ -4,7 +4,10 @@ import java.util.List;
 import java.util.Map;
 import com.acr.review.domain.ReviewCommentSyncResult;
 import com.acr.review.domain.ReviewIssue;
+import com.acr.review.domain.ReviewIssueBatchRequest;
+import com.acr.review.domain.ReviewIssueBatchResult;
 import com.acr.review.domain.ReviewIssueDetail;
+import com.acr.review.domain.ReviewIssueStats;
 import com.acr.review.domain.ReviewRoundReconcileResult;
 import com.acr.review.domain.ReviewTask;
 import com.acr.review.domain.ReviewTaskRun;
@@ -36,6 +39,12 @@ public interface IReviewIssueService
     ReviewCommentSyncResult reopen(Long issueId);
 
     /**
+     * 批量处置：事务内全有或全无预校验，通过后写状态与 action；
+     * 评论重渲染按 projectId+prNumber 去重。
+     */
+    ReviewIssueBatchResult batchDispose(ReviewIssueBatchRequest request);
+
+    /**
      * 当前 PR 下 RECHECKING 问题标题列表（处置重渲染 / 人工重试派生「疑似已修复」段）。
      * 顺序与 selectByProjectAndPr 一致。
      */
@@ -60,4 +69,7 @@ public interface IReviewIssueService
 
     /** 今日关闭问题数（CLOSED + CURDATE）；query 仅承载 DataScope。 */
     int countClosedToday(ReviewIssue query);
+
+    /** 状态总览五计数；query 仅承载 DataScope。 */
+    ReviewIssueStats selectIssueStats(ReviewIssue query);
 }

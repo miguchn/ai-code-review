@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -16,12 +18,16 @@ import com.acr.common.annotation.DataScope;
 import com.acr.common.exception.ServiceException;
 import com.acr.common.utils.SecurityUtils;
 import com.acr.common.utils.StringUtils;
+import com.acr.review.delivery.ReviewDeliveryConstants;
 import com.acr.review.delivery.ReviewSummaryContentFactory;
 import com.acr.review.domain.ReviewCommentSyncResult;
 import com.acr.review.domain.ReviewIssue;
 import com.acr.review.domain.ReviewIssueAction;
+import com.acr.review.domain.ReviewIssueBatchRequest;
+import com.acr.review.domain.ReviewIssueBatchResult;
 import com.acr.review.domain.ReviewIssueConstants;
 import com.acr.review.domain.ReviewIssueDetail;
+import com.acr.review.domain.ReviewIssueStats;
 import com.acr.review.domain.ReviewPipelineConstants;
 import com.acr.review.domain.ReviewProject;
 import com.acr.review.domain.ReviewRoundReconcileResult;
@@ -46,6 +52,9 @@ import com.alibaba.fastjson2.JSON;
 public class ReviewIssueServiceImpl implements IReviewIssueService
 {
     private static final Logger log = LoggerFactory.getLogger(ReviewIssueServiceImpl.class);
+
+    /** 批量处置单次上限。 */
+    private static final int MAX_BATCH_SIZE = 200;
 
     private final ReviewIssueMapper issueMapper;
     private final ReviewIssueActionMapper actionMapper;
@@ -398,6 +407,108 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ReviewIssueBatchResult batchDispose(ReviewIssueBatchRequest request)
+    {
+        if (request == null)
+        {
+            throw new ServiceException("批量处置参数不能为空");
+        }
+        String action = request.getAction() == null ? null : request.getAction().trim();
+        if (!ReviewIssueConstants.ACTION_CONFIRM.equals(action)
+            && !ReviewIssueConstants.ACTION_CLOSE.equals(action)
+            && !ReviewIssueConstants.ACTION_DISMISS.equals(action))
+        {
+            throw new ServiceException("action 仅接受 CONFIRM / CLOSE / DISMISS");
+        }
+        List<Long> issueIds = dedupeIssueIds(request.getIssueIds());
+        if (issueIds.isEmpty())
+        {
+            throw new ServiceException("issueIds 不能为空");
+        }
+        if (issueIds.size() > MAX_BATCH_SIZE)
+        {
+            throw new ServiceException("单次批量处置最多 " + MAX_BATCH_SIZE + " 条");
+        }
+        String requiredPermi = ReviewIssueConstants.ACTION_CONFIRM.equals(action)
+            ? "review:issue:confirm"
+            : "review:issue:close";
+        if (!SecurityUtils.hasPermi(requiredPermi))
+        {
+            throw new ServiceException("没有权限，请联系管理员授权");
+        }
+
+        String dismissType = null;
+        String note = null;
+        if (ReviewIssueConstants.ACTION_CLOSE.equals(action))
+        {
+            note = normalizeNote(request.getResolveNote(), false);
+        }
+        else if (ReviewIssueConstants.ACTION_DISMISS.equals(action))
+        {
+            dismissType = request.getDismissType();
+            if (!ReviewIssueConstants.STATUS_IGNORED.equals(dismissType)
+                && !ReviewIssueConstants.STATUS_FALSE_POSITIVE.equals(dismissType))
+            {
+                throw new ServiceException("dismissType 必须为 IGNORED 或 FALSE_POSITIVE");
+            }
+            note = normalizeNote(request.getResolveNote(), true);
+        }
+
+        List<Map<String, Object>> failures = new ArrayList<>();
+        List<ReviewIssue> ready = new ArrayList<>();
+        for (Long issueId : issueIds)
+        {
+            ReviewIssue issue = null;
+            try
+            {
+                issue = requireIssue(issueId);
+                checkIssueDataScope(issue);
+                String reason = batchPreconditionFailure(issue, action);
+                if (reason != null)
+                {
+                    failures.add(batchFailure(issueId, issue.getTitle(), reason));
+                    continue;
+                }
+                ready.add(issue);
+            }
+            catch (ServiceException ex)
+            {
+                failures.add(batchFailure(issueId, issue == null ? null : issue.getTitle(), ex.getMessage()));
+            }
+        }
+        if (!failures.isEmpty())
+        {
+            return ReviewIssueBatchResult.rejected(failures);
+        }
+
+        for (ReviewIssue issue : ready)
+        {
+            if (ReviewIssueConstants.ACTION_CONFIRM.equals(action))
+            {
+                transition(issue, ReviewIssueConstants.ACTION_CONFIRM,
+                    ReviewIssueConstants.STATUS_AWAITING_FIX, null, null);
+            }
+            else if (ReviewIssueConstants.ACTION_CLOSE.equals(action))
+            {
+                String closeSource = ReviewIssueConstants.STATUS_RECHECKING.equals(issue.getStatus())
+                    ? ReviewIssueConstants.CLOSE_SOURCE_AUTO_RECHECK
+                    : ReviewIssueConstants.CLOSE_SOURCE_MANUAL;
+                transition(issue, ReviewIssueConstants.ACTION_CLOSE,
+                    ReviewIssueConstants.STATUS_CLOSED, note, closeSource);
+            }
+            else
+            {
+                transition(issue, ReviewIssueConstants.ACTION_DISMISS, dismissType, note,
+                    ReviewIssueConstants.CLOSE_SOURCE_MANUAL);
+            }
+        }
+
+        ReviewCommentSyncResult sync = aggregateCommentRerender(ready);
+        return ReviewIssueBatchResult.success(ready.size(), sync);
+    }
+
+    @Override
     public List<String> listRecheckingTitles(Long projectId, Integer prNumber)
     {
         if (projectId == null || prNumber == null)
@@ -496,6 +607,19 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
         return issueMapper.countClosedToday(query);
     }
 
+    @Override
+    @DataScope(deptAlias = "d", userAlias = "owner", permission = "review:issue:list")
+    public ReviewIssueStats selectIssueStats(ReviewIssue query)
+    {
+        ReviewIssueStats stats = issueMapper.selectIssueStats(query == null ? new ReviewIssue() : query);
+        if (stats == null)
+        {
+            stats = new ReviewIssueStats();
+        }
+        stats.setPending(stats.getAwaitingConfirm() + stats.getRechecking());
+        return stats;
+    }
+
     private void transition(ReviewIssue issue, String actionType, String toStatus,
                             String resolveNote, String closeSource)
     {
@@ -565,6 +689,120 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
     {
         // 处置已在本事务写入；评论失败由 delivery 内部落 FAILED 并返回，不回滚处置。
         return deliveryService.rerenderSummaryComment(issue.getProjectId(), issue.getPrNumber());
+    }
+
+    /**
+     * 按 projectId+prNumber 去重后重渲染；任一 FAILED → FAILED，全部 SKIPPED → SKIPPED，否则 SUCCESS。
+     */
+    private ReviewCommentSyncResult aggregateCommentRerender(List<ReviewIssue> issues)
+    {
+        Set<String> seen = new LinkedHashSet<>();
+        List<ReviewCommentSyncResult> results = new ArrayList<>();
+        List<String> failureParts = new ArrayList<>();
+        for (ReviewIssue issue : issues)
+        {
+            if (issue.getProjectId() == null || issue.getPrNumber() == null)
+            {
+                continue;
+            }
+            String key = issue.getProjectId() + ":" + issue.getPrNumber();
+            if (!seen.add(key))
+            {
+                continue;
+            }
+            ReviewCommentSyncResult sync = deliveryService.rerenderSummaryComment(
+                issue.getProjectId(), issue.getPrNumber());
+            if (sync == null)
+            {
+                sync = ReviewCommentSyncResult.skipped();
+            }
+            results.add(sync);
+            if (ReviewDeliveryConstants.STATUS_FAILED.equals(sync.getStatus()))
+            {
+                String msg = sync.getFailureMessage() == null ? "未知原因" : sync.getFailureMessage();
+                failureParts.add("PR #" + issue.getPrNumber() + ": " + msg);
+            }
+        }
+        if (results.isEmpty())
+        {
+            return ReviewCommentSyncResult.skipped();
+        }
+        if (!failureParts.isEmpty())
+        {
+            return ReviewCommentSyncResult.of(ReviewDeliveryConstants.STATUS_FAILED,
+                String.join("；", failureParts), null);
+        }
+        boolean allSkipped = true;
+        for (ReviewCommentSyncResult sync : results)
+        {
+            if (!ReviewDeliveryConstants.STATUS_SKIPPED.equals(sync.getStatus()))
+            {
+                allSkipped = false;
+                break;
+            }
+        }
+        if (allSkipped)
+        {
+            return ReviewCommentSyncResult.skipped();
+        }
+        return ReviewCommentSyncResult.of(ReviewDeliveryConstants.STATUS_SUCCESS, null, null);
+    }
+
+    private static List<Long> dedupeIssueIds(List<Long> issueIds)
+    {
+        if (issueIds == null || issueIds.isEmpty())
+        {
+            return List.of();
+        }
+        LinkedHashSet<Long> unique = new LinkedHashSet<>();
+        for (Long id : issueIds)
+        {
+            if (id != null)
+            {
+                unique.add(id);
+            }
+        }
+        return new ArrayList<>(unique);
+    }
+
+    /** @return 不满足前置态时的原因；满足返回 null */
+    private static String batchPreconditionFailure(ReviewIssue issue, String action)
+    {
+        if (ReviewIssueConstants.ACTION_CONFIRM.equals(action))
+        {
+            if (!ReviewIssueConstants.STATUS_AWAITING_CONFIRM.equals(issue.getStatus()))
+            {
+                return terminalOrIllegalMessage(issue.getStatus(), "确认");
+            }
+            return null;
+        }
+        if (ReviewIssueConstants.ACTION_CLOSE.equals(action))
+        {
+            if (!ReviewIssueConstants.isOpen(issue.getStatus()))
+            {
+                return terminalOrIllegalMessage(issue.getStatus(), "关闭");
+            }
+            return null;
+        }
+        // DISMISS：与单条一致，不含 RECHECKING
+        if (ReviewIssueConstants.STATUS_RECHECKING.equals(issue.getStatus()))
+        {
+            return "待复核问题不可忽略/误报，请确认已修复或重新打开";
+        }
+        if (!ReviewIssueConstants.isConfirmable(issue.getStatus()))
+        {
+            return terminalOrIllegalMessage(issue.getStatus(), "忽略/误报");
+        }
+        return null;
+    }
+
+    private static Map<String, Object> batchFailure(Long issueId, String title, String reason)
+    {
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("issueId", issueId);
+        item.put("title", title);
+        item.put("reason", reason);
+        return item;
     }
 
     private ReviewIssue requireIssue(Long issueId)
