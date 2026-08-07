@@ -29,6 +29,11 @@ public class ReviewPromptComposer
 
     public String composeFinalPrompt(String templateBody, String renderedContextBody)
     {
+        return composeFinalPrompt(templateBody, renderedContextBody, false);
+    }
+
+    public String composeFinalPrompt(String templateBody, String renderedContextBody, boolean pushReview)
+    {
         String focus = stripConflictingOutputInstructions(templateBody);
         String context = renderedContextBody == null ? "" : renderedContextBody.trim();
         StringBuilder builder = new StringBuilder();
@@ -40,7 +45,7 @@ public class ReviewPromptComposer
         {
             builder.append(context).append("\n\n");
         }
-        builder.append(ReviewScoringConstants.protocolAppendix());
+        builder.append(ReviewScoringConstants.protocolAppendix(pushReview));
         return builder.toString().trim();
     }
 
@@ -49,8 +54,14 @@ public class ReviewPromptComposer
      */
     public String composeFromSnapshotTemplate(String snapshotTemplateContent, String renderedWithPlaceholders)
     {
+        return composeFromSnapshotTemplate(snapshotTemplateContent, renderedWithPlaceholders, false);
+    }
+
+    public String composeFromSnapshotTemplate(String snapshotTemplateContent, String renderedWithPlaceholders,
+                                              boolean pushReview)
+    {
         String strippedRendered = stripConflictingOutputInstructions(renderedWithPlaceholders);
-        String appendix = ReviewScoringConstants.protocolAppendix();
+        String appendix = ReviewScoringConstants.protocolAppendix(pushReview);
         if (strippedRendered.contains("平台公共评分标准与输出协议"))
         {
             return strippedRendered.trim();
@@ -64,6 +75,12 @@ public class ReviewPromptComposer
      */
     public String composeWithScope(String renderedWithPlaceholders, boolean scopeApplied, boolean hasFullContent)
     {
+        return composeWithScope(renderedWithPlaceholders, scopeApplied, hasFullContent, false);
+    }
+
+    public String composeWithScope(String renderedWithPlaceholders, boolean scopeApplied, boolean hasFullContent,
+                                   boolean pushReview)
+    {
         String strippedRendered = stripConflictingOutputInstructions(renderedWithPlaceholders);
         if (strippedRendered.contains("平台公共评分标准与输出协议"))
         {
@@ -71,6 +88,6 @@ public class ReviewPromptComposer
         }
         return (strippedRendered.trim()
             + "\n\n" + ReviewScoringConstants.scopeInstructionBlock(scopeApplied, hasFullContent)
-            + "\n\n" + ReviewScoringConstants.protocolAppendix()).trim();
+            + "\n\n" + ReviewScoringConstants.protocolAppendix(pushReview)).trim();
     }
 }

@@ -1,10 +1,12 @@
 package com.acr.review.git.github;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import javax.crypto.Mac;
@@ -247,6 +249,60 @@ class GitHubWebhookAdapterTest
         assertNull(adapter.parsePushEvent("push", "d-1",
             "{\"ref\":\"refs/tags/v1.0\",\"before\":\"aaa\",\"after\":\"bbb\",\"repository\":{\"name\":\"r\",\"owner\":{\"login\":\"o\"}}}"
                 .getBytes(StandardCharsets.UTF_8)));
+    }
+
+    @Test
+    void unwrapPayloadDecodesFormEncodedBody()
+    {
+        byte[] json = PUSH_PAYLOAD.getBytes(StandardCharsets.UTF_8);
+        byte[] form = ("payload=" + URLEncoder.encode(PUSH_PAYLOAD, StandardCharsets.UTF_8))
+            .getBytes(StandardCharsets.UTF_8);
+
+        byte[] unwrapped = adapter.unwrapPayload(form);
+
+        assertArrayEquals(json, unwrapped);
+    }
+
+    @Test
+    void unwrapPayloadReturnsJsonBytesUnchanged()
+    {
+        byte[] json = PUSH_PAYLOAD.getBytes(StandardCharsets.UTF_8);
+
+        assertArrayEquals(json, adapter.unwrapPayload(json));
+        assertArrayEquals(PR_PAYLOAD.getBytes(StandardCharsets.UTF_8),
+            adapter.unwrapPayload(PR_PAYLOAD.getBytes(StandardCharsets.UTF_8)));
+    }
+
+    @Test
+    void unwrapPayloadReturnsEmptyOrMalformedAsIs()
+    {
+        assertNull(adapter.unwrapPayload(null));
+        assertArrayEquals(new byte[0], adapter.unwrapPayload(new byte[0]));
+
+        byte[] emptyParam = "payload=".getBytes(StandardCharsets.UTF_8);
+        assertArrayEquals(emptyParam, adapter.unwrapPayload(emptyParam));
+
+        byte[] malformed = "payload=%E0%A4%A".getBytes(StandardCharsets.UTF_8);
+        assertArrayEquals(malformed, adapter.unwrapPayload(malformed));
+
+        byte[] notForm = "not-form".getBytes(StandardCharsets.UTF_8);
+        assertArrayEquals(notForm, adapter.unwrapPayload(notForm));
+    }
+
+    @Test
+    void parsesPushEventFromFormEncodedPayloadAfterUnwrap()
+    {
+        byte[] form = ("payload=" + URLEncoder.encode(PUSH_PAYLOAD, StandardCharsets.UTF_8))
+            .getBytes(StandardCharsets.UTF_8);
+        byte[] json = adapter.unwrapPayload(form);
+
+        GitPushEvent event = adapter.parsePushEvent("push", "delivery-form-1", json);
+
+        assertNotNull(event);
+        assertEquals("main", event.branch());
+        assertEquals("miguchn/demo-repo", event.repositoryFullPath());
+        assertEquals("alice", event.pusher());
+        assertEquals(2, event.commitCount());
     }
 
     private static WebhookRequestHeaders headers(String name, String value)

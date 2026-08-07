@@ -1,5 +1,6 @@
 package com.acr.review.git.github;
 
+import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
@@ -58,6 +59,50 @@ public class GitHubWebhookAdapter implements GitWebhookAdapter
     {
         String signatureHeader = headers == null ? null : headers.get(HEADER_SIGNATURE);
         return verifySignature(secret, payload, signatureHeader);
+    }
+
+    /**
+     * GitHub 对 push/ping 等事件可能发送 {@code application/x-www-form-urlencoded}
+     *（body 为 {@code payload=<URL编码JSON>}）。仅当整体以 {@code payload=} 开头时解包；
+     * 纯 JSON（以 '{' 开头）原样返回。验签仍使用原始请求字节。
+     */
+    @Override
+    public byte[] unwrapPayload(byte[] payload)
+    {
+        if (payload == null || payload.length == 0)
+        {
+            return payload;
+        }
+        // 纯 JSON 字节流必须原样返回；仅整体系 form（以 payload= 开头）才解包。
+        if (payload[0] != 'p')
+        {
+            return payload;
+        }
+        String body = new String(payload, StandardCharsets.UTF_8);
+        if (!body.startsWith("payload="))
+        {
+            return payload;
+        }
+        try
+        {
+            int valueStart = "payload=".length();
+            int amp = body.indexOf('&', valueStart);
+            String encoded = amp < 0 ? body.substring(valueStart) : body.substring(valueStart, amp);
+            if (encoded.isEmpty())
+            {
+                return payload;
+            }
+            String decoded = URLDecoder.decode(encoded, StandardCharsets.UTF_8);
+            if (decoded == null || decoded.isEmpty())
+            {
+                return payload;
+            }
+            return decoded.getBytes(StandardCharsets.UTF_8);
+        }
+        catch (RuntimeException ex)
+        {
+            return payload;
+        }
     }
 
     @Override
