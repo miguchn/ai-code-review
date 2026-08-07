@@ -374,10 +374,19 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
                 throw new ServiceException("项目连接测试成功后才能启用");
             }
             credentialService.getPlainToken(project.getCredentialId(), true);
+            if (!"0".equals(project.getPrReviewEnabled()) && !"0".equals(project.getPushReviewEnabled()))
+            {
+                throw new ServiceException("请至少选择一种审查类型");
+            }
             if ("0".equals(project.getPrReviewEnabled())
                 && (project.getPrTargetBranches() == null || project.getPrTargetBranches().isBlank()))
             {
                 throw new ServiceException("启用 PR 审查的项目必须配置目标分支");
+            }
+            if ("0".equals(project.getPushReviewEnabled())
+                && (project.getPushTriggerBranches() == null || project.getPushTriggerBranches().isBlank()))
+            {
+                throw new ServiceException("启用推送审查的项目必须配置触发分支");
             }
         }
         return projectMapper.updateProjectStatus(projectId, status, SecurityUtils.getUsername());
@@ -456,7 +465,26 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
         {
             project.setPrReviewEnabled("0");
         }
+        if (!"0".equals(project.getPushReviewEnabled()) && !"1".equals(project.getPushReviewEnabled()))
+        {
+            project.setPushReviewEnabled("1");
+        }
+        if (!"0".equals(project.getPrReviewEnabled()) && !"0".equals(project.getPushReviewEnabled()))
+        {
+            throw new ServiceException("请至少选择一种审查类型");
+        }
         project.setPrTargetBranches(normalizeTargetBranches(project.getPrTargetBranches()));
+        project.setPushTriggerBranches(normalizePushTriggerBranches(project.getPushTriggerBranches()));
+        if ("0".equals(project.getPushReviewEnabled())
+            && (project.getPushTriggerBranches() == null || project.getPushTriggerBranches().isBlank()))
+        {
+            throw new ServiceException("启用推送审查时必须配置触发分支");
+        }
+        if ("0".equals(project.getPrReviewEnabled())
+            && (project.getPrTargetBranches() == null || project.getPrTargetBranches().isBlank()))
+        {
+            throw new ServiceException("启用合并请求审查时必须配置目标分支");
+        }
 
         if (projectMapper.selectByFullPath(provider, repository.fullPath(), excludeProjectId) != null)
         {
@@ -730,6 +758,21 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
         {
             throw new ServiceException("PR 目标分支不支持通配规则，请从实际分支中选择");
         }
+        return values.isEmpty() ? null : String.join(",", values);
+    }
+
+    /** 推送触发分支：允许 glob 通配，逗号/中文逗号/换行分隔。 */
+    private String normalizePushTriggerBranches(String branches)
+    {
+        if (branches == null || branches.isBlank())
+        {
+            return null;
+        }
+        List<String> values = Arrays.stream(branches.replace('，', ',').replace('\n', ',').replace('\r', ',').split(","))
+            .map(String::trim)
+            .filter(value -> !value.isEmpty())
+            .distinct()
+            .collect(Collectors.toList());
         return values.isEmpty() ? null : String.join(",", values);
     }
 

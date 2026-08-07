@@ -205,10 +205,34 @@ export function mergeRequestLabel(provider) {
 
 /** 由平台、仓库坐标与合并请求编号生成 Web 链接。 */
 export function buildMergeRequestUrl(task) {
-  if (!task?.prNumber) return ''
+  if (!task?.prNumber || isPushTask(task)) return ''
   const base = resolveRepositoryBase(task)
   if (!base) return ''
   return `${base}${mergeRequestPathSegment(task.provider, task.prNumber)}`
+}
+
+/** push 审查任务：event_source=PUSH 或 pr_number 哨兵 0。 */
+export function isPushTask(task) {
+  if (!task) return false
+  if ((task.eventSource || '').toUpperCase() === 'PUSH') return true
+  return Number(task.prNumber) === 0
+}
+
+/** push 行 PR 列降级：分支名 @短 SHA。 */
+export function formatPushRefDisplay(task) {
+  if (!task) return '—'
+  const branch = task.targetBranch || task.refBranch || task.sourceBranch || '—'
+  const sha = shortSha(task.headSha)
+  return `${branch} @${sha}`
+}
+
+/** 列表/详情 PR 列：PR 编号或 push 分支引用。 */
+export function formatPrOrPushDisplay(task) {
+  if (!task) return '—'
+  if (isPushTask(task)) return formatPushRefDisplay(task)
+  const num = task.prNumber
+  if (num == null || num === '') return '—'
+  return `#${num}`
 }
 
 /** @deprecated 兼容别名，请使用 buildMergeRequestUrl。 */
@@ -401,4 +425,61 @@ export function scopeExpandStatusTagType(status) {
   if (status === 'FULL' || status === 'IN_DIFF') return 'success'
   if (status === 'DEGRADED') return 'warning'
   return 'info'
+}
+
+/**
+ * glob 是否匹配分支名（与后端 GlobPattern 对齐：
+ * `*` → 段内任意、`**` → 任意层级、`?` → 段内单字符）。
+ */
+export function globMatchesBranch(pattern, branch) {
+  if (!pattern || !branch) return false
+  if (pattern === branch) return true
+  if (!pattern.includes('*') && !pattern.includes('?')) return false
+  const normalizedPattern = String(pattern).trim().replace(/\\/g, '/').replace(/^\/+/, '')
+  const normalizedBranch = String(branch).trim().replace(/\\/g, '/').replace(/^\/+/, '')
+  let regex = '^'
+  for (let i = 0; i < normalizedPattern.length; ) {
+    const c = normalizedPattern[i]
+    if (c === '*') {
+      const doubleStar = i + 1 < normalizedPattern.length && normalizedPattern[i + 1] === '*'
+      if (doubleStar) {
+        const followedBySlash = i + 2 < normalizedPattern.length && normalizedPattern[i + 2] === '/'
+        if (followedBySlash) {
+          regex += '(?:.*/)?'
+          i += 3
+        } else {
+          regex += '.*'
+          i += 2
+        }
+      } else {
+        regex += '[^/]*'
+        i += 1
+      }
+    } else if (c === '?') {
+      regex += '[^/]'
+      i += 1
+    } else {
+      if ('.+^${}()|[]\\'.includes(c)) regex += '\\'
+      regex += c
+      i += 1
+    }
+  }
+  regex += '$'
+  return new RegExp(regex).test(normalizedBranch)
+}
+
+/** PR 目标分支与推送触发分支的交集（具体分支名列表）。 */
+export function findBranchIntersection(prTargets, pushTriggers) {
+  const prList = Array.isArray(prTargets) ? prTargets.filter(Boolean) : []
+  const pushList = Array.isArray(pushTriggers) ? pushTriggers.filter(Boolean) : []
+  if (!prList.length || !pushList.length) return []
+  const hits = new Set()
+  prList.forEach(branch => {
+    pushList.forEach(pattern => {
+      if (pattern === branch || globMatchesBranch(pattern, branch)) {
+        hits.add(branch)
+      }
+    })
+  })
+  return Array.from(hits)
 }

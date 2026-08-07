@@ -1,9 +1,11 @@
 package com.acr.review.service.impl;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.never;
@@ -15,9 +17,12 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.MockedStatic;
 import com.acr.common.core.domain.entity.SysDept;
 import com.acr.common.core.domain.entity.SysUser;
+import com.acr.common.exception.ServiceException;
 import com.acr.common.utils.SecurityUtils;
 import com.acr.review.domain.GitCredential;
 import com.acr.review.domain.GitRepositoryReadRequest;
+import com.acr.review.domain.ReviewPipelineConstants;
+import com.acr.review.domain.ReviewProject;
 import com.acr.review.domain.ReviewProjectOptions;
 import com.acr.review.domain.ReviewRepositoryInfo;
 import com.acr.review.git.GitAdapterRegistry;
@@ -30,6 +35,7 @@ import com.acr.review.mapper.ReviewProjectMapper;
 import com.acr.review.security.CredentialCryptoService;
 import com.acr.review.service.IGitCredentialService;
 import com.acr.review.service.IReviewTemplateService;
+import com.acr.system.domain.SysBusinessSystem;
 import com.acr.system.service.ISysAiModelConfigService;
 import com.acr.system.service.ISysBusinessSystemService;
 import com.acr.system.service.ISysConfigService;
@@ -161,6 +167,181 @@ class ReviewProjectServiceImplTest
             verify(deptService, never()).selectChildrenDeptById(any());
             verify(userService, never()).selectUserList(any(SysUser.class));
         }
+    }
+
+    @Test
+    void updateProjectStatusRejectsWhenNoReviewTypeEnabled()
+    {
+        ReviewProjectMapper projectMapper = mock(ReviewProjectMapper.class);
+        IGitCredentialService credentialService = mock(IGitCredentialService.class);
+        ReviewProject project = new ReviewProject();
+        project.setProjectId(1L);
+        project.setLastCheckStatus("SUCCESS");
+        project.setCredentialId(5L);
+        project.setPrReviewEnabled("1");
+        project.setPushReviewEnabled("1");
+        when(projectMapper.selectReviewProjectById(1L)).thenReturn(project);
+        when(credentialService.getPlainToken(5L, true)).thenReturn("token");
+        ReviewProjectServiceImpl service = newStatusService(projectMapper, credentialService);
+
+        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class))
+        {
+            security.when(SecurityUtils::isAdmin).thenReturn(true);
+            ServiceException ex = assertThrows(ServiceException.class,
+                () -> service.updateProjectStatus(1L, "0"));
+            assertTrue(ex.getMessage().contains("请至少选择一种审查类型"));
+        }
+    }
+
+    @Test
+    void updateProjectStatusRejectsPushEnabledWithoutTriggerBranches()
+    {
+        ReviewProjectMapper projectMapper = mock(ReviewProjectMapper.class);
+        IGitCredentialService credentialService = mock(IGitCredentialService.class);
+        ReviewProject project = new ReviewProject();
+        project.setProjectId(2L);
+        project.setLastCheckStatus("SUCCESS");
+        project.setCredentialId(5L);
+        project.setPrReviewEnabled("1");
+        project.setPushReviewEnabled("0");
+        project.setPushTriggerBranches(null);
+        when(projectMapper.selectReviewProjectById(2L)).thenReturn(project);
+        when(credentialService.getPlainToken(5L, true)).thenReturn("token");
+        ReviewProjectServiceImpl service = newStatusService(projectMapper, credentialService);
+
+        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class))
+        {
+            security.when(SecurityUtils::isAdmin).thenReturn(true);
+            ServiceException ex = assertThrows(ServiceException.class,
+                () -> service.updateProjectStatus(2L, "0"));
+            assertTrue(ex.getMessage().contains("触发分支"));
+        }
+    }
+
+    @Test
+    void insertNormalizesIllegalReviewTypeFlagsAndRejectsNoneSelected()
+    {
+        ReviewProjectMapper projectMapper = mock(ReviewProjectMapper.class);
+        GitCredentialMapper credentialMapper = mock(GitCredentialMapper.class);
+        IGitCredentialService credentialService = mock(IGitCredentialService.class);
+        GitProvider gitProvider = mock(GitProvider.class);
+        GitAdapterRegistry adapterRegistry = mock(GitAdapterRegistry.class);
+        ISysBusinessSystemService businessSystemService = mock(ISysBusinessSystemService.class);
+        ISysDeptService deptService = mock(ISysDeptService.class);
+        ISysUserService userService = mock(ISysUserService.class);
+        GitRepositoryCoordinates repository = new GitRepositoryCoordinates(
+            "owner", "repo", "owner/repo", "https://github.com/owner/repo");
+
+        GitCredential credential = new GitCredential();
+        credential.setCredentialId(1L);
+        credential.setProvider("GITHUB");
+        credential.setStatus("0");
+        when(credentialMapper.selectGitCredentialById(1L)).thenReturn(credential);
+        when(adapterRegistry.requireProvider("GITHUB")).thenReturn(gitProvider);
+        when(gitProvider.parseRepository(eq("https://github.com/owner/repo"), any())).thenReturn(repository);
+        when(projectMapper.selectByFullPath(any(), any(), isNull())).thenReturn(null);
+        when(projectMapper.selectByRepository(any(), any(), any(), isNull())).thenReturn(null);
+
+        ReviewProjectServiceImpl service = new ReviewProjectServiceImpl(projectMapper, credentialMapper,
+            mock(ReviewNotifyChannelMapper.class), credentialService, adapterRegistry, businessSystemService,
+            mock(ISysConfigService.class), deptService, userService, mock(ISysAiModelConfigService.class),
+            mock(IReviewTemplateService.class), mock(CredentialCryptoService.class), "http://localhost:8080");
+
+        ReviewProject noneSelected = baseInsertProject();
+        noneSelected.setPrReviewEnabled("1");
+        noneSelected.setPushReviewEnabled("1");
+
+        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class))
+        {
+            security.when(SecurityUtils::getUsername).thenReturn("admin");
+            ServiceException ex = assertThrows(ServiceException.class,
+                () -> service.insertReviewProject(noneSelected));
+            assertTrue(ex.getMessage().contains("请至少选择一种审查类型"));
+        }
+
+        // 非法开关值：PR 归一为启用、推送归一为停用
+        ReviewProject illegal = baseInsertProject();
+        illegal.setPrReviewEnabled("x");
+        illegal.setPushReviewEnabled("y");
+        illegal.setPrTargetBranches("main");
+        SysBusinessSystem system = new SysBusinessSystem();
+        system.setSystemId(9L);
+        system.setDeptId(100L);
+        system.setStatus("0");
+        when(businessSystemService.selectSysBusinessSystemById(9L)).thenReturn(system);
+        SysUser owner = user(11L, 100L, "张三");
+        when(userService.selectUserById(11L)).thenReturn(owner);
+        when(credentialService.getPlainToken(1L, true)).thenReturn("token");
+        when(gitProvider.readRepository(any(), any())).thenReturn(
+            GitRepositoryInfoResult.success(repository, repository.canonicalUrl(), "main", List.of("main", "dev")));
+        when(projectMapper.insertReviewProject(any())).thenReturn(1);
+
+        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class))
+        {
+            security.when(SecurityUtils::getUsername).thenReturn("admin");
+            security.when(SecurityUtils::isAdmin).thenReturn(true);
+            service.insertReviewProject(illegal);
+            assertEquals("0", illegal.getPrReviewEnabled());
+            assertEquals("1", illegal.getPushReviewEnabled());
+        }
+    }
+
+    @Test
+    void insertRejectsPushEnabledWithoutTriggerBranches()
+    {
+        ReviewProjectMapper projectMapper = mock(ReviewProjectMapper.class);
+        GitCredentialMapper credentialMapper = mock(GitCredentialMapper.class);
+        GitProvider gitProvider = mock(GitProvider.class);
+        GitAdapterRegistry adapterRegistry = mock(GitAdapterRegistry.class);
+        GitRepositoryCoordinates repository = new GitRepositoryCoordinates(
+            "owner", "repo", "owner/repo", "https://github.com/owner/repo");
+        GitCredential credential = new GitCredential();
+        credential.setCredentialId(1L);
+        credential.setProvider("GITHUB");
+        credential.setStatus("0");
+        when(credentialMapper.selectGitCredentialById(1L)).thenReturn(credential);
+        when(adapterRegistry.requireProvider("GITHUB")).thenReturn(gitProvider);
+        when(gitProvider.parseRepository(eq("https://github.com/owner/repo"), any())).thenReturn(repository);
+
+        ReviewProjectServiceImpl service = new ReviewProjectServiceImpl(projectMapper, credentialMapper,
+            mock(ReviewNotifyChannelMapper.class), mock(IGitCredentialService.class), adapterRegistry,
+            mock(ISysBusinessSystemService.class), mock(ISysConfigService.class), mock(ISysDeptService.class),
+            mock(ISysUserService.class), mock(ISysAiModelConfigService.class),
+            mock(IReviewTemplateService.class), mock(CredentialCryptoService.class), "http://localhost:8080");
+
+        ReviewProject project = baseInsertProject();
+        project.setPrReviewEnabled("1");
+        project.setPushReviewEnabled("0");
+        project.setPushTriggerBranches("");
+
+        ServiceException ex = assertThrows(ServiceException.class, () -> service.insertReviewProject(project));
+        assertTrue(ex.getMessage().contains("触发分支"));
+    }
+
+    private static ReviewProject baseInsertProject()
+    {
+        ReviewProject project = new ReviewProject();
+        project.setProjectName("demo");
+        project.setPrimaryStack("JAVA");
+        project.setProvider("GITHUB");
+        project.setRepositoryUrl("https://github.com/owner/repo");
+        project.setCredentialId(1L);
+        project.setBusinessSystemId(9L);
+        project.setDeptId(100L);
+        project.setOwnerUserId(11L);
+        project.setReviewMode(ReviewPipelineConstants.REVIEW_MODE_OCR_ENGINE);
+        project.setStatus("1");
+        return project;
+    }
+
+    private static ReviewProjectServiceImpl newStatusService(ReviewProjectMapper projectMapper,
+                                                            IGitCredentialService credentialService)
+    {
+        return new ReviewProjectServiceImpl(projectMapper, mock(GitCredentialMapper.class),
+            mock(ReviewNotifyChannelMapper.class), credentialService, mock(GitAdapterRegistry.class),
+            mock(ISysBusinessSystemService.class), mock(ISysConfigService.class), mock(ISysDeptService.class),
+            mock(ISysUserService.class), mock(ISysAiModelConfigService.class),
+            mock(IReviewTemplateService.class), mock(CredentialCryptoService.class), "http://localhost:8080");
     }
 
     private static ReviewProjectServiceImpl newFormOptionsService(ISysDeptService deptService, ISysUserService userService)

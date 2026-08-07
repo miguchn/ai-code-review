@@ -8,10 +8,12 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.springframework.stereotype.Component;
 import com.acr.review.git.GitPullRequestEvent;
+import com.acr.review.git.GitPushEvent;
 import com.acr.review.git.GitRepositoryCoordinates;
 import com.acr.review.git.GitWebhookAdapter;
 import com.acr.review.git.WebhookRequestHeaders;
 import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 
 /** GitLab Webhook 验签与载荷解析。 */
@@ -19,7 +21,9 @@ import com.alibaba.fastjson2.JSONObject;
 public class GitLabWebhookAdapter implements GitWebhookAdapter
 {
     private static final String MERGE_REQUEST_HOOK = "Merge Request Hook";
+    private static final String PUSH_HOOK = "Push Hook";
     private static final String OBJECT_KIND_MERGE_REQUEST = "merge_request";
+    private static final String OBJECT_KIND_PUSH = "push";
     private static final String HMAC_ALGORITHM = "HmacSHA256";
 
     private static final String HEADER_EVENT = "X-Gitlab-Event";
@@ -83,6 +87,55 @@ public class GitLabWebhookAdapter implements GitWebhookAdapter
     public boolean isPullRequestEventType(String eventType)
     {
         return MERGE_REQUEST_HOOK.equals(eventType);
+    }
+
+    @Override
+    public boolean isPushEventType(String eventType)
+    {
+        return PUSH_HOOK.equals(eventType);
+    }
+
+    @Override
+    public GitPushEvent parsePushEvent(String eventType, String deliveryId, byte[] payload)
+    {
+        if (!shouldParsePush(eventType, payload))
+        {
+            return null;
+        }
+        JSONObject root = parseObject(payload);
+        if (root == null)
+        {
+            return null;
+        }
+        String branch = stripHeadsBranchRef(root.getString("ref"));
+        if (branch == null)
+        {
+            return null;
+        }
+        String before = root.getString("before");
+        String after = root.getString("after");
+        if (before == null || after == null)
+        {
+            return null;
+        }
+        JSONObject project = root.getJSONObject("project");
+        String pathWithNamespace = project == null ? null : project.getString("path_with_namespace");
+        if (pathWithNamespace == null || pathWithNamespace.isBlank())
+        {
+            return null;
+        }
+        int lastSlash = pathWithNamespace.lastIndexOf('/');
+        if (lastSlash <= 0)
+        {
+            return null;
+        }
+        String owner = pathWithNamespace.substring(0, lastSlash);
+        String repository = pathWithNamespace.substring(lastSlash + 1);
+        boolean created = isZeroSha(before);
+        boolean deleted = isZeroSha(after);
+        return new GitPushEvent(deliveryId, owner, repository, pathWithNamespace, branch,
+            before, after, resolvePusher(root), resolveCommitCount(root), resolveHeadCommitMessage(root),
+            created, deleted);
     }
 
     @Override
@@ -167,6 +220,26 @@ public class GitLabWebhookAdapter implements GitWebhookAdapter
         boolean merged = "merge".equals(action);
         return new GitPullRequestEvent(deliveryId, action, owner, repository, pathWithNamespace, iid, title,
             sourceBranch, targetBranch, baseSha, headSha, author, null, null, null, merged);
+    }
+
+    /** 供单测复用：判断 object_kind 形式的 push 事件。 */
+    boolean isPushPayload(String eventType, byte[] payload)
+    {
+        return shouldParsePush(eventType, payload);
+    }
+
+    private static boolean shouldParsePush(String eventType, byte[] payload)
+    {
+        if (PUSH_HOOK.equals(eventType))
+        {
+            return true;
+        }
+        if (eventType != null && !eventType.isBlank())
+        {
+            return false;
+        }
+        JSONObject root = parseObject(payload);
+        return root != null && OBJECT_KIND_PUSH.equals(root.getString("object_kind"));
     }
 
     /** 供单测复用：判断 object_kind 形式的 MR 事件。 */
@@ -308,6 +381,59 @@ public class GitLabWebhookAdapter implements GitWebhookAdapter
         {
             throw new IllegalStateException("SHA-256 不可用", e);
         }
+    }
+
+    private static String stripHeadsBranchRef(String ref)
+    {
+        if (ref == null || ref.isBlank())
+        {
+            return null;
+        }
+        String prefix = "refs/heads/";
+        if (!ref.startsWith(prefix))
+        {
+            return null;
+        }
+        String branch = ref.substring(prefix.length());
+        return branch.isBlank() ? null : branch;
+    }
+
+    private static boolean isZeroSha(String sha)
+    {
+        return sha == null || sha.isBlank() || sha.matches("^0+$");
+    }
+
+    private static String resolvePusher(JSONObject root)
+    {
+        String username = root.getString("user_username");
+        if (username != null && !username.isBlank())
+        {
+            return username;
+        }
+        String name = root.getString("user_name");
+        return name == null || name.isBlank() ? null : name;
+    }
+
+    private static Integer resolveCommitCount(JSONObject root)
+    {
+        Integer total = root.getInteger("total_commits_count");
+        if (total != null)
+        {
+            return total;
+        }
+        JSONArray commits = root.getJSONArray("commits");
+        return commits == null ? null : commits.size();
+    }
+
+    private static String resolveHeadCommitMessage(JSONObject root)
+    {
+        JSONArray commits = root.getJSONArray("commits");
+        if (commits == null || commits.isEmpty())
+        {
+            return null;
+        }
+        JSONObject last = commits.getJSONObject(commits.size() - 1);
+        return last == null ? null : last.getString("message");
     }
 
     private static JSONObject parseObject(byte[] payload)

@@ -5,10 +5,13 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.acr.common.exception.ServiceException;
+import com.acr.common.utils.StringUtils;
+import com.acr.review.domain.ReviewPipelineConstants;
 import com.acr.review.domain.ReviewProject;
 import com.acr.review.domain.ReviewTask;
 import com.acr.review.domain.ReviewWebhookEvent;
 import com.acr.review.git.GitPullRequestEvent;
+import com.acr.review.git.GitPushEvent;
 import com.acr.review.mapper.ReviewTaskMapper;
 import com.acr.review.mapper.ReviewWebhookEventMapper;
 import com.acr.review.service.IReviewTaskCreateService;
@@ -43,6 +46,7 @@ public class ReviewTaskCreateServiceImpl implements IReviewTaskCreateService
         task.setProjectId(project.getProjectId());
         task.setEventId(event.getEventId());
         task.setProvider(event.getProvider());
+        task.setEventSource(ReviewPipelineConstants.EVENT_SOURCE_PR);
         task.setPrNumber(prEvent.prNumber());
         task.setPrTitle(prEvent.prTitle());
         task.setPrAuthor(prEvent.prAuthor());
@@ -58,6 +62,38 @@ public class ReviewTaskCreateServiceImpl implements IReviewTaskCreateService
         task.setAttemptCount(0);
         task.setCreateBy("webhook");
         snapshotService.freezeExecutionSnapshot(project, task);
+        return persistAndSchedule(task, event, "已受理，生成审查任务 #");
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Long createTaskFromPushEvent(ReviewProject project, ReviewWebhookEvent event, GitPushEvent pushEvent)
+    {
+        ReviewTask task = new ReviewTask();
+        task.setProjectId(project.getProjectId());
+        task.setEventId(event.getEventId());
+        task.setProvider(event.getProvider());
+        task.setEventSource(ReviewPipelineConstants.EVENT_SOURCE_PUSH);
+        task.setPrNumber(0);
+        task.setPrTitle(resolvePushTitle(pushEvent));
+        task.setPrAuthor(pushEvent.pusher());
+        task.setSourceBranch(pushEvent.branch());
+        task.setTargetBranch(pushEvent.branch());
+        task.setBaseSha(pushEvent.beforeSha());
+        task.setHeadSha(pushEvent.afterSha());
+        task.setAdditions(null);
+        task.setDeletions(null);
+        task.setChangedFiles(null);
+        task.setTriggerType("WEBHOOK");
+        task.setTaskStatus("PENDING");
+        task.setAttemptCount(0);
+        task.setCreateBy("webhook");
+        snapshotService.freezeExecutionSnapshot(project, task);
+        return persistAndSchedule(task, event, "已受理推送审查，生成审查任务 #");
+    }
+
+    private Long persistAndSchedule(ReviewTask task, ReviewWebhookEvent event, String acceptedPrefix)
+    {
         try
         {
             taskMapper.insertReviewTask(task);
@@ -69,10 +105,38 @@ public class ReviewTaskCreateServiceImpl implements IReviewTaskCreateService
 
         event.setTaskId(task.getTaskId());
         event.setProcessStatus("ACCEPTED");
-        event.setProcessMessage("已受理，生成审查任务 #" + task.getTaskId());
+        event.setProcessMessage(acceptedPrefix + task.getTaskId());
         event.setProcessTime(new Date());
         eventMapper.updateProcessResult(event);
         executionService.scheduleExecution(task.getTaskId());
         return task.getTaskId();
+    }
+
+    /** 推送任务标题：优先最新提交摘要，否则「N 个提交」。 */
+    static String resolvePushTitle(GitPushEvent pushEvent)
+    {
+        if (pushEvent == null)
+        {
+            return "推送审查";
+        }
+        if (StringUtils.isNotEmpty(pushEvent.headCommitMessage()))
+        {
+            String message = pushEvent.headCommitMessage().trim();
+            int newline = message.indexOf('\n');
+            if (newline >= 0)
+            {
+                message = message.substring(0, newline).trim();
+            }
+            if (!message.isEmpty())
+            {
+                return message.length() > 200 ? message.substring(0, 200) : message;
+            }
+        }
+        Integer count = pushEvent.commitCount();
+        if (count != null && count > 0)
+        {
+            return count + " 个提交";
+        }
+        return "推送审查";
     }
 }

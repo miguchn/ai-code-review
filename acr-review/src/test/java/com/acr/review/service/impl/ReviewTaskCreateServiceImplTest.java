@@ -9,12 +9,14 @@ import static org.mockito.Mockito.when;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DuplicateKeyException;
 import com.acr.common.exception.ServiceException;
+import com.acr.review.domain.ReviewPipelineConstants;
 import com.acr.review.domain.ReviewProject;
 import com.acr.review.domain.ReviewTask;
 import com.acr.review.domain.ReviewTemplate;
 import com.acr.review.domain.ReviewWebhookEvent;
 import com.acr.review.engine.config.ReviewEngineProperties;
 import com.acr.review.git.GitPullRequestEvent;
+import com.acr.review.git.GitPushEvent;
 import com.acr.review.mapper.ReviewTaskMapper;
 import com.acr.review.mapper.ReviewWebhookEventMapper;
 import com.acr.review.service.IReviewTaskExecutionService;
@@ -62,6 +64,7 @@ class ReviewTaskCreateServiceImplTest
         verify(taskMapper).insertReviewTask(org.mockito.ArgumentMatchers.argThat(task ->
             task.getProjectId().equals(1L) && task.getEventId().equals(10L)
                 && "PENDING".equals(task.getTaskStatus()) && "WEBHOOK".equals(task.getTriggerType())
+                && ReviewPipelineConstants.EVENT_SOURCE_PR.equals(task.getEventSource())
                 && Integer.valueOf(12).equals(task.getPrNumber())
                 && "alice".equals(task.getPrAuthor())
                 && Integer.valueOf(15).equals(task.getAdditions())
@@ -77,6 +80,44 @@ class ReviewTaskCreateServiceImplTest
         verify(eventMapper).updateProcessResult(org.mockito.ArgumentMatchers.argThat(e ->
             "ACCEPTED".equals(e.getProcessStatus()) && Long.valueOf(100L).equals(e.getTaskId())));
         verify(executionService).scheduleExecution(100L);
+    }
+
+    @Test
+    void createsPushTaskWithSentinelPrNumberAndSchedulesExecution()
+    {
+        ReviewProject project = new ReviewProject();
+        project.setProjectId(1L);
+        project.setReviewMode("LLM_DIRECT");
+        project.setModelId(3L);
+        project.setTemplateId(4L);
+        ReviewWebhookEvent event = new ReviewWebhookEvent();
+        event.setEventId(11L);
+        event.setProvider("GITHUB");
+        GitPushEvent pushEvent = new GitPushEvent(
+            "d-push", "miguchn", "demo", "miguchn/demo", "main",
+            "aaaabbbbccccddddeeeeffff0000111122223333", "ffffeeeeddddccccbbbbaaaa3333222211110000",
+            "bob", 3, "fix: cache\n\ndetails", false, false);
+        when(taskMapper.insertReviewTask(any())).thenAnswer(invocation -> {
+            ReviewTask task = invocation.getArgument(0);
+            task.setTaskId(200L);
+            return 1;
+        });
+        when(modelConfigService.selectRuntimeConfigById(3L)).thenReturn(enabledModel());
+        when(templateService.selectEnabledTemplateById(4L)).thenReturn(enabledTemplate());
+
+        Long taskId = service.createTaskFromPushEvent(project, event, pushEvent);
+
+        assertEquals(200L, taskId);
+        verify(taskMapper).insertReviewTask(org.mockito.ArgumentMatchers.argThat(task ->
+            ReviewPipelineConstants.EVENT_SOURCE_PUSH.equals(task.getEventSource())
+                && Integer.valueOf(0).equals(task.getPrNumber())
+                && "fix: cache".equals(task.getPrTitle())
+                && "bob".equals(task.getPrAuthor())
+                && "main".equals(task.getSourceBranch()) && "main".equals(task.getTargetBranch())
+                && task.getAdditions() == null && task.getDeletions() == null && task.getChangedFiles() == null
+                && "WEBHOOK".equals(task.getTriggerType())
+                && "PENDING".equals(task.getTaskStatus())));
+        verify(executionService).scheduleExecution(200L);
     }
 
     @Test

@@ -3,7 +3,7 @@
 </div>
 
 <div align="center">
-  <h5>Turns AI code review from "one-off comments" into an enterprise governance loop — 4 git platforms × dual engines × Chinese IM × issue ledger.</h5>
+  <h4>Turns AI code review from "one-off comments" into an enterprise governance loop — 4 git platforms × dual engines × Chinese IM × issue ledger.</h4>
 </div>
 
 > **See the real thing first (30 seconds)**: [this public PR](https://github.com/miguchn/acr-demo/pull/1) deliberately keeps typical flaws such as SQL injection and hardcoded credentials. The review comment on the PR was written back automatically by a real run of this platform — not a screenshot; open it and browse it yourself.

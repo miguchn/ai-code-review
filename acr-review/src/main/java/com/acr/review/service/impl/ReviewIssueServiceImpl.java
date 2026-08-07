@@ -93,7 +93,8 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
             return ReviewRoundReconcileResult.empty();
         }
         List<ReviewTopIssue> roundIssues = ReviewSummaryContentFactory.resolveTopIssues(run);
-        List<ReviewIssue> allIssues = issueMapper.selectByProjectAndPr(task.getProjectId(), task.getPrNumber());
+        List<ReviewIssue> allIssues = issueMapper.selectByProjectAndPr(
+            task.getProjectId(), task.getPrNumber(), resolveRefBranch(task));
         if (allIssues == null)
         {
             allIssues = List.of();
@@ -370,11 +371,13 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
     @Transactional(rollbackFor = Exception.class)
     public int closeActiveIssuesForPr(Long projectId, Integer prNumber, boolean merged)
     {
-        if (projectId == null || prNumber == null)
+        // push 线哨兵 pr_number=0 无关闭联动语义。
+        if (projectId == null || prNumber == null || prNumber <= 0)
         {
             return 0;
         }
-        List<ReviewIssue> list = issueMapper.selectByProjectAndPr(projectId, prNumber);
+        // PR 关闭联动：按 pr_number 全量关闭，不过滤 ref_branch（PR 线均为空串）。
+        List<ReviewIssue> list = issueMapper.selectByProjectAndPr(projectId, prNumber, null);
         if (list == null || list.isEmpty())
         {
             return 0;
@@ -541,13 +544,13 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
     }
 
     @Override
-    public List<String> listRecheckingTitles(Long projectId, Integer prNumber)
+    public List<String> listRecheckingTitles(Long projectId, Integer prNumber, String refBranch)
     {
         if (projectId == null || prNumber == null)
         {
             return List.of();
         }
-        List<ReviewIssue> list = issueMapper.selectByProjectAndPr(projectId, prNumber);
+        List<ReviewIssue> list = issueMapper.selectByProjectAndPr(projectId, prNumber, normalizeRefBranch(refBranch));
         if (list == null || list.isEmpty())
         {
             return List.of();
@@ -566,14 +569,14 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
     }
 
     @Override
-    public Map<String, ReviewIssue> mapByFingerprint(Long projectId, Integer prNumber)
+    public Map<String, ReviewIssue> mapByFingerprint(Long projectId, Integer prNumber, String refBranch)
     {
         Map<String, ReviewIssue> map = new HashMap<>();
         if (projectId == null || prNumber == null)
         {
             return map;
         }
-        List<ReviewIssue> list = issueMapper.selectByProjectAndPr(projectId, prNumber);
+        List<ReviewIssue> list = issueMapper.selectByProjectAndPr(projectId, prNumber, normalizeRefBranch(refBranch));
         if (list == null)
         {
             return map;
@@ -586,18 +589,18 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
     }
 
     @Override
-    public void enrichTopIssues(List<ReviewTopIssue> topIssues, Long projectId, Integer prNumber)
+    public void enrichTopIssues(List<ReviewTopIssue> topIssues, Long projectId, Integer prNumber, String refBranch)
     {
         if (topIssues == null || topIssues.isEmpty() || projectId == null || prNumber == null)
         {
             return;
         }
-        Map<String, ReviewIssue> byFp = mapByFingerprint(projectId, prNumber);
+        Map<String, ReviewIssue> byFp = mapByFingerprint(projectId, prNumber, refBranch);
         ReviewIssueDispositionEnricher.enrich(topIssues, byFp);
     }
 
     @Override
-    public void enrichRuns(List<ReviewTaskRun> runs, Long projectId, Integer prNumber)
+    public void enrichRuns(List<ReviewTaskRun> runs, Long projectId, Integer prNumber, String refBranch)
     {
         if (runs == null || runs.isEmpty() || projectId == null || prNumber == null)
         {
@@ -610,7 +613,7 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
             {
                 continue;
             }
-            enrichTopIssues(issues, projectId, prNumber);
+            enrichTopIssues(issues, projectId, prNumber, refBranch);
             run.setTopIssuesJson(JSON.toJSONString(issues));
         }
     }
@@ -744,6 +747,11 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
 
     private ReviewCommentSyncResult scheduleCommentRerender(ReviewIssue issue)
     {
+        // push 线问题（pr_number=0）无 PR 评论可挂，跳过重渲染。
+        if (issue == null || issue.getPrNumber() == null || issue.getPrNumber() <= 0)
+        {
+            return ReviewCommentSyncResult.skipped();
+        }
         // 处置已在本事务写入；评论失败由 delivery 内部落 FAILED 并返回，不回滚处置。
         return deliveryService.rerenderSummaryComment(issue.getProjectId(), issue.getPrNumber());
     }
@@ -758,7 +766,7 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
         List<String> failureParts = new ArrayList<>();
         for (ReviewIssue issue : issues)
         {
-            if (issue.getProjectId() == null || issue.getPrNumber() == null)
+            if (issue.getProjectId() == null || issue.getPrNumber() == null || issue.getPrNumber() <= 0)
             {
                 continue;
             }
@@ -908,6 +916,7 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
         issue.setProjectId(task.getProjectId());
         issue.setProvider(StringUtils.defaultIfEmpty(task.getProvider(), ReviewIssueConstants.PROVIDER_GITHUB));
         issue.setPrNumber(task.getPrNumber());
+        issue.setRefBranch(resolveRefBranch(task));
         issue.setFingerprint(fingerprint);
         issue.setFamilyKey(ReviewIssueFingerprint.familyKey(top));
         issue.setFirstTaskId(task.getTaskId());
@@ -1068,6 +1077,21 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
             return "问题已终态（" + ReviewIssueConstants.statusLabel(status) + "），不可再" + action;
         }
         return "当前状态不允许" + action;
+    }
+
+    /** push 任务取 targetBranch；PR 线固定空串。 */
+    static String resolveRefBranch(ReviewTask task)
+    {
+        if (task != null && ReviewPipelineConstants.EVENT_SOURCE_PUSH.equals(task.getEventSource()))
+        {
+            return normalizeRefBranch(task.getTargetBranch());
+        }
+        return "";
+    }
+
+    static String normalizeRefBranch(String refBranch)
+    {
+        return refBranch == null ? "" : refBranch;
     }
 
     private static String safeOperator()

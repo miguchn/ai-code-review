@@ -54,21 +54,21 @@ public interface IReviewIssueService
     ReviewIssueBatchResult batchDispose(ReviewIssueBatchRequest request);
 
     /**
-     * 当前 PR 下 RECHECKING 问题标题列表（处置重渲染 / 人工重试派生「疑似已修复」段）。
-     * 顺序与 selectByProjectAndPr 一致。
+     * 当前引用维度下 RECHECKING 问题标题列表（处置重渲染 / 人工重试派生「疑似已修复」段）。
+     * refBranch：PR 线传空串，push 线传分支名。
      */
-    List<String> listRecheckingTitles(Long projectId, Integer prNumber);
+    List<String> listRecheckingTitles(Long projectId, Integer prNumber, String refBranch);
 
-    /** 按 PR 加载问题集合（指纹 → issue）。 */
-    Map<String, ReviewIssue> mapByFingerprint(Long projectId, Integer prNumber);
+    /** 按引用维度加载问题集合（指纹 → issue）。 */
+    Map<String, ReviewIssue> mapByFingerprint(Long projectId, Integer prNumber, String refBranch);
 
     /** 给问题清单附加 issueId / 处置态。 */
-    void enrichTopIssues(List<ReviewTopIssue> topIssues, Long projectId, Integer prNumber);
+    void enrichTopIssues(List<ReviewTopIssue> topIssues, Long projectId, Integer prNumber, String refBranch);
 
     /**
      * 给 runs 的 topIssuesJson 附加台账处置态（仅写回响应对象，不落库）。
      */
-    void enrichRuns(List<ReviewTaskRun> runs, Long projectId, Integer prNumber);
+    void enrichRuns(List<ReviewTaskRun> runs, Long projectId, Integer prNumber, String refBranch);
 
     /** 未关闭新增问题数（含待复核，排除 EXISTING）。 */
     int countOpenNewByProject(Long projectId);

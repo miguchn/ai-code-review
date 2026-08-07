@@ -23,8 +23,11 @@
               {{ emptyDash(detailTask.projectName) }}
               <span v-if="detailTask.businessSystemName" class="system-inline">（{{ detailTask.businessSystemName }}）</span>
             </el-descriptions-item>
+            <el-descriptions-item label="事件来源">
+              <dict-tag :options="review_event_source" :value="detailTask.eventSource || 'PR'" />
+            </el-descriptions-item>
             <el-descriptions-item label="发起人">{{ emptyDash(detailTask.prAuthor) }}</el-descriptions-item>
-            <el-descriptions-item label="合并请求">
+            <el-descriptions-item v-if="!isPushTask(detailTask)" label="合并请求">
               <a v-if="mergeRequestLink" :href="mergeRequestLink" target="_blank" rel="noopener noreferrer" class="pr-link">
                 <el-tag size="small" type="info" class="mr-tag">{{ mergeRequestLinkLabel }}</el-tag>
                 #{{ detailTask.prNumber }} {{ emptyDash(detailTask.prTitle) }}
@@ -33,6 +36,10 @@
                 <el-tag size="small" type="info" class="mr-tag">{{ mergeRequestLinkLabel }}</el-tag>
                 #{{ detailTask.prNumber }} {{ emptyDash(detailTask.prTitle) }}
               </span>
+            </el-descriptions-item>
+            <el-descriptions-item v-else label="推送引用">
+              {{ formatPushRefDisplay(detailTask) }}
+              <span v-if="detailTask.prTitle" class="push-title"> · {{ detailTask.prTitle }}</span>
             </el-descriptions-item>
             <el-descriptions-item label="分支">{{ emptyDash(detailTask.sourceBranch) }} → {{ emptyDash(detailTask.targetBranch) }}</el-descriptions-item>
             <el-descriptions-item label="代码变更">{{ formatCodeChange(detailTask.changedFiles, detailTask.additions, detailTask.deletions) }}</el-descriptions-item>
@@ -220,12 +227,15 @@ import {
   severityLabel, severityTagType, formatIssueLines, pickLatestSuccessRun,
   engineOrModelLabel, templateLabel, buildMergeRequestUrl, mergeRequestLabel,
   recordConclusionLabel, recordConclusionTagType,
-  issueOriginLabel, issueOriginTagType, formatDateTime
+  issueOriginLabel, issueOriginTagType, formatDateTime,
+  isPushTask, formatPushRefDisplay
 } from '@/utils/reviewDisplay'
 
 const { proxy } = getCurrentInstance()
 const route = useRoute()
-const { review_task_status, review_issue_status } = proxy.useDict('review_task_status', 'review_issue_status')
+const { review_task_status, review_issue_status, review_event_source } = proxy.useDict(
+  'review_task_status', 'review_issue_status', 'review_event_source'
+)
 
 const detailLoading = ref(false)
 const detailTask = ref(null)
@@ -284,9 +294,13 @@ function goIssueLedger(issueId) {
 }
 
 function goIssueLedgerByPr() {
-  const prNumber = detailTask.value?.prNumber
+  const task = detailTask.value
   const query = {}
-  if (prNumber != null && prNumber !== '') query.prNumber = String(prNumber)
+  if (isPushTask(task)) {
+    if (task?.targetBranch) query.keyword = task.targetBranch
+  } else if (task?.prNumber != null && task?.prNumber !== '') {
+    query.prNumber = String(task.prNumber)
+  }
   proxy.$router.push({ path: '/review/issue', query })
 }
 
@@ -317,6 +331,7 @@ watch(() => route.query.focus, () => focusIssuesIfNeeded())
 .pr-link { color: var(--el-color-primary); text-decoration: none; }
 .pr-link:hover { text-decoration: underline; }
 .mr-tag { margin-right: 6px; vertical-align: middle; }
+.push-title { color: var(--el-text-color-secondary); font-size: 13px; }
 .mb12 { margin-bottom: 12px; }
 .detail-section { margin-bottom: 20px; }
 .section-hint { margin: 0 0 12px; font-size: 13px; color: var(--el-text-color-secondary); }

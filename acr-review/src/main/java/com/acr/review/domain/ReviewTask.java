@@ -13,6 +13,8 @@ public class ReviewTask extends BaseEntity
     private Long projectId;
     private Long eventId;
     private String provider;
+    /** 事件来源：PR / PUSH。 */
+    private String eventSource;
     private Integer prNumber;
     private String prTitle;
     private String prAuthor;
@@ -128,6 +130,16 @@ public class ReviewTask extends BaseEntity
     public void setProvider(String provider)
     {
         this.provider = provider;
+    }
+
+    public String getEventSource()
+    {
+        return eventSource;
+    }
+
+    public void setEventSource(String eventSource)
+    {
+        this.eventSource = eventSource;
     }
 
     public Integer getPrNumber()

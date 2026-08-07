@@ -13,6 +13,8 @@ public class ReviewIssue extends BaseEntity
     private Long projectId;
     private String provider;
     private Integer prNumber;
+    /** 参考分支：PR 线空串；push 线为推送分支名。 */
+    private String refBranch;
     private String fingerprint;
     private String familyKey;
     private Long firstTaskId;
@@ -78,6 +80,8 @@ public class ReviewIssue extends BaseEntity
     public void setProvider(String provider) { this.provider = provider; }
     public Integer getPrNumber() { return prNumber; }
     public void setPrNumber(Integer prNumber) { this.prNumber = prNumber; }
+    public String getRefBranch() { return refBranch; }
+    public void setRefBranch(String refBranch) { this.refBranch = refBranch; }
     public String getFingerprint() { return fingerprint; }
     public void setFingerprint(String fingerprint) { this.fingerprint = fingerprint; }
     public String getFamilyKey() { return familyKey; }

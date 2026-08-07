@@ -6,6 +6,11 @@
           <el-option v-for="item in projectOptions" :key="item.projectId" :label="item.projectName" :value="item.projectId" />
         </el-select>
       </el-form-item>
+      <el-form-item label="类型" prop="eventSource">
+        <el-select v-model="queryParams.eventSource" clearable placeholder="请选择类型" style="width: 130px">
+          <el-option v-for="dict in review_event_source" :key="dict.value" :label="dict.label" :value="dict.value" />
+        </el-select>
+      </el-form-item>
       <el-form-item label="合并请求编号" prop="prNumber">
         <el-input v-model="queryParams.prNumber" placeholder="请输入编号" clearable style="width: 140px" @keyup.enter="handleQuery" />
       </el-form-item>
@@ -40,9 +45,20 @@
           </div>
         </template>
       </el-table-column>
+      <el-table-column label="类型" width="100">
+        <template #default="scope">
+          <dict-tag :options="review_event_source" :value="scope.row.eventSource || 'PR'" />
+        </template>
+      </el-table-column>
       <el-table-column label="合并请求" min-width="220">
         <template #default="scope">
-          <a v-if="mergeRequestUrl(scope.row)" class="pr-link" :href="mergeRequestUrl(scope.row)" target="_blank" rel="noopener noreferrer"
+          <template v-if="isPushTask(scope.row)">
+            <div class="pr-cell">
+              <el-tag size="small" type="success">{{ formatPushRefDisplay(scope.row) }}</el-tag>
+              <span class="pr-title">{{ emptyDash(scope.row.prTitle) }}</span>
+            </div>
+          </template>
+          <a v-else-if="mergeRequestUrl(scope.row)" class="pr-link" :href="mergeRequestUrl(scope.row)" target="_blank" rel="noopener noreferrer"
             :title="'打开 ' + mergeRequestLabel(scope.row.provider) + ' #' + scope.row.prNumber">
             <el-tag size="small" type="info">{{ mergeRequestLabel(scope.row.provider) }}</el-tag>
             <el-tag size="small" type="primary">#{{ scope.row.prNumber }}</el-tag>
@@ -92,7 +108,12 @@
         <template #default="scope">
           <el-button link type="primary" v-hasPermi="['review:record:query']" @click="handleDetail(scope.row)">查看详情</el-button>
           <el-button link type="primary" v-hasPermi="['review:record:query']" @click="handleViewIssues(scope.row)">查看问题</el-button>
-          <el-button link type="primary" :disabled="!mergeRequestUrl(scope.row)" @click="openMergeRequest(scope.row)">打开 {{ mergeRequestLabel(scope.row.provider) }}</el-button>
+          <el-button
+            v-if="!isPushTask(scope.row)"
+            link type="primary"
+            :disabled="!mergeRequestUrl(scope.row)"
+            @click="openMergeRequest(scope.row)"
+          >打开 {{ mergeRequestLabel(scope.row.provider) }}</el-button>
           <el-button
             v-if="scope.row.taskStatus === 'FAILED'"
             link type="primary"
@@ -114,11 +135,13 @@ import { listReviewProject } from '@/api/review/project'
 import { retryReviewTask } from '@/api/review/task'
 import {
   emptyDash, formatScore, formatCodeChange, formatFocusIssueCounts,
-  recordConclusionLabel, recordConclusionTagType, buildMergeRequestUrl, mergeRequestLabel, formatDateTime
+  recordConclusionLabel, recordConclusionTagType, buildMergeRequestUrl, mergeRequestLabel, formatDateTime,
+  isPushTask, formatPushRefDisplay
 } from '@/utils/reviewDisplay'
 
 const route = useRoute()
 const { proxy } = getCurrentInstance()
+const { review_event_source } = proxy.useDict('review_event_source')
 
 const conclusionOptions = [
   { label: '通过', value: 'PASS' },
@@ -140,6 +163,7 @@ const data = reactive({
     pageSize: 10,
     projectId: undefined,
     prNumber: undefined,
+    eventSource: undefined,
     prAuthor: undefined,
     reviewConclusion: undefined
   }
@@ -198,6 +222,7 @@ function applyRouteQuery() {
   if (q.reviewConclusion) queryParams.value.reviewConclusion = String(q.reviewConclusion)
   if (q.projectId) queryParams.value.projectId = Number(q.projectId) || q.projectId
   if (q.prNumber) queryParams.value.prNumber = Number(q.prNumber) || q.prNumber
+  if (q.eventSource) queryParams.value.eventSource = String(q.eventSource)
   if (q.prAuthor) queryParams.value.prAuthor = String(q.prAuthor)
   if (q.beginTime || q.endTime) {
     dateRange.value = [q.beginTime ? String(q.beginTime) : '', q.endTime ? String(q.endTime) : '']

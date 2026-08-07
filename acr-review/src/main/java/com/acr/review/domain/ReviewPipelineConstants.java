@@ -32,6 +32,11 @@ public final class ReviewPipelineConstants
     public static final String CONCLUSION_WARN = "WARN";
     public static final String CONCLUSION_BLOCK = "BLOCK";
 
+    /** 事件来源：合并请求。 */
+    public static final String EVENT_SOURCE_PR = "PR";
+    /** 事件来源：推送。 */
+    public static final String EVENT_SOURCE_PUSH = "PUSH";
+
     public static final String FAILURE_CONFIG_MISSING = "CONFIG_MISSING";
     public static final String FAILURE_CREDENTIAL_ERROR = "CREDENTIAL_ERROR";
     public static final String FAILURE_WORKSPACE_PREPARE = "WORKSPACE_PREPARE_FAILED";

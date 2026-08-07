@@ -113,8 +113,11 @@
     >
       <el-table-column v-if="canBatch" type="selection" width="48" align="center" />
       <el-table-column label="项目名称" prop="projectName" min-width="150" :show-overflow-tooltip="true" />
-      <el-table-column label="合并请求" width="90">
-        <template #default="scope">#{{ scope.row.prNumber }}</template>
+      <el-table-column label="合并请求" width="120">
+        <template #default="scope">
+          <span v-if="isPushIssue(scope.row)">{{ emptyDash(scope.row.refBranch) }}</span>
+          <span v-else>#{{ scope.row.prNumber }}</span>
+        </template>
       </el-table-column>
       <el-table-column label="问题标题" prop="title" min-width="200" :show-overflow-tooltip="true" />
       <el-table-column label="严重度" width="90">
@@ -210,7 +213,7 @@ import { listIssue, getIssueStats } from '@/api/review/issue'
 import { listReviewProject } from '@/api/review/project'
 import auth from '@/plugins/auth'
 import {
-  formatDateTime, formatStageDuration, severityLabel, severityTagType
+  emptyDash, formatDateTime, formatStageDuration, severityLabel, severityTagType, isPushTask
 } from '@/utils/reviewDisplay'
 import IssueDetailDrawer from './IssueDetailDrawer.vue'
 import IssueBatchBar from './IssueBatchBar.vue'
@@ -269,6 +272,10 @@ const canBatch = computed(() =>
   auth.hasPermiOr(['review:issue:confirm', 'review:issue:close'])
 )
 const canOpenRecord = computed(() => auth.hasPermi('review:record:query'))
+
+function isPushIssue(row) {
+  return Number(row?.prNumber) === 0 || isPushTask(row)
+}
 
 const closedFilterActive = computed(() => queryParams.value.closedFlag === 'Y')
 

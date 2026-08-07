@@ -14,6 +14,11 @@
           <el-option v-for="item in projectOptions" :key="item.projectId" :label="item.projectName" :value="item.projectId" />
         </el-select>
       </el-form-item>
+      <el-form-item label="类型" prop="eventSource">
+        <el-select v-model="queryParams.eventSource" clearable placeholder="请选择类型" style="width: 130px">
+          <el-option v-for="dict in review_event_source" :key="dict.value" :label="dict.label" :value="dict.value" />
+        </el-select>
+      </el-form-item>
       <el-form-item label="合并请求编号" prop="prNumber">
         <el-input v-model="queryParams.prNumber" placeholder="请输入合并请求编号" clearable style="width: 140px" @keyup.enter="handleQuery" />
       </el-form-item>
@@ -44,9 +49,18 @@
 
     <el-table v-loading="loading" :data="taskList" empty-text="暂无审查任务">
       <el-table-column label="所属项目" prop="projectName" min-width="140" :show-overflow-tooltip="true" />
+      <el-table-column label="类型" width="100">
+        <template #default="scope">
+          <dict-tag :options="review_event_source" :value="scope.row.eventSource || 'PR'" />
+        </template>
+      </el-table-column>
       <el-table-column label="合并请求" min-width="200">
         <template #default="scope">
-          <div class="pr-cell">
+          <div v-if="isPushTask(scope.row)" class="pr-cell">
+            <el-tag size="small" type="success">{{ formatPushRefDisplay(scope.row) }}</el-tag>
+            <span class="pr-title" :title="scope.row.prTitle || ''">{{ emptyDash(scope.row.prTitle) }}</span>
+          </div>
+          <div v-else class="pr-cell">
             <el-tag size="small" type="primary">#{{ scope.row.prNumber }}</el-tag>
             <span class="pr-title" :title="scope.row.prTitle || ''">{{ emptyDash(scope.row.prTitle) }}</span>
           </div>
@@ -107,11 +121,13 @@
 import { listReviewTask, retryReviewTask } from '@/api/review/task'
 import { listReviewProject } from '@/api/review/project'
 import auth from '@/plugins/auth'
-import { emptyDash, formatDateTime } from '@/utils/reviewDisplay'
+import { emptyDash, formatDateTime, isPushTask, formatPushRefDisplay } from '@/utils/reviewDisplay'
 
 const route = useRoute()
 const { proxy } = getCurrentInstance()
-const { review_task_status, review_task_step } = proxy.useDict('review_task_status', 'review_task_step')
+const { review_task_status, review_task_step, review_event_source } = proxy.useDict(
+  'review_task_status', 'review_task_step', 'review_event_source'
+)
 
 const taskList = ref([])
 const projectOptions = ref([])
@@ -127,6 +143,7 @@ const data = reactive({
     pageSize: 10,
     projectId: undefined,
     prNumber: undefined,
+    eventSource: undefined,
     taskStatus: undefined,
     queueOnly: true
   }
@@ -264,6 +281,7 @@ function applyRouteQuery() {
   }
   if (q.projectId) queryParams.value.projectId = Number(q.projectId) || q.projectId
   if (q.prNumber) queryParams.value.prNumber = Number(q.prNumber) || q.prNumber
+  if (q.eventSource) queryParams.value.eventSource = String(q.eventSource)
 }
 </script>
 

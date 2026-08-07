@@ -996,6 +996,10 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
      */
     private void applyPrMetadata(ReviewTask task, ReviewTaskRun run, ExecutionPlan plan)
     {
+        if (ReviewPipelineConstants.EVENT_SOURCE_PUSH.equals(task.getEventSource()))
+        {
+            return;
+        }
         GitPullRequestMetadata metadata = adapterRegistry.requireMetadataFetcher(plan.provider()).fetch(
             plan.repository(), plan.access(), task.getPrNumber());
         if (metadata == null || !metadata.fetched())

@@ -62,13 +62,12 @@
           <dict-tag :options="review_mode" :value="normalizeReviewMode(scope.row.reviewMode)" />
         </template>
       </el-table-column>
-      <el-table-column label="合并请求审查" min-width="180">
+      <el-table-column label="审查类型" min-width="160">
         <template #default="scope">
-          <el-tag :type="scope.row.prReviewEnabled === '0' ? 'success' : 'info'" size="small">
-            {{ scope.row.prReviewEnabled === '0' ? '已启用' : '未启用' }}
-          </el-tag>
-          <div v-if="scope.row.prReviewEnabled === '0'" class="text-muted text-ellipsis">
-            {{ formatTargetBranches(scope.row.prTargetBranches) }}
+          <div class="review-type-tags">
+            <el-tag v-if="scope.row.prReviewEnabled === '0'" type="primary" size="small">合并请求</el-tag>
+            <el-tag v-if="scope.row.pushReviewEnabled === '0'" type="success" size="small">推送</el-tag>
+            <span v-if="scope.row.prReviewEnabled !== '0' && scope.row.pushReviewEnabled !== '0'" class="text-muted">未配置</span>
           </div>
         </template>
       </el-table-column>
@@ -214,33 +213,6 @@
                 <div><span>最近同步</span><strong>{{ form.lastBranchSyncTime ? formatDateTime(form.lastBranchSyncTime) : '尚未同步' }}</strong></div>
               </div>
             </el-form-item>
-            <el-form-item label="启用合并请求审查" prop="prReviewEnabled">
-              <div class="form-control-block">
-                <el-switch v-model="form.prReviewEnabled" active-value="0" inactive-value="1"
-                  active-text="启用" inactive-text="停用" @change="handlePrReviewChange" />
-                <div class="inline-tip">仅审查合并请求，不启用 Push 审查。</div>
-              </div>
-            </el-form-item>
-            <el-form-item v-if="form.prReviewEnabled === '0'" label="目标分支" prop="prTargetBranches">
-              <div class="form-control-block">
-                <el-select v-model="form.prTargetBranches" multiple filterable collapse-tags :max-collapse-tags="2"
-                  :placeholder="repositoryInfoLoaded ? '请选择合并请求目标分支' : '请先读取仓库信息'">
-                  <el-option v-for="branch in branchOptions" :key="branch" :label="branch" :value="branch" />
-                </el-select>
-                <div class="field-actions field-actions--split">
-                  <span class="inline-tip inline-tip--inline">来源分支默认全部允许，通常只选择 dev 或 develop，避免后续合并重复审查。</span>
-                  <div class="field-actions__links">
-                    <el-tooltip :disabled="repositoryInfoLoaded" content="请先读取仓库信息" placement="top">
-                      <span class="action-wrap">
-                        <el-button link type="primary" :disabled="!repositoryInfoLoaded" @click="branchDialogOpen = true">查看全部分支</el-button>
-                      </span>
-                    </el-tooltip>
-                    <el-button link type="primary" :loading="repositoryReading" @click="handleReadRepositoryInfo"
-                      v-hasPermi="['review:project:test']">刷新分支</el-button>
-                  </div>
-                </div>
-              </div>
-            </el-form-item>
             <el-collapse v-model="advancedSections" class="advanced-settings">
               <el-collapse-item title="高级设置（系统统一配置）" name="advanced">
                 <el-form-item label="来源分支"><span>全部允许</span></el-form-item>
@@ -330,12 +302,63 @@
             </el-form-item>
           </el-tab-pane>
 
-          <el-tab-pane label="审查范围" name="scope">
-            <el-form-item label="说明">
-              <div class="inline-tip">
-                默认仅审查本次合并请求变更内容，不扫描整个文件的历史问题；锁文件、依赖目录与构建产物由平台统一排除。以下配置随任务快照冻结，修改仅影响新建任务。
+          <el-tab-pane label="审查配置" name="scope">
+            <div class="config-section">
+              <div class="config-section-title">审查类型</div>
+              <div class="review-type-cards">
+                <label class="review-type-card" :class="{ 'is-checked': prReviewChecked }">
+                  <el-checkbox v-model="prReviewChecked" @change="handlePrReviewToggle">合并请求审查</el-checkbox>
+                  <p class="review-type-desc">在合并请求（PR/MR）创建或更新代码时触发审查，审查结论以合并请求评论发布，问题进入问题台账。适合有合并请求协作流程的团队。</p>
+                </label>
+                <label class="review-type-card" :class="{ 'is-checked': pushReviewChecked }">
+                  <el-checkbox v-model="pushReviewChecked" @change="handlePushReviewToggle">推送审查</el-checkbox>
+                  <p class="review-type-desc">代码直接推送到指定分支（不经合并请求）时触发审查，审查结论以通知送达，问题进入问题台账。适合直接向主干推送代码的团队。本审查为推送后审查，不拦截推送。</p>
+                </label>
+              </div>
+            </div>
+
+            <div class="config-section">
+              <div class="config-section-title">审查范围</div>
+              <div class="inline-tip config-section-intro">
+                默认仅审查本次变更内容，不扫描整个文件的历史问题；锁文件、依赖目录与构建产物由平台统一排除。以下配置随任务快照冻结，修改仅影响新建任务。
+              </div>
+
+            <el-form-item v-if="prReviewChecked" label="目标分支" prop="prTargetBranches">
+              <div class="form-control-block">
+                <el-select v-model="form.prTargetBranches" multiple filterable collapse-tags :max-collapse-tags="2"
+                  :placeholder="repositoryInfoLoaded ? '请选择合并请求目标分支' : '请先读取仓库信息'">
+                  <el-option v-for="branch in branchOptions" :key="branch" :label="branch" :value="branch" />
+                </el-select>
+                <div class="field-actions field-actions--split">
+                  <span class="inline-tip inline-tip--inline">来源分支默认全部允许，通常只选择 dev 或 develop，避免后续合并重复审查。</span>
+                  <div class="field-actions__links">
+                    <el-tooltip :disabled="repositoryInfoLoaded" content="请先读取仓库信息" placement="top">
+                      <span class="action-wrap">
+                        <el-button link type="primary" :disabled="!repositoryInfoLoaded" @click="branchDialogOpen = true">查看全部分支</el-button>
+                      </span>
+                    </el-tooltip>
+                    <el-button link type="primary" :loading="repositoryReading" @click="handleReadRepositoryInfo"
+                      v-hasPermi="['review:project:test']">刷新分支</el-button>
+                  </div>
+                </div>
               </div>
             </el-form-item>
+
+            <el-form-item v-if="pushReviewChecked" label="触发分支" prop="pushTriggerBranches">
+              <div class="form-control-block">
+                <el-select v-model="form.pushTriggerBranches" multiple filterable allow-create default-first-option
+                  collapse-tags :max-collapse-tags="2"
+                  :placeholder="repositoryInfoLoaded ? 'main、release/*' : '请先读取仓库信息'">
+                  <el-option v-for="branch in branchOptions" :key="'push-' + branch" :label="branch" :value="branch" />
+                </el-select>
+                <div class="inline-tip">仅列出的分支上的推送会触发审查，其余分支推送忽略。</div>
+              </div>
+            </el-form-item>
+
+            <el-alert v-if="branchIntersection.length" type="warning" :closable="false" show-icon class="intersection-alert">
+              以下分支同时是合并请求目标分支：{{ branchIntersection.join('、') }}。合并请求合并到这些分支时，会额外触发一次推送后审查。问题台账自动去重、不会产生重复问题；如希望避免，可在推送审查中移除相应分支。
+            </el-alert>
+
             <el-form-item label="排除路径" prop="scopeExcludePatterns">
               <div class="form-control-block">
                 <el-input v-model="form.scopeExcludePatterns" type="textarea" :rows="4" maxlength="2000" show-word-limit
@@ -366,6 +389,7 @@
                 <div class="inline-tip">开启后保留变更行之外的历史存量问题并标注来源；默认剔除，审查结果只聚焦本次变更。</div>
               </div>
             </el-form-item>
+            </div>
           </el-tab-pane>
 
           <el-tab-pane label="审查执行" name="execution">
@@ -457,7 +481,8 @@
         <el-table-column label="标记" width="180">
           <template #default="scope">
             <el-tag v-if="scope.row.name === form.defaultBranch" type="info" size="small" class="mr8">默认分支</el-tag>
-            <el-tag v-if="form.prTargetBranches.includes(scope.row.name)" type="success" size="small">已选择</el-tag>
+            <el-tag v-if="form.prTargetBranches.includes(scope.row.name)" type="primary" size="small" class="mr8">PR 目标</el-tag>
+            <el-tag v-if="form.pushTriggerBranches.includes(scope.row.name)" type="success" size="small">推送触发</el-tag>
           </template>
         </el-table-column>
       </el-table>
@@ -477,6 +502,7 @@ import { listGitCredential } from '@/api/review/credential'
 import { listNotifyChannel } from '@/api/review/notifyChannel'
 import { GIT_PROVIDER_FALLBACK } from '@/constants/gitProviders'
 import useGuideStore from '@/store/modules/guide'
+import { findBranchIntersection } from '@/utils/reviewDisplay'
 
 const { proxy } = getCurrentInstance()
 const router = useRouter()
@@ -514,9 +540,25 @@ const options = reactive({
   longLivedBranches: [], robotBranchPrefixes: [], prEvents: [], webhookCallbackUrl: ''
 })
 
+function validateReviewTypes(rule, value, callback) {
+  if (data.form.prReviewEnabled !== '0' && data.form.pushReviewEnabled !== '0') {
+    callback(new Error('请至少选择一种审查类型'))
+    return
+  }
+  callback()
+}
+
 function validateTargetBranches(rule, value, callback) {
   if (data.form.prReviewEnabled === '0' && (!Array.isArray(value) || value.length === 0)) {
     callback(new Error('请选择至少一个合并请求目标分支'))
+    return
+  }
+  callback()
+}
+
+function validatePushTriggerBranches(rule, value, callback) {
+  if (data.form.pushReviewEnabled === '0' && (!Array.isArray(value) || value.length === 0)) {
+    callback(new Error('请配置推送触发分支'))
     return
   }
   callback()
@@ -554,6 +596,9 @@ const data = reactive({
     provider: [{ required: true, message: '请选择 Git 平台', trigger: 'change' }],
     repositoryUrl: [{ required: true, message: '仓库地址不能为空', trigger: 'blur' }],
     prTargetBranches: [{ validator: validateTargetBranches, trigger: 'change' }],
+    pushTriggerBranches: [{ validator: validatePushTriggerBranches, trigger: 'change' }],
+    prReviewEnabled: [{ validator: validateReviewTypes, trigger: 'change' }],
+    pushReviewEnabled: [{ validator: validateReviewTypes, trigger: 'change' }],
     businessSystemId: [{ required: true, message: '请选择业务系统', trigger: 'change' }],
     deptId: [{ required: true, message: '请选择所属部门', trigger: 'change' }],
     ownerUserId: [{ required: true, message: '请选择项目负责人', trigger: 'change' }],
@@ -572,8 +617,21 @@ const availableOwners = computed(() => form.value.deptId
   : options.owners)
 const branchOptions = computed(() => Array.from(new Set([
   ...availableBranches.value,
-  ...(Array.isArray(form.value.prTargetBranches) ? form.value.prTargetBranches : [])
+  ...(Array.isArray(form.value.prTargetBranches) ? form.value.prTargetBranches : []),
+  ...(Array.isArray(form.value.pushTriggerBranches) ? form.value.pushTriggerBranches : [])
 ])))
+const prReviewChecked = computed({
+  get: () => form.value.prReviewEnabled === '0',
+  set: (checked) => { form.value.prReviewEnabled = checked ? '0' : '1' }
+})
+const pushReviewChecked = computed({
+  get: () => form.value.pushReviewEnabled === '0',
+  set: (checked) => { form.value.pushReviewEnabled = checked ? '0' : '1' }
+})
+const branchIntersection = computed(() => {
+  if (form.value.prReviewEnabled !== '0' || form.value.pushReviewEnabled !== '0') return []
+  return findBranchIntersection(form.value.prTargetBranches, form.value.pushTriggerBranches)
+})
 const filteredBranches = computed(() => {
   const keyword = branchSearch.value.trim().toLowerCase()
   return availableBranches.value
@@ -685,7 +743,7 @@ function reset() {
   form.value = {
     projectId: undefined, projectName: undefined, provider: 'GITHUB', repositoryUrl: undefined,
     repositoryOwner: undefined, repositoryName: undefined, repositoryFullPath: undefined, defaultBranch: undefined,
-    prReviewEnabled: '0', prTargetBranches: [], businessSystemId: undefined, deptId: undefined,
+    prReviewEnabled: '0', pushReviewEnabled: '1', prTargetBranches: [], pushTriggerBranches: [], businessSystemId: undefined, deptId: undefined,
     ownerUserId: undefined, credentialId: undefined, modelId: undefined, templateId: undefined,
     primaryStack: 'FULLSTACK', reviewMode: 'OCR_ENGINE', engineCode: 'OPEN_CODE_REVIEW',
     status: '1', lastBranchSyncStatus: 'UNSYNCED',
@@ -731,6 +789,8 @@ function handleUpdate(row) {
   getReviewProject(row.projectId).then(response => {
     const project = response.data || {}
     project.prTargetBranches = splitBranches(project.prTargetBranches)
+    project.pushTriggerBranches = splitBranches(project.pushTriggerBranches)
+    project.pushReviewEnabled = project.pushReviewEnabled || '1'
     project.reviewMode = normalizeReviewMode(project.reviewMode)
     project.primaryStack = project.primaryStack || 'FULLSTACK'
     project.scopeIncludeTests = project.scopeIncludeTests || 'N'
@@ -746,7 +806,7 @@ function handleUpdate(row) {
       project.engineCode = undefined
     }
     form.value = project
-    availableBranches.value = [...project.prTargetBranches]
+    availableBranches.value = [...project.prTargetBranches, ...project.pushTriggerBranches.filter(b => !b.includes('*'))]
     originalRepositorySignature.value = repositorySignature(project)
     loadNotifyChannelOptions()
     loadCredentialOptions()
@@ -864,6 +924,7 @@ function invalidateRepositoryInfo() {
   form.value.repositoryFullPath = undefined
   form.value.defaultBranch = undefined
   form.value.prTargetBranches = []
+  form.value.pushTriggerBranches = []
   form.value.lastBranchSyncStatus = 'UNSYNCED'
   form.value.lastBranchSyncMessage = undefined
   form.value.lastBranchSyncTime = undefined
@@ -894,28 +955,42 @@ function handleReadRepositoryInfo() {
       return
     }
     const branches = result.branches || []
-    const selected = (form.value.prTargetBranches || []).filter(branch => branches.includes(branch))
+    const selectedPr = (form.value.prTargetBranches || []).filter(branch => branches.includes(branch))
+    const selectedPush = (form.value.pushTriggerBranches || []).filter(branch =>
+      branches.includes(branch) || String(branch).includes('*'))
     form.value.repositoryUrl = result.repositoryUrl
     form.value.repositoryOwner = result.repositoryOwner
     form.value.repositoryName = result.repositoryName
     form.value.repositoryFullPath = result.repositoryFullPath
     form.value.defaultBranch = result.defaultBranch
-    form.value.prTargetBranches = selected.length ? selected : [...(result.recommendedTargetBranches || [])]
+    form.value.prTargetBranches = selectedPr.length ? selectedPr : [...(result.recommendedTargetBranches || [])]
+    if (!selectedPush.length && form.value.pushReviewEnabled === '0' && !form.value.pushTriggerBranches?.length) {
+      form.value.pushTriggerBranches = result.defaultBranch ? [result.defaultBranch] : []
+    } else {
+      form.value.pushTriggerBranches = selectedPush.length ? selectedPush : (form.value.pushTriggerBranches || [])
+    }
     availableBranches.value = branches
     recommendedBranches.value = result.recommendedTargetBranches || []
     branchCount.value = branches.length
     repositoryInfoLoaded.value = true
     loadedRepositorySignature.value = repositorySignature(form.value)
-    proxy.$refs.projectRef?.clearValidate(['repositoryUrl', 'credentialId', 'prTargetBranches'])
+    proxy.$refs.projectRef?.clearValidate(['repositoryUrl', 'credentialId', 'prTargetBranches', 'pushTriggerBranches'])
     proxy.$modal.msgSuccess(`仓库信息读取成功，共 ${branches.length} 个分支`)
   }).finally(() => { repositoryReading.value = false })
 }
 
-function handlePrReviewChange(value) {
-  if (value === '0' && (!form.value.prTargetBranches || form.value.prTargetBranches.length === 0)) {
+function handlePrReviewToggle(checked) {
+  if (checked && (!form.value.prTargetBranches || form.value.prTargetBranches.length === 0)) {
     form.value.prTargetBranches = [...recommendedBranches.value]
   }
-  proxy.$refs.projectRef?.validateField('prTargetBranches').catch(() => {})
+  proxy.$refs.projectRef?.validateField(['prReviewEnabled', 'pushReviewEnabled', 'prTargetBranches']).catch(() => {})
+}
+
+function handlePushReviewToggle(checked) {
+  if (checked && (!form.value.pushTriggerBranches || form.value.pushTriggerBranches.length === 0)) {
+    form.value.pushTriggerBranches = form.value.defaultBranch ? [form.value.defaultBranch] : []
+  }
+  proxy.$refs.projectRef?.validateField(['prReviewEnabled', 'pushReviewEnabled', 'pushTriggerBranches']).catch(() => {})
 }
 
 function openCredentialManagement() {
@@ -952,11 +1027,17 @@ function submitForm() {
     if (!valid) {
       if (!form.value.projectName || !form.value.businessSystemId || !form.value.ownerUserId) {
         activeTab.value = 'basic'
-      } else if (!form.value.repositoryUrl || !form.value.credentialId
-        || (form.value.prReviewEnabled === '0' && !(form.value.prTargetBranches || []).length)) {
+      } else if (!form.value.repositoryUrl || !form.value.credentialId) {
         activeTab.value = 'repository'
+      } else if (form.value.prReviewEnabled !== '0' && form.value.pushReviewEnabled !== '0'
+        || (form.value.prReviewEnabled === '0' && !(form.value.prTargetBranches || []).length)
+        || (form.value.pushReviewEnabled === '0' && !(form.value.pushTriggerBranches || []).length)) {
+        activeTab.value = 'scope'
       } else {
         activeTab.value = 'execution'
+      }
+      if (form.value.prReviewEnabled !== '0' && form.value.pushReviewEnabled !== '0') {
+        proxy.$modal.msgWarning('请至少选择一种审查类型')
       }
       return
     }
@@ -970,7 +1051,8 @@ function submitForm() {
     const payload = {
       ...form.value,
       reviewMode: normalizeReviewMode(form.value.reviewMode),
-      prTargetBranches: (form.value.prTargetBranches || []).join(',')
+      prTargetBranches: (form.value.prTargetBranches || []).join(','),
+      pushTriggerBranches: (form.value.pushTriggerBranches || []).join(',')
     }
     if (payload.reviewMode === 'LLM_DIRECT') {
       payload.engineCode = null
@@ -1028,7 +1110,7 @@ function splitBranches(value) {
 
 function formatTargetBranches(value) {
   const branches = splitBranches(value)
-  return branches.length ? branches.join('、') : '未选择目标分支'
+  return branches.length ? branches.join('、') : '未选择'
 }
 
 function checkStatusText(status) {
@@ -1177,5 +1259,58 @@ Promise.all([loadOptions(), loadNotifyChannelOptions(), getList()])
 .guide-deep-link {
   margin-top: 6px;
   line-height: 22px;
+}
+
+.review-type-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.config-section { margin-bottom: 20px; }
+.config-section-title {
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+.config-section-intro { margin: -4px 0 16px; }
+.review-type-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.review-type-card {
+  display: block;
+  padding: 12px 14px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  background: var(--el-fill-color-blank);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.review-type-card:hover {
+  border-color: var(--el-border-color);
+}
+.review-type-card.is-checked {
+  border-color: var(--el-color-primary-light-5);
+  background: var(--el-color-primary-light-9);
+}
+.review-type-card :deep(.el-checkbox) {
+  height: auto;
+  margin-bottom: 8px;
+}
+.review-type-desc {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--el-text-color-secondary);
+}
+.intersection-alert { margin: 0 0 16px 110px; }
+
+@media (max-width: 900px) {
+  .review-type-cards { grid-template-columns: 1fr; }
+  .intersection-alert { margin-left: 0; }
 }
 </style>

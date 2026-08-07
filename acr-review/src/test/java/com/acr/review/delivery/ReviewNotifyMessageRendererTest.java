@@ -94,6 +94,39 @@ class ReviewNotifyMessageRendererTest
     }
 
     @Test
+    void rendersPushTaskAttributionAndSubmissionBlock()
+    {
+        ReviewSummaryContent content = ReviewSummaryContent.builder()
+            .taskId(99L)
+            .conclusion(ReviewPipelineConstants.CONCLUSION_WARN)
+            .conclusionLabel("建议修改")
+            .totalScore(70)
+            .prNumber(0)
+            .prTitle("fix: cache race")
+            .prAuthor("alice")
+            .projectName("Demo 项目")
+            .businessSystemName("长寿官网系统")
+            .sourceBranch("main")
+            .targetBranch("main")
+            .headShaShort("abcdef1")
+            .commitMessage("fix: cache race")
+            .reviewTime(new Date(1754361000000L))
+            .summaryText("推送审查小结")
+            .detailUrl("https://acr.example.com/review/record-detail/index/99")
+            .build();
+
+        String body = ReviewNotifyMessageRenderer.renderSuccess(content);
+
+        assertTrue(body.contains("**长寿官网系统 · Demo 项目 · main @abcdef1**"));
+        assertTrue(body.contains("   - 推送人: alice · "));
+        assertTrue(body.contains("   - 分支: main"));
+        assertTrue(body.contains("   - Commit: fix: cache race"));
+        assertFalse(body.contains("PR #0"));
+        assertFalse(body.contains("查看合并请求"));
+        assertTrue(body.contains("[查看审查详情](https://acr.example.com/review/record-detail/index/99)"));
+    }
+
+    @Test
     void attributionOmitsBusinessSystemWhenEmpty()
     {
         ReviewSummaryContent content = ReviewSummaryContent.builder()

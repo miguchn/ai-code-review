@@ -13,10 +13,12 @@ import javax.crypto.spec.SecretKeySpec;
 import org.springframework.stereotype.Component;
 import com.acr.review.git.GitProviderCodes;
 import com.acr.review.git.GitPullRequestEvent;
+import com.acr.review.git.GitPushEvent;
 import com.acr.review.git.GitRepositoryCoordinates;
 import com.acr.review.git.GitWebhookAdapter;
 import com.acr.review.git.WebhookRequestHeaders;
 import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 
 /** Gitee Webhook 验签与载荷解析。Secret、签名与载荷结构不越出本包。 */
@@ -29,6 +31,7 @@ public class GiteeWebhookAdapter implements GitWebhookAdapter
     private static final String HEADER_TIMESTAMP = "X-Gitee-Timestamp";
     private static final String MERGE_REQUEST_HOOK = "Merge Request Hook";
     private static final String PULL_REQUEST_HOOK = "Pull Request Hook";
+    private static final String PUSH_HOOK = "Push Hook";
     private static final Duration MAX_TIMESTAMP_SKEW = Duration.ofHours(1);
 
     @Override
@@ -132,6 +135,53 @@ public class GiteeWebhookAdapter implements GitWebhookAdapter
         }
         return MERGE_REQUEST_HOOK.equalsIgnoreCase(eventType)
             || PULL_REQUEST_HOOK.equalsIgnoreCase(eventType);
+    }
+
+    @Override
+    public boolean isPushEventType(String eventType)
+    {
+        return eventType != null && PUSH_HOOK.equalsIgnoreCase(eventType);
+    }
+
+    @Override
+    public GitPushEvent parsePushEvent(String eventType, String deliveryId, byte[] payload)
+    {
+        if (!isPushEventType(eventType))
+        {
+            return null;
+        }
+        JSONObject root = parseObject(payload);
+        if (root == null)
+        {
+            return null;
+        }
+        String branch = stripHeadsBranchRef(root.getString("ref"));
+        if (branch == null)
+        {
+            return null;
+        }
+        String before = root.getString("before");
+        String after = root.getString("after");
+        if (before == null || after == null)
+        {
+            return null;
+        }
+        JSONObject repository = root.getJSONObject("repository");
+        if (repository == null)
+        {
+            return null;
+        }
+        String repoName = repository.getString("name");
+        String ownerLogin = parseOwner(repository);
+        if (repoName == null || repoName.isBlank() || ownerLogin == null || ownerLogin.isBlank())
+        {
+            return null;
+        }
+        boolean created = Boolean.TRUE.equals(root.getBoolean("created")) || isZeroSha(before);
+        boolean deleted = Boolean.TRUE.equals(root.getBoolean("deleted")) || isZeroSha(after);
+        return new GitPushEvent(deliveryId, ownerLogin, repoName, ownerLogin + "/" + repoName, branch,
+            before, after, resolvePusher(root), resolveCommitCount(root), resolveHeadCommitMessage(root),
+            created, deleted);
     }
 
     @Override
@@ -280,6 +330,85 @@ public class GiteeWebhookAdapter implements GitWebhookAdapter
         {
             return "";
         }
+    }
+
+    private static String stripHeadsBranchRef(String ref)
+    {
+        if (ref == null || ref.isBlank())
+        {
+            return null;
+        }
+        String prefix = "refs/heads/";
+        if (!ref.startsWith(prefix))
+        {
+            return null;
+        }
+        String branch = ref.substring(prefix.length());
+        return branch.isBlank() ? null : branch;
+    }
+
+    private static boolean isZeroSha(String sha)
+    {
+        return sha == null || sha.isBlank() || sha.matches("^0+$");
+    }
+
+    private static String resolvePusher(JSONObject root)
+    {
+        JSONObject pusher = root.getJSONObject("pusher");
+        if (pusher != null)
+        {
+            String name = pusher.getString("name");
+            if (name != null && !name.isBlank())
+            {
+                return name;
+            }
+            String login = pusher.getString("login");
+            if (login != null && !login.isBlank())
+            {
+                return login;
+            }
+        }
+        JSONObject sender = root.getJSONObject("sender");
+        if (sender != null)
+        {
+            String login = sender.getString("login");
+            if (login != null && !login.isBlank())
+            {
+                return login;
+            }
+        }
+        String userName = root.getString("user_name");
+        if (userName != null && !userName.isBlank())
+        {
+            return userName;
+        }
+        return null;
+    }
+
+    private static Integer resolveCommitCount(JSONObject root)
+    {
+        JSONArray commits = root.getJSONArray("commits");
+        return commits == null ? null : commits.size();
+    }
+
+    private static String resolveHeadCommitMessage(JSONObject root)
+    {
+        JSONObject headCommit = root.getJSONObject("head_commit");
+        if (headCommit != null)
+        {
+            String message = headCommit.getString("message");
+            if (message != null && !message.isBlank())
+            {
+                return message;
+            }
+        }
+        JSONArray commits = root.getJSONArray("commits");
+        if (commits != null && !commits.isEmpty())
+        {
+            JSONObject last = commits.getJSONObject(commits.size() - 1);
+            return last == null ? null : last.getString("message");
+        }
+        return null;
     }
 
     private static String parseOwner(JSONObject repository)

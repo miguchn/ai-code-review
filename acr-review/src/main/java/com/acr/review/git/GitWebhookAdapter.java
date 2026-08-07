@@ -52,4 +52,17 @@ public interface GitWebhookAdapter
 
     /** 是否为合并请求类事件（平台事件类型判断）。 */
     boolean isPullRequestEventType(String eventType);
+
+    /**
+     * 解析推送事件载荷。
+     *
+     * @param eventType  平台事件类型
+     * @param deliveryId 投递 ID
+     * @param payload    请求原始字节
+     * @return 平台无关推送事件；非推送事件或载荷非法时返回 null
+     */
+    GitPushEvent parsePushEvent(String eventType, String deliveryId, byte[] payload);
+
+    /** 是否为推送类事件（平台事件类型判断）。 */
+    boolean isPushEventType(String eventType);
 }
