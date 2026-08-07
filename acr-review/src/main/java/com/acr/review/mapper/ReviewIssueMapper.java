@@ -11,8 +11,13 @@ public interface ReviewIssueMapper
 
     List<ReviewIssue> selectIssueList(ReviewIssue query);
 
+    /**
+     * 按项目 + PR 编号查询问题；refBranch 非 null 时额外按参考分支过滤（含空串）。
+     * PR 关闭联动等跨分支场景可传 null 表示不过滤 ref_branch。
+     */
     List<ReviewIssue> selectByProjectAndPr(@Param("projectId") Long projectId,
-                                          @Param("prNumber") Integer prNumber);
+                                          @Param("prNumber") Integer prNumber,
+                                          @Param("refBranch") String refBranch);
 
     int insertIssue(ReviewIssue issue);
 

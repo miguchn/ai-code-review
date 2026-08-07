@@ -260,6 +260,7 @@ CREATE TABLE `review_issue` (
   `project_id` bigint NOT NULL COMMENT '项目ID',
   `provider` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'GITHUB' COMMENT 'Git Provider',
   `pr_number` int NOT NULL COMMENT 'PR编号',
+  `ref_branch` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '' COMMENT '参考分支(PR线空串；PUSH线=推送分支)',
   `fingerprint` varchar(80) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '问题指纹(PR级去重)',
   `family_key` varchar(80) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '族键 SHA-256(filePath+NUL+category)',
   `first_task_id` bigint NOT NULL COMMENT '首次发现任务ID',
@@ -293,10 +294,10 @@ CREATE TABLE `review_issue` (
   `update_by` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT '',
   `update_time` datetime DEFAULT NULL,
   PRIMARY KEY (`issue_id`),
-  UNIQUE KEY `uk_issue_pr_fingerprint` (`project_id`,`pr_number`,`fingerprint`),
+  UNIQUE KEY `uk_issue_ref_fingerprint` (`project_id`,`pr_number`,`ref_branch`,`fingerprint`),
   KEY `idx_issue_project_status` (`project_id`,`status`),
   KEY `idx_issue_origin_status` (`origin`,`status`),
-  KEY `idx_issue_pr_family` (`project_id`,`pr_number`,`family_key`)
+  KEY `idx_issue_ref_family` (`project_id`,`pr_number`,`ref_branch`,`family_key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='审查问题台账';
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `review_issue_action`;
@@ -353,6 +354,8 @@ CREATE TABLE `review_project` (
   `default_branch` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '默认分支',
   `pr_review_enabled` char(1) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '0' COMMENT '是否启用PR审查(0启用 1停用)',
   `pr_target_branches` varchar(1000) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT 'PR目标分支，逗号分隔',
+  `push_review_enabled` char(1) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '1' COMMENT '是否启用推送审查(0启用 1停用)',
+  `push_trigger_branches` varchar(1000) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '推送触发分支，换行或逗号分隔，支持通配 release/*',
   `business_system_id` bigint NOT NULL COMMENT '业务系统ID',
   `dept_id` bigint NOT NULL COMMENT '所属部门ID',
   `owner_user_id` bigint NOT NULL COMMENT '项目负责人用户ID',
@@ -403,6 +406,7 @@ CREATE TABLE `review_task` (
   `project_id` bigint NOT NULL COMMENT '项目ID',
   `event_id` bigint NOT NULL COMMENT '触发事件ID',
   `provider` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'GITHUB' COMMENT 'Git Provider',
+  `event_source` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'PR' COMMENT '事件来源(PR=合并请求 PUSH=推送)',
   `pr_number` int NOT NULL COMMENT 'PR编号',
   `pr_title` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT 'PR标题',
   `pr_author` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT 'PR 发起人（GitHub login）',
@@ -1229,6 +1233,7 @@ INSERT INTO `sys_dict_type` (`dict_id`, `dict_name`, `dict_type`, `status`, `cre
 INSERT INTO `sys_dict_type` (`dict_id`, `dict_name`, `dict_type`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (114,'审查问题归属','review_issue_origin','0','admin','2026-08-03 08:08:26','',NULL,'NEW / EXISTING');
 INSERT INTO `sys_dict_type` (`dict_id`, `dict_name`, `dict_type`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (115,'审查投递触发来源','review_delivery_trigger_source','0','admin','2026-08-03 09:15:27','',NULL,'投递记录最近一次尝试的触发来源');
 INSERT INTO `sys_dict_type` (`dict_id`, `dict_name`, `dict_type`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (116,'Git 平台','review_git_provider','0','admin','2026-08-03 13:30:52','',NULL,'代码审查支持的 Git 托管平台');
+INSERT INTO `sys_dict_type` (`dict_id`, `dict_name`, `dict_type`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (117,'审查事件来源','review_event_source','0','admin','2026-08-07 10:30:00','',NULL,'审查任务触发事件来源（合并请求/推送）');
 /*!40000 ALTER TABLE `sys_dict_type` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -1322,6 +1327,8 @@ INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value
 INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (156,2,'自动复核','auto_recheck','review_issue_close_source','','info','N','0','admin','2026-08-03 08:08:26','admin','2026-08-05 06:49:55','');
 INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (169,3,'随 PR 合并关闭','pr_merged','review_issue_close_source','','success','N','0','admin','2026-08-06 00:00:00','',NULL,'');
 INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (170,4,'随 PR 关闭','pr_closed','review_issue_close_source','','info','N','0','admin','2026-08-06 00:00:00','',NULL,'');
+INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (171,1,'合并请求','PR','review_event_source','','primary','Y','0','admin','2026-08-07 10:30:00','',NULL,'');
+INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (172,2,'推送','PUSH','review_event_source','','success','N','0','admin','2026-08-07 10:30:00','',NULL,'');
 INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (157,1,'新增','NEW','review_issue_origin','','success','Y','0','admin','2026-08-03 08:08:26','',NULL,'');
 INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (158,2,'存量','EXISTING','review_issue_origin','','info','N','0','admin','2026-08-03 08:08:26','',NULL,'');
 INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (159,1,'任务回写','TASK_SUCCESS','review_delivery_trigger_source','','primary','N','0','admin','2026-08-03 09:15:27','',NULL,'');
@@ -1357,6 +1364,10 @@ INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_valu
 INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (106,'代码审查-Gitea默认PR事件','review.gitea.prEvents','opened,reopened,synchronize','Y','admin','2026-08-03 13:30:52','',NULL,'统一启用的 Pull Request 触发事件');
 INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (107,'问题台账-转待复核未命中轮数阈值','review.issue.recheck.missedRoundsThreshold','1','Y','admin','2026-08-05 06:49:55','',NULL,'连续未命中 N 轮后自动转待复核；关闭仍须人工确认');
 INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (108,'审查协议-单轮问题清单上限','review.protocol.maxIssues','20','Y','admin','2026-08-05 06:49:55','',NULL,'协议 v1.2 解析截断上限；超出记截断标记');
+INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (109,'代码审查-GitHub默认Push事件','review.github.pushEvents','push','Y','admin','2026-08-07 10:30:00','',NULL,'推送审查启用的 Push 触发事件');
+INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (110,'代码审查-GitLab默认Push事件','review.gitlab.pushEvents','Push Hook','Y','admin','2026-08-07 10:30:00','',NULL,'推送审查启用的 Push 触发事件');
+INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (111,'代码审查-Gitee默认Push事件','review.gitee.pushEvents','Push Hook','Y','admin','2026-08-07 10:30:00','',NULL,'推送审查启用的 Push 触发事件');
+INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (112,'代码审查-Gitea默认Push事件','review.gitea.pushEvents','push','Y','admin','2026-08-07 10:30:00','',NULL,'推送审查启用的 Push 触发事件');
 /*!40000 ALTER TABLE `sys_config` ENABLE KEYS */;
 UNLOCK TABLES;
 

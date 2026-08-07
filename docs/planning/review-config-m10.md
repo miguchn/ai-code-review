@@ -1,6 +1,6 @@
 # M10 审查配置设计草案（审查范围 → 审查配置：审查类型 + 审查范围）
 
-- 状态：**设计草案，待产品决策**（不在 feature/m8.1-issue-lifecycle-view 分支开发）
+- 状态：**已被取代**——产品决策已于 2026-08-07 确认，定稿见 `docs/planning/push-review-m10.md`（开发分支 feature/m10-push-review）
 - 日期：2026-08-06
 - 上游依据：product-roadmap.md §7.6「Push/merge 事件双触发路径（2026-08-05 方向确认）」
 - 关联设计：issue-ledger-lifecycle-view-m8.1.md（台账侧消费审查结果，本迭代不改）

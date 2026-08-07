@@ -25,7 +25,16 @@
           <el-descriptions :column="2" border>
             <el-descriptions-item label="任务 ID">{{ detailTask.taskId }}</el-descriptions-item>
             <el-descriptions-item label="项目">{{ emptyDash(detailTask.projectName) }}</el-descriptions-item>
-            <el-descriptions-item label="合并请求">#{{ detailTask.prNumber }} {{ emptyDash(detailTask.prTitle) }}</el-descriptions-item>
+            <el-descriptions-item label="事件来源">
+              <dict-tag :options="review_event_source" :value="detailTask.eventSource || 'PR'" />
+            </el-descriptions-item>
+            <el-descriptions-item v-if="!isPushTask(detailTask)" label="合并请求">
+              #{{ detailTask.prNumber }} {{ emptyDash(detailTask.prTitle) }}
+            </el-descriptions-item>
+            <el-descriptions-item v-else label="推送引用">
+              {{ formatPushRefDisplay(detailTask) }}
+              <span v-if="detailTask.prTitle"> · {{ detailTask.prTitle }}</span>
+            </el-descriptions-item>
             <el-descriptions-item label="发起人">{{ emptyDash(detailTask.prAuthor) }}</el-descriptions-item>
             <el-descriptions-item label="分支">{{ emptyDash(detailTask.sourceBranch) }} → {{ emptyDash(detailTask.targetBranch) }}</el-descriptions-item>
             <el-descriptions-item label="代码变更">{{ formatCodeChange(detailTask.changedFiles, detailTask.additions, detailTask.deletions) }}</el-descriptions-item>
@@ -112,15 +121,16 @@ import ImDeliveryStatusView from '@/views/review/components/ImDeliveryStatusView
 import ScopeDecisionView from '@/views/review/components/ScopeDecisionView.vue'
 import {
   emptyDash, formatDuration, formatCodeChange, normalizeMode,
-  shortSha, engineOrModelLabel, templateLabel, formatDateTime
+  shortSha, engineOrModelLabel, templateLabel, formatDateTime,
+  isPushTask, formatPushRefDisplay
 } from '@/utils/reviewDisplay'
 
 const { proxy } = getCurrentInstance()
 const route = useRoute()
 const {
-  review_task_status, review_task_step, review_task_failure_type, review_mode
+  review_task_status, review_task_step, review_task_failure_type, review_mode, review_event_source
 } = proxy.useDict(
-  'review_task_status', 'review_task_step', 'review_task_failure_type', 'review_mode'
+  'review_task_status', 'review_task_step', 'review_task_failure_type', 'review_mode', 'review_event_source'
 )
 
 const detailLoading = ref(false)

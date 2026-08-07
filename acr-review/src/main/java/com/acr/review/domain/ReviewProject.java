@@ -24,6 +24,10 @@ public class ReviewProject extends BaseEntity
     private String defaultBranch;
     private String prReviewEnabled;
     private String prTargetBranches;
+    /** 是否启用推送审查（0启用 1停用，默认停用）。 */
+    private String pushReviewEnabled;
+    /** 推送触发分支（换行/逗号分隔，支持 glob 通配）。 */
+    private String pushTriggerBranches;
     private Long businessSystemId;
     private String businessSystemName;
     private Long deptId;
@@ -199,6 +203,27 @@ public class ReviewProject extends BaseEntity
     public void setPrTargetBranches(String prTargetBranches)
     {
         this.prTargetBranches = prTargetBranches;
+    }
+
+    public String getPushReviewEnabled()
+    {
+        return pushReviewEnabled;
+    }
+
+    public void setPushReviewEnabled(String pushReviewEnabled)
+    {
+        this.pushReviewEnabled = pushReviewEnabled;
+    }
+
+    @Size(max = 1000, message = "推送触发分支不能超过1000个字符")
+    public String getPushTriggerBranches()
+    {
+        return pushTriggerBranches;
+    }
+
+    public void setPushTriggerBranches(String pushTriggerBranches)
+    {
+        this.pushTriggerBranches = pushTriggerBranches;
     }
 
     @NotNull(message = "所属业务系统不能为空")

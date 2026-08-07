@@ -177,13 +177,24 @@ public final class ReviewNotifyMessageRenderer
         {
             parts.add(projectSeg);
         }
-        if (content.getPrNumber() != null)
+        if (content.getPrNumber() != null && content.getPrNumber() > 0)
         {
             String prSeg = formatPrSegment(content.getPrNumber(), content.getPrTitle(), content.getPrUrl());
             if (StringUtils.isNotEmpty(prSeg))
             {
                 parts.add(prSeg);
             }
+        }
+        else if (content.getPrNumber() != null && content.getPrNumber() <= 0
+            && StringUtils.isNotEmpty(content.getTargetBranch()))
+        {
+            // push 语义（pr_number 哨兵 0）：分支名 @短 SHA
+            String pushSeg = content.getTargetBranch().trim();
+            if (StringUtils.isNotEmpty(content.getHeadShaShort()))
+            {
+                pushSeg = pushSeg + " @" + content.getHeadShaShort().trim();
+            }
+            parts.add(pushSeg);
         }
         if (parts.isEmpty())
         {
@@ -234,6 +245,17 @@ public final class ReviewNotifyMessageRenderer
     {
         sb.append("**提交信息**\n");
         // 列表行缩进 3 个半角空格（markdown 列表延续；勿超 3，否则脱离列表）
+        boolean push = content.getPrNumber() != null && content.getPrNumber() <= 0;
+        if (push)
+        {
+            sb.append("   - 推送人: ").append(displayOrEmpty(content.getPrAuthor()))
+                .append(" · ").append(formatReviewTime(content.getReviewTime())).append('\n');
+            sb.append("   - 分支: ").append(displayOrEmpty(content.getTargetBranch())).append('\n');
+            String commit = StringUtils.isNotEmpty(content.getCommitMessage())
+                ? content.getCommitMessage() : content.getPrTitle();
+            sb.append("   - Commit: ").append(displayOrEmpty(commit)).append('\n');
+            return;
+        }
         sb.append("   - 提交人: ").append(displayOrEmpty(content.getPrAuthor()))
             .append(" · ").append(formatReviewTime(content.getReviewTime())).append('\n');
         sb.append("   - 分支: ").append(displayOrEmpty(content.getSourceBranch()))

@@ -1,6 +1,7 @@
 package com.acr.review.service.impl;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
@@ -19,6 +20,7 @@ import com.acr.review.domain.ReviewWebhookEvent;
 import com.acr.review.domain.WebhookHandleResult;
 import com.acr.review.git.GitAdapterRegistry;
 import com.acr.review.git.GitPullRequestEvent;
+import com.acr.review.git.GitPushEvent;
 import com.acr.review.git.GitRepositoryCoordinates;
 import com.acr.review.git.GitWebhookAdapter;
 import com.acr.review.git.WebhookRequestHeaders;
@@ -37,6 +39,11 @@ class ReviewWebhookServiceImplTest
     private static final GitPullRequestEvent PR_EVENT = new GitPullRequestEvent(
         "d-1", "opened", "miguchn", "demo", 12, "feat: login",
         "feature/login", "dev", "aaaabbbbccccddddeeeeffff0000111122223333", "ffffeeeeddddccccbbbbaaaa3333222211110000");
+    private static final String ZERO_SHA = "0000000000000000000000000000000000000000";
+    private static final GitPushEvent PUSH_EVENT = new GitPushEvent(
+        "d-1", "miguchn", "demo", "miguchn/demo", "dev",
+        "aaaabbbbccccddddeeeeffff0000111122223333", "ffffeeeeddddccccbbbbaaaa3333222211110000",
+        "alice", 2, "feat: push login", false, false);
 
     private ReviewWebhookEventMapper eventMapper;
     private ReviewProjectMapper projectMapper;
@@ -70,8 +77,13 @@ class ReviewWebhookServiceImplTest
         });
         when(webhookAdapter.isPullRequestEventType("pull_request")).thenReturn(true);
         when(webhookAdapter.isPullRequestEventType("ping")).thenReturn(false);
+        when(webhookAdapter.isPullRequestEventType("push")).thenReturn(false);
+        when(webhookAdapter.isPushEventType("push")).thenReturn(true);
+        when(webhookAdapter.isPushEventType("ping")).thenReturn(false);
+        when(webhookAdapter.isPushEventType("pull_request")).thenReturn(false);
         when(webhookAdapter.parseRepository(PAYLOAD)).thenReturn(REPO);
         when(configService.selectConfigByKey("review.github.prEvents")).thenReturn("opened,reopened,synchronize");
+        when(configService.selectConfigByKey("review.github.pushEvents")).thenReturn("push");
     }
 
     @Test
@@ -306,6 +318,184 @@ class ReviewWebhookServiceImplTest
         verify(configService).selectConfigByKey("review.gitlab.mrEvents");
     }
 
+    @Test
+    void acceptsValidPushEventAndCreatesTask()
+    {
+        ReviewProject project = pushEnabledProject();
+        when(projectMapper.selectByFullPath("GITHUB", "miguchn/demo", null)).thenReturn(project);
+        when(cryptoService.decryptWebhookSecret("cipher")).thenReturn("secret");
+        when(webhookAdapter.verify(eq("secret"), eq(PAYLOAD), any())).thenReturn(true);
+        when(webhookAdapter.parsePushEvent("push", "d-1", PAYLOAD)).thenReturn(PUSH_EVENT);
+        when(taskCreateService.createTaskFromPushEvent(eq(project), any(), eq(PUSH_EVENT))).thenReturn(300L);
+
+        WebhookHandleResult result = service.handleGitHubWebhook("push", "d-1", "sig", PAYLOAD);
+
+        assertEquals(200, result.httpStatus());
+        assertTrue(result.message().contains("300"));
+        verify(taskCreateService).createTaskFromPushEvent(eq(project), any(), eq(PUSH_EVENT));
+        verify(taskCreateService, never()).createTaskFromEvent(any(), any(), any());
+        verify(configService).selectConfigByKey("review.github.pushEvents");
+    }
+
+    @Test
+    void ignoresPushWhenPushReviewDisabled()
+    {
+        ReviewProject project = pushEnabledProject();
+        project.setPushReviewEnabled("1");
+        when(projectMapper.selectByFullPath("GITHUB", "miguchn/demo", null)).thenReturn(project);
+        when(cryptoService.decryptWebhookSecret("cipher")).thenReturn("secret");
+        when(webhookAdapter.verify(eq("secret"), eq(PAYLOAD), any())).thenReturn(true);
+        when(webhookAdapter.parsePushEvent("push", "d-1", PAYLOAD)).thenReturn(PUSH_EVENT);
+
+        WebhookHandleResult result = service.handleGitHubWebhook("push", "d-1", "sig", PAYLOAD);
+
+        assertEquals(200, result.httpStatus());
+        verify(eventMapper).updateProcessResult(argMatchesStatus("IGNORED"));
+        verify(taskCreateService, never()).createTaskFromPushEvent(any(), any(), any());
+    }
+
+    @Test
+    void ignoresDeletedBranchPush()
+    {
+        GitPushEvent deleted = new GitPushEvent(
+            "d-1", "miguchn", "demo", "miguchn/demo", "dev",
+            PUSH_EVENT.beforeSha(), ZERO_SHA, "alice", 0, null, false, true);
+        when(projectMapper.selectByFullPath("GITHUB", "miguchn/demo", null)).thenReturn(pushEnabledProject());
+        when(cryptoService.decryptWebhookSecret("cipher")).thenReturn("secret");
+        when(webhookAdapter.verify(eq("secret"), eq(PAYLOAD), any())).thenReturn(true);
+        when(webhookAdapter.parsePushEvent("push", "d-1", PAYLOAD)).thenReturn(deleted);
+
+        WebhookHandleResult result = service.handleGitHubWebhook("push", "d-1", "sig", PAYLOAD);
+
+        assertEquals(200, result.httpStatus());
+        verify(eventMapper).updateProcessResult(argMatchesStatus("IGNORED"));
+        verify(taskCreateService, never()).createTaskFromPushEvent(any(), any(), any());
+    }
+
+    @Test
+    void ignoresCreatedBranchPush()
+    {
+        GitPushEvent created = new GitPushEvent(
+            "d-1", "miguchn", "demo", "miguchn/demo", "dev",
+            ZERO_SHA, PUSH_EVENT.afterSha(), "alice", 1, "init", true, false);
+        when(projectMapper.selectByFullPath("GITHUB", "miguchn/demo", null)).thenReturn(pushEnabledProject());
+        when(cryptoService.decryptWebhookSecret("cipher")).thenReturn("secret");
+        when(webhookAdapter.verify(eq("secret"), eq(PAYLOAD), any())).thenReturn(true);
+        when(webhookAdapter.parsePushEvent("push", "d-1", PAYLOAD)).thenReturn(created);
+
+        WebhookHandleResult result = service.handleGitHubWebhook("push", "d-1", "sig", PAYLOAD);
+
+        assertEquals(200, result.httpStatus());
+        verify(eventMapper).updateProcessResult(argMatchesStatus("IGNORED"));
+        verify(taskCreateService, never()).createTaskFromPushEvent(any(), any(), any());
+    }
+
+    @Test
+    void ignoresPushWhenBranchNotInTriggerList()
+    {
+        GitPushEvent other = new GitPushEvent(
+            "d-1", "miguchn", "demo", "miguchn/demo", "feature/x",
+            PUSH_EVENT.beforeSha(), PUSH_EVENT.afterSha(), "alice", 1, "wip", false, false);
+        when(projectMapper.selectByFullPath("GITHUB", "miguchn/demo", null)).thenReturn(pushEnabledProject());
+        when(cryptoService.decryptWebhookSecret("cipher")).thenReturn("secret");
+        when(webhookAdapter.verify(eq("secret"), eq(PAYLOAD), any())).thenReturn(true);
+        when(webhookAdapter.parsePushEvent("push", "d-1", PAYLOAD)).thenReturn(other);
+
+        WebhookHandleResult result = service.handleGitHubWebhook("push", "d-1", "sig", PAYLOAD);
+
+        assertEquals(200, result.httpStatus());
+        verify(eventMapper).updateProcessResult(argMatchesStatus("IGNORED"));
+        verify(taskCreateService, never()).createTaskFromPushEvent(any(), any(), any());
+    }
+
+    @Test
+    void acceptsPushWhenBranchMatchesGlob()
+    {
+        ReviewProject project = pushEnabledProject();
+        project.setPushTriggerBranches("release/*");
+        GitPushEvent releasePush = new GitPushEvent(
+            "d-1", "miguchn", "demo", "miguchn/demo", "release/1.0",
+            PUSH_EVENT.beforeSha(), PUSH_EVENT.afterSha(), "alice", 1, "cut", false, false);
+        when(projectMapper.selectByFullPath("GITHUB", "miguchn/demo", null)).thenReturn(project);
+        when(cryptoService.decryptWebhookSecret("cipher")).thenReturn("secret");
+        when(webhookAdapter.verify(eq("secret"), eq(PAYLOAD), any())).thenReturn(true);
+        when(webhookAdapter.parsePushEvent("push", "d-1", PAYLOAD)).thenReturn(releasePush);
+        when(taskCreateService.createTaskFromPushEvent(eq(project), any(), eq(releasePush))).thenReturn(301L);
+
+        WebhookHandleResult result = service.handleGitHubWebhook("push", "d-1", "sig", PAYLOAD);
+
+        assertEquals(200, result.httpStatus());
+        verify(taskCreateService).createTaskFromPushEvent(eq(project), any(), eq(releasePush));
+    }
+
+    @Test
+    void failsWhenPushPayloadInvalid()
+    {
+        when(projectMapper.selectByFullPath("GITHUB", "miguchn/demo", null)).thenReturn(pushEnabledProject());
+        when(cryptoService.decryptWebhookSecret("cipher")).thenReturn("secret");
+        when(webhookAdapter.verify(eq("secret"), eq(PAYLOAD), any())).thenReturn(true);
+        when(webhookAdapter.parsePushEvent("push", "d-1", PAYLOAD)).thenReturn(null);
+
+        WebhookHandleResult result = service.handleGitHubWebhook("push", "d-1", "sig", PAYLOAD);
+
+        assertEquals(200, result.httpStatus());
+        verify(eventMapper).updateProcessResult(argMatchesStatus("FAILED"));
+        verify(taskCreateService, never()).createTaskFromPushEvent(any(), any(), any());
+    }
+
+    @Test
+    void ignoresTagPushAsIgnoredNotFailed()
+    {
+        byte[] tagPayload = """
+            {
+              "ref": "refs/tags/v1.0.0",
+              "before": "aaaabbbbccccddddeeeeffff0000111122223333",
+              "after": "ffffeeeeddddccccbbbbaaaa3333222211110000",
+              "repository": { "name": "demo", "owner": { "login": "miguchn" } }
+            }
+            """.getBytes(StandardCharsets.UTF_8);
+        when(webhookAdapter.resolveDeliveryId(any(), eq(tagPayload))).thenReturn("d-tag");
+        when(webhookAdapter.parseRepository(tagPayload)).thenReturn(REPO);
+        when(projectMapper.selectByFullPath("GITHUB", "miguchn/demo", null)).thenReturn(pushEnabledProject());
+        when(cryptoService.decryptWebhookSecret("cipher")).thenReturn("secret");
+        when(webhookAdapter.verify(eq("secret"), eq(tagPayload), any())).thenReturn(true);
+        when(webhookAdapter.parsePushEvent("push", "d-tag", tagPayload)).thenReturn(null);
+
+        WebhookHandleResult result = service.handleGitHubWebhook("push", "d-tag", "sig", tagPayload);
+
+        assertEquals(200, result.httpStatus());
+        verify(eventMapper).updateProcessResult(org.mockito.ArgumentMatchers.argThat(event ->
+            event != null && "IGNORED".equals(event.getProcessStatus())
+                && event.getProcessMessage() != null && event.getProcessMessage().contains("tag")));
+        verify(taskCreateService, never()).createTaskFromPushEvent(any(), any(), any());
+    }
+
+    @Test
+    void ignoresPushWhenEventTypeOutsideWhitelist()
+    {
+        when(projectMapper.selectByFullPath("GITHUB", "miguchn/demo", null)).thenReturn(pushEnabledProject());
+        when(cryptoService.decryptWebhookSecret("cipher")).thenReturn("secret");
+        when(webhookAdapter.verify(eq("secret"), eq(PAYLOAD), any())).thenReturn(true);
+        when(webhookAdapter.parsePushEvent("push", "d-1", PAYLOAD)).thenReturn(PUSH_EVENT);
+        when(configService.selectConfigByKey("review.github.pushEvents")).thenReturn("push_request");
+
+        WebhookHandleResult result = service.handleGitHubWebhook("push", "d-1", "sig", PAYLOAD);
+
+        assertEquals(200, result.httpStatus());
+        verify(eventMapper).updateProcessResult(argMatchesStatus("IGNORED"));
+        verify(taskCreateService, never()).createTaskFromPushEvent(any(), any(), any());
+    }
+
+    @Test
+    void matchesTriggerBranchSupportsExactAndGlob()
+    {
+        assertTrue(ReviewWebhookServiceImpl.matchesTriggerBranch("dev,main", "dev"));
+        assertTrue(ReviewWebhookServiceImpl.matchesTriggerBranch("release/*", "release/1.2"));
+        assertFalse(ReviewWebhookServiceImpl.matchesTriggerBranch("dev", "main"));
+        assertFalse(ReviewWebhookServiceImpl.matchesTriggerBranch("", "dev"));
+        assertFalse(ReviewWebhookServiceImpl.matchesTriggerBranch(null, "dev"));
+    }
+
     private ReviewProject enabledProject()
     {
         ReviewProject project = new ReviewProject();
@@ -313,7 +503,16 @@ class ReviewWebhookServiceImplTest
         project.setStatus("0");
         project.setPrReviewEnabled("0");
         project.setPrTargetBranches("dev,develop");
+        project.setPushReviewEnabled("1");
         project.setWebhookSecretCiphertext("cipher");
+        return project;
+    }
+
+    private ReviewProject pushEnabledProject()
+    {
+        ReviewProject project = enabledProject();
+        project.setPushReviewEnabled("0");
+        project.setPushTriggerBranches("dev,main");
         return project;
     }
 

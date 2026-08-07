@@ -337,6 +337,31 @@ class ReviewTaskExecutionServiceImplTest
     }
 
     @Test
+    void pushTaskSkipsApplyPrMetadata()
+    {
+        // 有有效审查范围时才会走到 applyPrMetadata；PUSH 任务应直接跳过，不触碰 metadataFetcher。
+        ReviewTask task = llmTask(28L);
+        task.setEventSource(ReviewPipelineConstants.EVENT_SOURCE_PUSH);
+        task.setPrNumber(0);
+        task.setTargetBranch("main");
+        stubLlmPathPrerequisites(task);
+        when(diffFetcher.fetchDiff(any(), any(), eq("abc1234"), eq("def5678")))
+            .thenReturn(GitPullRequestDiffResult.ok(scopeTestDiff()));
+        when(fileContentFetcher.fetchFileContent(any(), any(), eq("pom.xml"), eq("def5678")))
+            .thenReturn(com.acr.review.git.GitFileContentResult.fail("IO"));
+        when(fileContentFetcher.fetchFileContent(any(), any(), eq("src/main/resources/application.yml"), eq("def5678")))
+            .thenReturn(com.acr.review.git.GitFileContentResult.ok("server:\n  port: 8080\n"));
+        when(llmCallService.chat(eq(3L), any()))
+            .thenReturn(com.acr.common.ai.LlmCallResult.failure(
+                com.acr.common.enums.LlmCallErrorType.UNKNOWN, "stop-here", 5L, null));
+
+        service.executeTask(28L);
+
+        // setUp 会对 requireMetadataFetcher 做 stubbing 调用；此处只断言业务路径未真正 fetch。
+        verify(metadataFetcher, never()).fetch(any(), any(), anyInt());
+    }
+
+    @Test
     void llmPathSkipsModelWhenScopeEmpty()
     {
         // 全部文件命中排除：不调用模型，任务按通过完成并说明原因

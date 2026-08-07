@@ -82,7 +82,7 @@ class ReviewDeliveryServiceImplTest
     {
         lenient().when(adapterRegistry.requireCommentClient("GITHUB")).thenReturn(commentClient);
         lenient().when(credentialMapper.selectGitCredentialById(5L)).thenReturn(credential());
-        lenient().when(issueService.listRecheckingTitles(anyLong(), anyInt())).thenReturn(List.of());
+        lenient().when(issueService.listRecheckingTitles(anyLong(), anyInt(), any())).thenReturn(List.of());
         service = new ReviewDeliveryServiceImpl(deliveryMapper, taskMapper, runMapper, projectMapper,
             issueMapper, credentialService, notifyChannelService, robotClients, contentFactory,
             deptService, adapterRegistry, credentialMapper, issueService);
@@ -187,6 +187,23 @@ class ReviewDeliveryServiceImplTest
 
         verify(commentClient, never()).findCommentWithMarker(any(), any(), anyInt(), anyString());
         verify(deliveryMapper, never()).insertDelivery(any());
+    }
+
+    @Test
+    void pushTaskSkipsSummaryCommentDelivery()
+    {
+        ReviewTask task = successTask(130L, 3L, 0);
+        task.setEventSource(ReviewPipelineConstants.EVENT_SOURCE_PUSH);
+        task.setTargetBranch("main");
+
+        service.deliverAfterSuccess(task, successRun(1300L, 1), null);
+
+        verify(commentClient, never()).findCommentWithMarker(any(), any(), anyInt(), anyString());
+        verify(commentClient, never()).createIssueComment(any(), any(), anyInt(), anyString());
+        verify(commentClient, never()).updateIssueComment(any(), any(), anyString(), anyString());
+        verify(deliveryMapper, never()).insertDelivery(any());
+        verify(deliveryMapper, never()).updateDeliveryResult(any());
+        verify(adapterRegistry, never()).requireCommentClient(anyString());
     }
 
     @Test
@@ -579,7 +596,7 @@ class ReviewDeliveryServiceImplTest
         when(taskMapper.selectLatestSuccessByProjectAndPr(3L, 8)).thenReturn(latest);
         when(runMapper.selectRunsByTaskId(50L)).thenReturn(List.of(successRun(701L, 1)));
         stubProjectAndToken();
-        when(issueService.listRecheckingTitles(3L, 8)).thenReturn(List.of("sql-injection", "cmd-injection"));
+        when(issueService.listRecheckingTitles(3L, 8, "")).thenReturn(List.of("sql-injection", "cmd-injection"));
         ArgumentCaptor<ReviewRoundReconcileResult> reconcileCaptor =
             ArgumentCaptor.forClass(ReviewRoundReconcileResult.class);
         when(contentFactory.build(any(), any(), any(), reconcileCaptor.capture()))
@@ -596,7 +613,7 @@ class ReviewDeliveryServiceImplTest
         ReviewCommentSyncResult result = service.rerenderSummaryComment(3L, 8);
 
         assertEquals(ReviewDeliveryConstants.STATUS_SUCCESS, result.getStatus());
-        verify(issueService).listRecheckingTitles(3L, 8);
+        verify(issueService).listRecheckingTitles(3L, 8, "");
         assertTrue(reconcileCaptor.getValue().hasRechecking());
         assertEquals(List.of("sql-injection", "cmd-injection"), reconcileCaptor.getValue().recheckingTitles());
         ArgumentCaptor<String> bodyCaptor = ArgumentCaptor.forClass(String.class);
@@ -611,7 +628,7 @@ class ReviewDeliveryServiceImplTest
         when(taskMapper.selectLatestSuccessByProjectAndPr(3L, 8)).thenReturn(latest);
         when(runMapper.selectRunsByTaskId(51L)).thenReturn(List.of(successRun(702L, 1)));
         stubProjectAndToken();
-        when(issueService.listRecheckingTitles(3L, 8)).thenReturn(List.of());
+        when(issueService.listRecheckingTitles(3L, 8, "")).thenReturn(List.of());
         when(contentFactory.build(any(), any(), any(), any()))
             .thenReturn(ReviewSummaryContent.builder().conclusionLabel("通过").build());
         when(commentClient.findCommentWithMarker(any(), any(), anyInt(), anyString()))
@@ -634,7 +651,7 @@ class ReviewDeliveryServiceImplTest
         when(taskMapper.selectLatestSuccessByProjectAndPr(3L, 8)).thenReturn(latest);
         when(runMapper.selectRunsByTaskId(52L)).thenReturn(List.of(successRun(703L, 1)));
         stubProjectAndToken();
-        when(issueService.listRecheckingTitles(3L, 8)).thenThrow(new RuntimeException("db down"));
+        when(issueService.listRecheckingTitles(3L, 8, "")).thenThrow(new RuntimeException("db down"));
         ArgumentCaptor<ReviewRoundReconcileResult> reconcileCaptor =
             ArgumentCaptor.forClass(ReviewRoundReconcileResult.class);
         when(contentFactory.build(any(), any(), any(), reconcileCaptor.capture()))

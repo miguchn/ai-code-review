@@ -12,6 +12,7 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.junit.jupiter.api.Test;
 import com.acr.review.git.GitPullRequestEvent;
+import com.acr.review.git.GitPushEvent;
 import com.acr.review.git.GitRepositoryCoordinates;
 import com.acr.review.git.WebhookRequestHeaders;
 
@@ -39,6 +40,29 @@ class GitLabWebhookAdapterTest
               "head_sha": "ffffeeeeddddccccbbbbaaaa3333222211110000"
             }
           }
+        }
+        """;
+
+    private static final String PUSH_PAYLOAD = """
+        {
+          "object_kind": "push",
+          "event_name": "push",
+          "before": "aaaabbbbccccddddeeeeffff0000111122223333",
+          "after": "ffffeeeeddddccccbbbbaaaa3333222211110000",
+          "ref": "refs/heads/main",
+          "user_name": "Alice",
+          "user_username": "alice",
+          "total_commits_count": 2,
+          "commits": [
+            { "id": "aaaabbbbccccddddeeeeffff0000111122223333", "message": "first" },
+            { "id": "ffffeeeeddddccccbbbbaaaa3333222211110000", "message": "second fix" }
+          ],
+          "project": {
+            "path_with_namespace": "miguchn/demo-repo",
+            "namespace": "miguchn",
+            "name": "demo-repo"
+          },
+          "repository": { "name": "demo-repo", "url": "https://gitlab.example.com/miguchn/demo-repo" }
         }
         """;
 
@@ -181,6 +205,84 @@ class GitLabWebhookAdapterTest
         assertEquals("merge", mergeEvent.action());
         assertTrue(mergeEvent.merged());
         assertTrue(mergeEvent.isCloseLifecycle());
+    }
+
+    @Test
+    void resolvesPushEventType()
+    {
+        assertTrue(adapter.isPushEventType("Push Hook"));
+        assertFalse(adapter.isPushEventType("Merge Request Hook"));
+        assertFalse(adapter.isPullRequestEventType("Push Hook"));
+    }
+
+    @Test
+    void parsesNormalPushEvent()
+    {
+        GitPushEvent event = adapter.parsePushEvent(
+            "Push Hook", "delivery-push-1", PUSH_PAYLOAD.getBytes(StandardCharsets.UTF_8));
+
+        assertNotNull(event);
+        assertEquals("delivery-push-1", event.deliveryId());
+        assertEquals("miguchn", event.repositoryOwner());
+        assertEquals("demo-repo", event.repositoryName());
+        assertEquals("miguchn/demo-repo", event.repositoryFullPath());
+        assertEquals("main", event.branch());
+        assertEquals("aaaabbbbccccddddeeeeffff0000111122223333", event.beforeSha());
+        assertEquals("ffffeeeeddddccccbbbbaaaa3333222211110000", event.afterSha());
+        assertEquals("alice", event.pusher());
+        assertEquals(2, event.commitCount());
+        assertEquals("second fix", event.headCommitMessage());
+        assertFalse(event.created());
+        assertFalse(event.deleted());
+    }
+
+    @Test
+    void parsesBranchDeletePushEvent()
+    {
+        String deletePayload = PUSH_PAYLOAD.replace(
+            "\"after\": \"ffffeeeeddddccccbbbbaaaa3333222211110000\"",
+            "\"after\": \"0000000000000000000000000000000000000000\"");
+        GitPushEvent event = adapter.parsePushEvent(
+            "Push Hook", "delivery-del", deletePayload.getBytes(StandardCharsets.UTF_8));
+
+        assertNotNull(event);
+        assertTrue(event.deleted());
+        assertFalse(event.created());
+    }
+
+    @Test
+    void parsesNewBranchPushEvent()
+    {
+        String createPayload = PUSH_PAYLOAD.replace(
+            "\"before\": \"aaaabbbbccccddddeeeeffff0000111122223333\"",
+            "\"before\": \"0000000000000000000000000000000000000000\"");
+        GitPushEvent event = adapter.parsePushEvent(
+            "Push Hook", "delivery-new", createPayload.getBytes(StandardCharsets.UTF_8));
+
+        assertNotNull(event);
+        assertTrue(event.created());
+        assertFalse(event.deleted());
+    }
+
+    @Test
+    void parsesPushEventFromObjectKindWhenEventTypeBlank()
+    {
+        GitPushEvent event = adapter.parsePushEvent(
+            null, "delivery-kind", PUSH_PAYLOAD.getBytes(StandardCharsets.UTF_8));
+
+        assertNotNull(event);
+        assertEquals("main", event.branch());
+        assertTrue(adapter.isPushPayload(null, PUSH_PAYLOAD.getBytes(StandardCharsets.UTF_8)));
+    }
+
+    @Test
+    void returnsNullPushEventForNonPushOrBrokenPayload()
+    {
+        assertNull(adapter.parsePushEvent("Merge Request Hook", "d-1", PUSH_PAYLOAD.getBytes(StandardCharsets.UTF_8)));
+        assertNull(adapter.parsePushEvent("Push Hook", "d-1", "broken".getBytes(StandardCharsets.UTF_8)));
+        assertNull(adapter.parsePushEvent("Push Hook", "d-1",
+            "{\"ref\":\"refs/tags/v1.0\",\"before\":\"aaa\",\"after\":\"bbb\",\"project\":{\"path_with_namespace\":\"o/r\"}}"
+                .getBytes(StandardCharsets.UTF_8)));
     }
 
     private static WebhookRequestHeaders headers(String name, String value)

@@ -7,10 +7,12 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.springframework.stereotype.Component;
 import com.acr.review.git.GitPullRequestEvent;
+import com.acr.review.git.GitPushEvent;
 import com.acr.review.git.GitRepositoryCoordinates;
 import com.acr.review.git.GitWebhookAdapter;
 import com.acr.review.git.WebhookRequestHeaders;
 import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 
 /** GitHub Webhook 验签与载荷解析。Secret、签名与载荷结构不越出本包。 */
@@ -20,6 +22,7 @@ public class GitHubWebhookAdapter implements GitWebhookAdapter
     private static final String SIGNATURE_PREFIX = "sha256=";
     private static final String HMAC_ALGORITHM = "HmacSHA256";
     private static final String PULL_REQUEST_EVENT = "pull_request";
+    private static final String PUSH_EVENT = "push";
     private static final String HEADER_SIGNATURE = "X-Hub-Signature-256";
     private static final String HEADER_DELIVERY = "X-GitHub-Delivery";
     private static final String HEADER_EVENT = "X-GitHub-Event";
@@ -61,6 +64,54 @@ public class GitHubWebhookAdapter implements GitWebhookAdapter
     public boolean isPullRequestEventType(String eventType)
     {
         return PULL_REQUEST_EVENT.equals(eventType);
+    }
+
+    @Override
+    public boolean isPushEventType(String eventType)
+    {
+        return PUSH_EVENT.equals(eventType);
+    }
+
+    @Override
+    public GitPushEvent parsePushEvent(String eventType, String deliveryId, byte[] payload)
+    {
+        if (!PUSH_EVENT.equals(eventType))
+        {
+            return null;
+        }
+        JSONObject root = parseObject(payload);
+        if (root == null)
+        {
+            return null;
+        }
+        String branch = stripHeadsBranchRef(root.getString("ref"));
+        if (branch == null)
+        {
+            return null;
+        }
+        String before = root.getString("before");
+        String after = root.getString("after");
+        if (before == null || after == null)
+        {
+            return null;
+        }
+        JSONObject repository = root.getJSONObject("repository");
+        if (repository == null)
+        {
+            return null;
+        }
+        JSONObject owner = repository.getJSONObject("owner");
+        String repoName = repository.getString("name");
+        String ownerLogin = owner == null ? null : owner.getString("login");
+        if (repoName == null || repoName.isBlank() || ownerLogin == null || ownerLogin.isBlank())
+        {
+            return null;
+        }
+        boolean created = Boolean.TRUE.equals(root.getBoolean("created")) || isZeroSha(before);
+        boolean deleted = Boolean.TRUE.equals(root.getBoolean("deleted")) || isZeroSha(after);
+        return new GitPushEvent(deliveryId, ownerLogin, repoName, ownerLogin + "/" + repoName, branch,
+            before, after, resolvePusher(root), resolveCommitCount(root), resolveHeadCommitMessage(root),
+            created, deleted);
     }
 
     @Override
@@ -150,6 +201,80 @@ public class GitHubWebhookAdapter implements GitWebhookAdapter
         {
             return false;
         }
+    }
+
+    private static String stripHeadsBranchRef(String ref)
+    {
+        if (ref == null || ref.isBlank())
+        {
+            return null;
+        }
+        String prefix = "refs/heads/";
+        if (!ref.startsWith(prefix))
+        {
+            return null;
+        }
+        String branch = ref.substring(prefix.length());
+        return branch.isBlank() ? null : branch;
+    }
+
+    private static boolean isZeroSha(String sha)
+    {
+        return sha == null || sha.isBlank() || sha.matches("^0+$");
+    }
+
+    private static String resolvePusher(JSONObject root)
+    {
+        JSONObject pusher = root.getJSONObject("pusher");
+        if (pusher != null)
+        {
+            String name = pusher.getString("name");
+            if (name != null && !name.isBlank())
+            {
+                return name;
+            }
+            String login = pusher.getString("login");
+            if (login != null && !login.isBlank())
+            {
+                return login;
+            }
+        }
+        JSONObject sender = root.getJSONObject("sender");
+        if (sender != null)
+        {
+            String login = sender.getString("login");
+            if (login != null && !login.isBlank())
+            {
+                return login;
+            }
+        }
+        return null;
+    }
+
+    private static Integer resolveCommitCount(JSONObject root)
+    {
+        JSONArray commits = root.getJSONArray("commits");
+        return commits == null ? null : commits.size();
+    }
+
+    private static String resolveHeadCommitMessage(JSONObject root)
+    {
+        JSONObject headCommit = root.getJSONObject("head_commit");
+        if (headCommit != null)
+        {
+            String message = headCommit.getString("message");
+            if (message != null && !message.isBlank())
+            {
+                return message;
+            }
+        }
+        JSONArray commits = root.getJSONArray("commits");
+        if (commits != null && !commits.isEmpty())
+        {
+            JSONObject last = commits.getJSONObject(commits.size() - 1);
+            return last == null ? null : last.getString("message");
+        }
+        return null;
     }
 
     private JSONObject parseObject(byte[] payload)

@@ -43,7 +43,8 @@
           <div class="detail-meta">
             <span>{{ emptyDash(detailIssue.projectName) }}</span>
             <span class="meta-sep">·</span>
-            <span>合并请求 #{{ detailIssue.prNumber }}</span>
+            <span v-if="isPushIssue(detailIssue)">{{ emptyDash(detailIssue.refBranch) }}</span>
+            <span v-else>合并请求 #{{ detailIssue.prNumber }}</span>
             <span v-if="detailIssue.category" class="meta-sep">·</span>
             <span v-if="detailIssue.category">{{ detailIssue.category }}</span>
           </div>
@@ -249,7 +250,7 @@ import { useRouter } from 'vue-router'
 import { listIssue, getIssue, confirmIssue, closeIssue, dismissIssue, reopenIssue } from '@/api/review/issue'
 import auth from '@/plugins/auth'
 import {
-  emptyDash, formatDateTime, formatIssueLines, shortSha
+  emptyDash, formatDateTime, formatIssueLines, shortSha, isPushTask
 } from '@/utils/reviewDisplay'
 import { buildLifecycleNodes } from './issueLifecycle'
 
@@ -333,6 +334,10 @@ watch(() => [props.modelValue, props.issueId], ([visible, issueId]) => {
     resetDetail()
   }
 })
+
+function isPushIssue(issue) {
+  return Number(issue?.prNumber) === 0 || isPushTask(issue)
+}
 
 function isOpenStatus(status) {
   return OPEN_STATUSES.includes(status)

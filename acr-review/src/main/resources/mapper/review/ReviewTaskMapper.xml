@@ -9,6 +9,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="projectId" column="project_id" />
         <result property="eventId" column="event_id" />
         <result property="provider" column="provider" />
+        <result property="eventSource" column="event_source" />
         <result property="prNumber" column="pr_number" />
         <result property="prTitle" column="pr_title" />
         <result property="prAuthor" column="pr_author" />
@@ -71,7 +72,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     </resultMap>
 
     <sql id="taskSelect">
-        select t.task_id, t.project_id, t.event_id, t.provider,
+        select t.task_id, t.project_id, t.event_id, t.provider, t.event_source,
                t.pr_number, t.pr_title, t.pr_author, t.source_branch, t.target_branch, t.base_sha, t.head_sha,
                t.additions, t.deletions, t.changed_files,
                t.trigger_type, t.task_status, t.review_conclusion, t.current_step, t.failure_step, t.failure_type,
@@ -96,7 +97,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 
     <!-- 列表查询不拉取 mediumtext 快照正文，仅详情查询使用完整字段 -->
     <sql id="taskListSelect">
-        select t.task_id, t.project_id, t.event_id, t.provider,
+        select t.task_id, t.project_id, t.event_id, t.provider, t.event_source,
                t.pr_number, t.pr_title, t.pr_author, t.source_branch, t.target_branch, t.base_sha, t.head_sha,
                t.additions, t.deletions, t.changed_files,
                t.trigger_type, t.task_status, t.review_conclusion, t.current_step, t.failure_step, t.failure_type,
@@ -119,7 +120,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 
     <!-- 审查记录列表：附带最新 run 的 Top3 JSON，供重点问题分级统计 -->
     <sql id="recordListSelect">
-        select t.task_id, t.project_id, t.event_id, t.provider,
+        select t.task_id, t.project_id, t.event_id, t.provider, t.event_source,
                t.pr_number, t.pr_title, t.pr_author, t.source_branch, t.target_branch, t.base_sha, t.head_sha,
                t.additions, t.deletions, t.changed_files,
                t.trigger_type, t.task_status, t.review_conclusion, t.current_step, t.failure_step, t.failure_type,
@@ -144,7 +145,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 
     <insert id="insertReviewTask" parameterType="com.acr.review.domain.ReviewTask" useGeneratedKeys="true" keyProperty="taskId">
         insert into review_task
-        (project_id, event_id, provider, pr_number, pr_title, pr_author, source_branch, target_branch,
+        (project_id, event_id, provider, event_source, pr_number, pr_title, pr_author, source_branch, target_branch,
          base_sha, head_sha, additions, deletions, changed_files, trigger_type, task_status, failure_message, attempt_count,
          snapshot_review_mode, snapshot_template_id, snapshot_template_name, snapshot_template_code,
          snapshot_template_version, snapshot_prompt_content,
@@ -154,7 +155,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
          snapshot_scope_report_existing, snapshot_scope_expand_enabled,
          remark, create_by, create_time)
         values
-        (#{projectId}, #{eventId}, #{provider}, #{prNumber}, #{prTitle}, #{prAuthor}, #{sourceBranch}, #{targetBranch},
+        (#{projectId}, #{eventId}, #{provider}, #{eventSource}, #{prNumber}, #{prTitle}, #{prAuthor}, #{sourceBranch}, #{targetBranch},
          #{baseSha}, #{headSha}, #{additions}, #{deletions}, #{changedFiles}, #{triggerType}, #{taskStatus}, #{failureMessage},
          #{attemptCount,jdbcType=INTEGER},
          #{snapshotReviewMode}, #{snapshotTemplateId}, #{snapshotTemplateName}, #{snapshotTemplateCode},
@@ -275,6 +276,9 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <if test="triggerType != null and triggerType != ''">
             and t.trigger_type = #{triggerType}
         </if>
+        <if test="eventSource != null and eventSource != ''">
+            and t.event_source = #{eventSource}
+        </if>
         <if test="params.beginTime != null and params.beginTime != ''">
             and date_format(t.create_time,'%y%m%d') &gt;= date_format(#{params.beginTime},'%y%m%d')
         </if>
@@ -294,6 +298,9 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         </if>
         <if test="prNumber != null">
             and t.pr_number = #{prNumber}
+        </if>
+        <if test="eventSource != null and eventSource != ''">
+            and t.event_source = #{eventSource}
         </if>
         <if test="prAuthor != null and prAuthor != ''">
             and t.pr_author like concat('%', #{prAuthor}, '%')

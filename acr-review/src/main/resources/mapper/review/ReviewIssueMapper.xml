@@ -10,6 +10,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="projectName" column="project_name" />
         <result property="provider" column="provider" />
         <result property="prNumber" column="pr_number" />
+        <result property="refBranch" column="ref_branch" />
         <result property="fingerprint" column="fingerprint" />
         <result property="familyKey" column="family_key" />
         <result property="firstTaskId" column="first_task_id" />
@@ -46,7 +47,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     </resultMap>
 
     <sql id="selectColumns">
-        select i.issue_id, i.project_id, p.project_name, i.provider, i.pr_number, i.fingerprint, i.family_key,
+        select i.issue_id, i.project_id, p.project_name, i.provider, i.pr_number, i.ref_branch, i.fingerprint, i.family_key,
                i.first_task_id, i.first_run_id, i.last_task_id, i.last_run_id, i.issue_rank,
                i.severity, i.category, i.title, i.description, i.file_path, i.start_line, i.end_line,
                i.evidence, i.suggestion, i.origin, i.status, i.resolve_note, i.close_source,
@@ -88,7 +89,9 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             and i.pr_number = #{prNumber}
         </if>
         <if test="keyword != null and keyword != ''">
-            and (i.title like concat('%', #{keyword}, '%') or i.file_path like concat('%', #{keyword}, '%'))
+            and (i.title like concat('%', #{keyword}, '%')
+                 or i.file_path like concat('%', #{keyword}, '%')
+                 or i.ref_branch like concat('%', #{keyword}, '%'))
         </if>
         <if test="beginTime != null and beginTime != ''">
             and i.create_time &gt;= #{beginTime}
@@ -105,7 +108,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     </select>
 
     <select id="selectByProjectAndPr" resultMap="ReviewIssueResult">
-        select issue_id, project_id, provider, pr_number, fingerprint, family_key,
+        select issue_id, project_id, provider, pr_number, ref_branch, fingerprint, family_key,
                first_task_id, first_run_id, last_task_id, last_run_id, issue_rank,
                severity, category, title, description, file_path, start_line, end_line,
                evidence, suggestion, origin, status, resolve_note, close_source,
@@ -115,6 +118,9 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         from review_issue
         where project_id = #{projectId}
           and pr_number = #{prNumber}
+        <if test="refBranch != null">
+          and ref_branch = #{refBranch}
+        </if>
         order by issue_rank asc, issue_id asc
     </select>
 
@@ -172,13 +178,13 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 
     <insert id="insertIssue" parameterType="com.acr.review.domain.ReviewIssue" useGeneratedKeys="true" keyProperty="issueId">
         insert into review_issue
-        (project_id, provider, pr_number, fingerprint, family_key, first_task_id, first_run_id, last_task_id, last_run_id,
+        (project_id, provider, pr_number, ref_branch, fingerprint, family_key, first_task_id, first_run_id, last_task_id, last_run_id,
          issue_rank, severity, category, title, description, file_path, start_line, end_line,
          evidence, suggestion, origin, status, resolve_note, close_source, closed_by, closed_time,
          missed_streak, last_seen_head_sha, last_missed_run_id, recheck_task_id, recheck_run_id, recheck_commit_sha,
          create_by, create_time, update_by, update_time)
         values
-        (#{projectId}, #{provider}, #{prNumber}, #{fingerprint}, #{familyKey}, #{firstTaskId}, #{firstRunId}, #{lastTaskId}, #{lastRunId},
+        (#{projectId}, #{provider}, #{prNumber}, #{refBranch}, #{fingerprint}, #{familyKey}, #{firstTaskId}, #{firstRunId}, #{lastTaskId}, #{lastRunId},
          #{issueRank}, #{severity}, #{category}, #{title}, #{description}, #{filePath}, #{startLine}, #{endLine},
          #{evidence}, #{suggestion}, #{origin}, #{status}, #{resolveNote}, #{closeSource}, #{closedBy}, #{closedTime},
          #{missedStreak}, #{lastSeenHeadSha}, #{lastMissedRunId}, #{recheckTaskId}, #{recheckRunId}, #{recheckCommitSha},

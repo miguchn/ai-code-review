@@ -10,6 +10,7 @@ import java.time.Instant;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import com.acr.review.git.GitPullRequestEvent;
+import com.acr.review.git.GitPushEvent;
 import com.acr.review.git.GitRepositoryCoordinates;
 import com.acr.review.git.WebhookRequestHeaders;
 
@@ -31,6 +32,28 @@ class GiteeWebhookAdapterTest
             "base": { "ref": "dev", "sha": "aaaabbbbccccddddeeeeffff0000111122223333" },
             "head": { "ref": "feature/login", "sha": "ffffeeeeddddccccbbbbaaaa3333222211110000" }
           },
+          "repository": {
+            "name": "demo-repo",
+            "full_name": "miguchn/demo-repo",
+            "owner": { "login": "miguchn" }
+          }
+        }
+        """;
+
+    private static final String PUSH_PAYLOAD = """
+        {
+          "ref": "refs/heads/main",
+          "before": "aaaabbbbccccddddeeeeffff0000111122223333",
+          "after": "ffffeeeeddddccccbbbbaaaa3333222211110000",
+          "created": false,
+          "deleted": false,
+          "pusher": { "name": "alice", "email": "a@x.com" },
+          "sender": { "login": "alice" },
+          "commits": [
+            { "id": "aaaabbbbccccddddeeeeffff0000111122223333", "message": "first", "distinct": true },
+            { "id": "ffffeeeeddddccccbbbbaaaa3333222211110000", "message": "second fix", "distinct": true }
+          ],
+          "head_commit": { "id": "ffffeeeeddddccccbbbbaaaa3333222211110000", "message": "second fix" },
           "repository": {
             "name": "demo-repo",
             "full_name": "miguchn/demo-repo",
@@ -133,6 +156,9 @@ class GiteeWebhookAdapterTest
         assertTrue(adapter.isPullRequestEventType("Merge Request Hook"));
         assertTrue(adapter.isPullRequestEventType("Pull Request Hook"));
         assertFalse(adapter.isPullRequestEventType("Push Hook"));
+        assertTrue(adapter.isPushEventType("Push Hook"));
+        assertTrue(adapter.isPushEventType("push hook"));
+        assertFalse(adapter.isPushEventType("Merge Request Hook"));
     }
 
     @Test
@@ -225,6 +251,67 @@ class GiteeWebhookAdapterTest
     {
         assertNull(adapter.parseRepository("not-json".getBytes(StandardCharsets.UTF_8)));
         assertNull(adapter.parsePullRequestEvent("Merge Request Hook", "d-1", "broken".getBytes(StandardCharsets.UTF_8)));
+    }
+
+    @Test
+    void parsesNormalPushEvent()
+    {
+        GitPushEvent event = adapter.parsePushEvent(
+            "Push Hook", "delivery-push-1", PUSH_PAYLOAD.getBytes(StandardCharsets.UTF_8));
+
+        assertNotNull(event);
+        assertEquals("delivery-push-1", event.deliveryId());
+        assertEquals("miguchn", event.repositoryOwner());
+        assertEquals("demo-repo", event.repositoryName());
+        assertEquals("miguchn/demo-repo", event.repositoryFullPath());
+        assertEquals("main", event.branch());
+        assertEquals("aaaabbbbccccddddeeeeffff0000111122223333", event.beforeSha());
+        assertEquals("ffffeeeeddddccccbbbbaaaa3333222211110000", event.afterSha());
+        assertEquals("alice", event.pusher());
+        assertEquals(2, event.commitCount());
+        assertEquals("second fix", event.headCommitMessage());
+        assertFalse(event.created());
+        assertFalse(event.deleted());
+    }
+
+    @Test
+    void parsesBranchDeletePushEvent()
+    {
+        String deletePayload = PUSH_PAYLOAD
+            .replace("\"deleted\": false", "\"deleted\": true")
+            .replace("\"after\": \"ffffeeeeddddccccbbbbaaaa3333222211110000\"",
+                "\"after\": \"0000000000000000000000000000000000000000\"");
+        GitPushEvent event = adapter.parsePushEvent(
+            "Push Hook", "delivery-del", deletePayload.getBytes(StandardCharsets.UTF_8));
+
+        assertNotNull(event);
+        assertTrue(event.deleted());
+        assertFalse(event.created());
+    }
+
+    @Test
+    void parsesNewBranchPushEvent()
+    {
+        String createPayload = PUSH_PAYLOAD
+            .replace("\"created\": false", "\"created\": true")
+            .replace("\"before\": \"aaaabbbbccccddddeeeeffff0000111122223333\"",
+                "\"before\": \"0000000000000000000000000000000000000000\"");
+        GitPushEvent event = adapter.parsePushEvent(
+            "Push Hook", "delivery-new", createPayload.getBytes(StandardCharsets.UTF_8));
+
+        assertNotNull(event);
+        assertTrue(event.created());
+        assertFalse(event.deleted());
+    }
+
+    @Test
+    void returnsNullPushEventForNonPushOrBrokenPayload()
+    {
+        assertNull(adapter.parsePushEvent("Merge Request Hook", "d-1", PUSH_PAYLOAD.getBytes(StandardCharsets.UTF_8)));
+        assertNull(adapter.parsePushEvent("Push Hook", "d-1", "broken".getBytes(StandardCharsets.UTF_8)));
+        assertNull(adapter.parsePushEvent("Push Hook", "d-1",
+            "{\"ref\":\"refs/tags/v1.0\",\"before\":\"aaa\",\"after\":\"bbb\",\"repository\":{\"name\":\"r\",\"full_name\":\"o/r\"}}"
+                .getBytes(StandardCharsets.UTF_8)));
     }
 
     private static WebhookRequestHeaders headers(String name, String value)

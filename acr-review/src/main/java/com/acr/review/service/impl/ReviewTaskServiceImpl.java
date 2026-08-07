@@ -114,7 +114,8 @@ public class ReviewTaskServiceImpl implements IReviewTaskService
         ReviewTask task = selectReviewTaskById(taskId);
         checkTaskDataScope(task);
         List<ReviewTaskRun> runs = runMapper.selectRunsByTaskId(taskId);
-        issueService.enrichRuns(runs, task.getProjectId(), task.getPrNumber());
+        issueService.enrichRuns(runs, task.getProjectId(), task.getPrNumber(),
+            ReviewIssueServiceImpl.resolveRefBranch(task));
         ReviewDeliveryRecord delivery = deliveryService.selectSummaryDelivery(task.getProjectId(), task.getPrNumber());
         return new ReviewTaskDetail(task, runs, delivery);
     }

@@ -110,6 +110,12 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
         {
             return;
         }
+        // push 任务无 PR 评论可挂，跳过总结评论；IM 走 deliverNotifyAfterTerminal。
+        if (ReviewPipelineConstants.EVENT_SOURCE_PUSH.equals(task.getEventSource())
+            || task.getPrNumber() == null || task.getPrNumber() <= 0)
+        {
+            return;
+        }
         AtomicReference<String> snapshotRef = new AtomicReference<>();
         try
         {
@@ -180,7 +186,7 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
                 return;
             }
             ReviewSummaryContent content = contentFactory.build(task, run, project,
-                resolveRecheckingForRender(reconcile, task.getProjectId(), task.getPrNumber()));
+                resolveRecheckingForRender(reconcile, task));
             String title = success
                 ? "AI Code Review · " + content.getConclusionLabel()
                 : "AI Code Review · 执行失败";
@@ -248,7 +254,7 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
     @Override
     public ReviewCommentSyncResult rerenderSummaryComment(Long projectId, Integer prNumber)
     {
-        if (projectId == null || prNumber == null)
+        if (projectId == null || prNumber == null || prNumber <= 0)
         {
             return ReviewCommentSyncResult.skipped();
         }
@@ -337,7 +343,7 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
                     record.getChannel(), channel.channelType(), deliveryId);
             }
             ReviewSummaryContent content = contentFactory.build(task, run, project,
-                resolveRecheckingForRender(null, task.getProjectId(), task.getPrNumber()));
+                resolveRecheckingForRender(null, task));
             boolean success = ReviewPipelineConstants.TASK_SUCCESS.equals(task.getTaskStatus());
             boolean failed = ReviewPipelineConstants.TASK_FAILED.equals(task.getTaskStatus());
             if (!success && !failed)
@@ -499,8 +505,8 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
         GitRepositoryCoordinates repository = new GitRepositoryCoordinates(
             project.getRepositoryOwner(), project.getRepositoryName(), fullPath, project.getRepositoryUrl());
         ReviewSummaryContent content = contentFactory.build(task, run, project,
-            resolveRecheckingForRender(reconcile, task.getProjectId(), task.getPrNumber()));
-        enrichDisposition(content, task.getProjectId(), task.getPrNumber());
+            resolveRecheckingForRender(reconcile, task));
+        enrichDisposition(content, task);
         String body = ReviewCommentBodyRenderer.render(content);
         String channel = ReviewDeliveryConstants.channelForProvider(provider);
         if (snapshotRef != null)
@@ -521,13 +527,16 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
             repository, access, task.getPrNumber(), body).id();
     }
 
-    private void enrichDisposition(ReviewSummaryContent content, Long projectId, Integer prNumber)
+    private void enrichDisposition(ReviewSummaryContent content, ReviewTask task)
     {
-        if (content == null || content.getTopIssues().isEmpty() || projectId == null || prNumber == null)
+        if (content == null || content.getTopIssues().isEmpty() || task == null
+            || task.getProjectId() == null || task.getPrNumber() == null)
         {
             return;
         }
-        List<ReviewIssue> issues = issueMapper.selectByProjectAndPr(projectId, prNumber);
+        String refBranch = ReviewIssueServiceImpl.resolveRefBranch(task);
+        List<ReviewIssue> issues = issueMapper.selectByProjectAndPr(
+            task.getProjectId(), task.getPrNumber(), refBranch);
         if (issues == null || issues.isEmpty())
         {
             return;
@@ -545,20 +554,26 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
      * 派生失败静默降级为空，不阻塞评论/通知主体。
      */
     private ReviewRoundReconcileResult resolveRecheckingForRender(ReviewRoundReconcileResult reconcile,
-                                                                  Long projectId, Integer prNumber)
+                                                                  ReviewTask task)
     {
         if (reconcile != null)
         {
             return reconcile;
         }
+        if (task == null || task.getProjectId() == null || task.getPrNumber() == null)
+        {
+            return ReviewRoundReconcileResult.empty();
+        }
         try
         {
             return ReviewRoundReconcileResult.forRecheckingTitles(
-                issueService.listRecheckingTitles(projectId, prNumber));
+                issueService.listRecheckingTitles(task.getProjectId(), task.getPrNumber(),
+                    ReviewIssueServiceImpl.resolveRefBranch(task)));
         }
         catch (Exception ex)
         {
-            log.warn("派生待复核标题失败（评论/通知降级为空）, projectId={}, pr={}", projectId, prNumber, ex);
+            log.warn("派生待复核标题失败（评论/通知降级为空）, projectId={}, pr={}",
+                task.getProjectId(), task.getPrNumber(), ex);
             return ReviewRoundReconcileResult.empty();
         }
     }
