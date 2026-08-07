@@ -15,6 +15,15 @@ class GiteaPullRequestWorkspacePreparerTest
     private final GiteaPullRequestWorkspacePreparer preparer = new GiteaPullRequestWorkspacePreparer(30);
 
     @Test
+    void buildsFullFetchArgsWithoutDepth()
+    {
+        String[] args = GiteaPullRequestWorkspacePreparer.buildFetchArgs("origin", "abc1234");
+        org.junit.jupiter.api.Assertions.assertArrayEquals(
+            new String[] { "fetch", "origin", "abc1234" }, args);
+        org.junit.jupiter.api.Assertions.assertFalse(java.util.Arrays.asList(args).contains("--depth"));
+    }
+
+    @Test
     void sanitizesTokenFromMessage()
     {
         String message = GiteaPullRequestWorkspacePreparer.sanitize("failed token=abc123secret detail", "abc123secret");

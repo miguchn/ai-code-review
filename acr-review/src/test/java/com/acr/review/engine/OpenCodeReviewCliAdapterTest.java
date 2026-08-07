@@ -144,6 +144,26 @@ class OpenCodeReviewCliAdapterTest
         assertFalse(command.contains("--exclude"));
     }
 
+    @Test
+    void summarizeFailurePrefersJsonMessageOverFirstLineBrace()
+    {
+        String json = "{\n  \"status\": \"failed\",\n  \"message\": \"Review failed (input): no files selected\"\n}";
+        assertEquals("Review failed (input): no files selected",
+            OpenCodeReviewCliAdapter.summarizeFailureMessage(json, ""));
+        assertEquals("Review failed (input): no files selected",
+            OpenCodeReviewCliAdapter.summarizeFailureMessage("", json));
+    }
+
+    @Test
+    void summarizeFailureTruncatesPlainTextOutput()
+    {
+        String longText = "fatal: " + "x".repeat(500);
+        String summary = OpenCodeReviewCliAdapter.summarizeFailureMessage(longText, null);
+        assertEquals(480, summary.length());
+        assertTrue(summary.startsWith("fatal: "));
+        assertFalse(summary.contains("\n") && summary.indexOf('\n') == 0);
+    }
+
     private Path createWorkspace()
     {
         try

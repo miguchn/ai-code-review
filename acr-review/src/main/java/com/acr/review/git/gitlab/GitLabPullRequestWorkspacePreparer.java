@@ -6,6 +6,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
@@ -148,14 +149,14 @@ public class GitLabPullRequestWorkspacePreparer implements GitPullRequestWorkspa
     private void fetchCommit(Path workspace, String token, String sha)
         throws IOException, InterruptedException, WorkspacePrepareException
     {
-        try
-        {
-            runGit(workspace, token, "fetch", "--depth", "1", "origin", sha);
-        }
-        catch (WorkspacePrepareException shallowFailure)
-        {
-            runGit(workspace, token, "fetch", "origin", sha);
-        }
+        // 禁止 --depth：浅拉取会使 base/head 成为互不连通的浅根，OCR 无法选择 base..head 变更。
+        runGit(workspace, token, buildFetchArgs("origin", sha));
+    }
+
+    /** 完整按 SHA fetch；供单测断言不含 --depth。 */
+    static String[] buildFetchArgs(String remote, String sha)
+    {
+        return new String[] { "fetch", remote, sha };
     }
 
     private void ensureCommitExists(Path workspace, String sha)
@@ -181,9 +182,10 @@ public class GitLabPullRequestWorkspacePreparer implements GitPullRequestWorkspa
         builder.environment().put("GIT_TERMINAL_PROMPT", "0");
         if (token != null && !token.isBlank())
         {
+            // PRIVATE-TOKEN 仅对 GitLab REST API 有效；git over HTTP 使用 Basic(oauth2:PAT)。
             builder.environment().put("GIT_CONFIG_COUNT", "1");
             builder.environment().put("GIT_CONFIG_KEY_0", "http.extraHeader");
-            builder.environment().put("GIT_CONFIG_VALUE_0", "PRIVATE-TOKEN: " + token);
+            builder.environment().put("GIT_CONFIG_VALUE_0", buildAuthorizationExtraHeader(token));
         }
         Process process = builder.start();
         boolean finished = process.waitFor(prepareTimeoutSeconds, TimeUnit.SECONDS);
@@ -200,6 +202,17 @@ public class GitLabPullRequestWorkspacePreparer implements GitPullRequestWorkspa
             throw new WorkspacePrepareException(ReviewPipelineConstants.FAILURE_WORKSPACE_PREPARE,
                 "git " + String.join(" ", args) + " 失败: " + detail);
         }
+    }
+
+    /**
+     * GitLab git over HTTPS 的 http.extraHeader 值：
+     * {@code Authorization: Basic base64("oauth2:" + token)}。
+     */
+    static String buildAuthorizationExtraHeader(String token)
+    {
+        String credentials = "oauth2:" + token;
+        String encoded = Base64.getEncoder().encodeToString(credentials.getBytes(StandardCharsets.UTF_8));
+        return "Authorization: Basic " + encoded;
     }
 
     static String sanitize(String message, String token)

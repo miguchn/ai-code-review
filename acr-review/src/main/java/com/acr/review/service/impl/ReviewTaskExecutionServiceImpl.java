@@ -331,6 +331,16 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
                 return;
             }
 
+            // base..head 无树变更时 OCR 会 0 选中并失败；对齐 LLM emptyScope，短路为通过。
+            if (hasNoCommitDiff(workspaceResult.workingDirectory(), task.getBaseSha(), task.getHeadSha()))
+            {
+                String emptySummary = ReviewPipelineConstants.EVENT_SOURCE_PUSH.equals(task.getEventSource())
+                    ? "本次推送无代码变更，未调用审查引擎，按通过处理"
+                    : "本次变更无代码变更，未调用审查引擎，按通过处理";
+                persistEmptyScopeSuccess(task, run, beginMs, emptySummary);
+                return;
+            }
+
             acquired = concurrencyLimiter.tryAcquire();
             if (!acquired)
             {
@@ -628,10 +638,15 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
     /** 无有效审查范围：不调用模型，按通过落库并在摘要说明原因；决策快照已在调用前落库。 */
     private void persistEmptyScopeSuccess(ReviewTask task, ReviewTaskRun run, long beginMs)
     {
+        persistEmptyScopeSuccess(task, run, beginMs,
+            "本次变更无有效审查范围（全部文件被排除规则命中或为删除、改名等记录类变更），未调用模型，按通过处理");
+    }
+
+    private void persistEmptyScopeSuccess(ReviewTask task, ReviewTaskRun run, long beginMs, String summary)
+    {
         updateStep(task, run, ReviewPipelineConstants.STEP_PERSIST_RESULT);
         long duration = System.currentTimeMillis() - beginMs;
         Date finished = new Date();
-        String summary = "本次变更无有效审查范围（全部文件被排除规则命中或为删除、改名等记录类变更），未调用模型，按通过处理";
 
         run.setRunStatus(ReviewPipelineConstants.RUN_SUCCESS);
         run.setCurrentStep(ReviewPipelineConstants.STEP_PERSIST_RESULT);
@@ -654,6 +669,44 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         task.setDurationMs(duration);
         taskMapper.updateTaskExecution(task);
         deliverQuietly(task, run);
+    }
+
+    /**
+     * 工作区 base..head 是否无树变更（{@code git diff --quiet}）。
+     * 检测失败时返回 false，继续走引擎，避免误短路。
+     */
+    static boolean hasNoCommitDiff(String workingDirectory, String baseSha, String headSha)
+    {
+        if (workingDirectory == null || workingDirectory.isBlank()
+            || baseSha == null || baseSha.isBlank()
+            || headSha == null || headSha.isBlank())
+        {
+            return false;
+        }
+        if (baseSha.equals(headSha))
+        {
+            return true;
+        }
+        try
+        {
+            ProcessBuilder builder = new ProcessBuilder(
+                "git", "-C", workingDirectory, "diff", "--quiet", baseSha, headSha);
+            builder.redirectErrorStream(true);
+            builder.environment().put("GIT_TERMINAL_PROMPT", "0");
+            Process process = builder.start();
+            boolean finished = process.waitFor(30, java.util.concurrent.TimeUnit.SECONDS);
+            if (!finished)
+            {
+                process.destroyForcibly();
+                return false;
+            }
+            // 0=无差异，1=有差异，其它=异常
+            return process.exitValue() == 0;
+        }
+        catch (Exception ex)
+        {
+            return false;
+        }
     }
 
     private ExecutionPlan resolveConfig(ReviewTask task, ReviewTaskRun run)
