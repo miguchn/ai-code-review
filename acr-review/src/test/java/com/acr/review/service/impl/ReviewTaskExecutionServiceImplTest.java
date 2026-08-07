@@ -665,6 +665,43 @@ class ReviewTaskExecutionServiceImplTest
         org.junit.jupiter.api.Assertions.assertEquals(ReviewPipelineConstants.TASK_SUCCESS, finished.getTaskStatus());
     }
 
+    @Test
+    void ocrPathShortCircuitsWhenWorkspaceHasNoDiff()
+    {
+        // base==head：无树变更，直接按空范围通过，不调用引擎
+        ReviewTask task = ocrTask(29L);
+        task.setEventSource(ReviewPipelineConstants.EVENT_SOURCE_PUSH);
+        task.setPrNumber(0);
+        task.setBaseSha("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        task.setHeadSha("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        stubOcrPathPrerequisites(task);
+        when(diffFetcher.fetchDiff(any(), any(), any(), any()))
+            .thenReturn(GitPullRequestDiffResult.fail("EMPTY", "no compare"));
+        when(workspacePreparer.prepare(any())).thenReturn(
+            com.acr.review.git.GitPullRequestWorkspaceResult.ok(
+                "/tmp/ocr-ws-29/repo",
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"));
+
+        service.executeTask(29L);
+
+        verify(reviewEngine, never()).execute(any());
+        org.mockito.ArgumentCaptor<ReviewTask> taskCaptor = org.mockito.ArgumentCaptor.forClass(ReviewTask.class);
+        verify(taskMapper, org.mockito.Mockito.atLeastOnce()).updateTaskExecution(taskCaptor.capture());
+        ReviewTask finished = taskCaptor.getAllValues().get(taskCaptor.getAllValues().size() - 1);
+        org.junit.jupiter.api.Assertions.assertEquals(ReviewPipelineConstants.TASK_SUCCESS, finished.getTaskStatus());
+        org.junit.jupiter.api.Assertions.assertEquals(
+            ReviewPipelineConstants.CONCLUSION_PASS, finished.getReviewConclusion());
+
+        org.mockito.ArgumentCaptor<ReviewTaskRun> runCaptor = org.mockito.ArgumentCaptor.forClass(ReviewTaskRun.class);
+        verify(runMapper, org.mockito.Mockito.atLeastOnce()).updateReviewTaskRun(runCaptor.capture());
+        boolean sawEmptySummary = runCaptor.getAllValues().stream()
+            .map(ReviewTaskRun::getResultSummary)
+            .filter(java.util.Objects::nonNull)
+            .anyMatch(s -> s.contains("本次推送无代码变更"));
+        assertTrue(sawEmptySummary, "应落推送无代码变更摘要");
+    }
+
     /** OCR 快照任务（项目排除两条：docs/** 与 *.generated.java；其余快照列留空走平台默认）。 */
     private ReviewTask ocrTask(long taskId)
     {

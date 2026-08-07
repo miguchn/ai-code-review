@@ -3,6 +3,8 @@ package com.acr.review.git.github;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import org.junit.jupiter.api.Test;
 import com.acr.review.git.GitAccessContext;
 import com.acr.review.domain.ReviewPipelineConstants;
@@ -17,11 +19,31 @@ class GitHubPullRequestWorkspacePreparerTest
     private final GitHubPullRequestWorkspacePreparer preparer = new GitHubPullRequestWorkspacePreparer(30);
 
     @Test
+    void buildsFullFetchArgsWithoutDepth()
+    {
+        String[] args = GitHubPullRequestWorkspacePreparer.buildFetchArgs("origin", "abc1234");
+        org.junit.jupiter.api.Assertions.assertArrayEquals(
+            new String[] { "fetch", "origin", "abc1234" }, args);
+        org.junit.jupiter.api.Assertions.assertFalse(java.util.Arrays.asList(args).contains("--depth"));
+    }
+
+    @Test
     void sanitizesTokenFromMessage()
     {
         String message = GitHubPullRequestWorkspacePreparer.sanitize("failed token=ghp_secret_value detail", "ghp_secret_value");
         assertFalse(message.contains("ghp_secret_value"));
         assertTrue(message.contains("***"));
+    }
+
+    @Test
+    void buildsBasicXAccessTokenAuthorizationHeader()
+    {
+        String header = GitHubPullRequestWorkspacePreparer.buildAuthorizationExtraHeader("ghp_test_token");
+        assertTrue(header.startsWith("Authorization: Basic "));
+        assertFalse(header.contains("Bearer"));
+        String encoded = header.substring("Authorization: Basic ".length());
+        String decoded = new String(Base64.getDecoder().decode(encoded), StandardCharsets.UTF_8);
+        assertEquals("x-access-token:ghp_test_token", decoded);
     }
 
     @Test

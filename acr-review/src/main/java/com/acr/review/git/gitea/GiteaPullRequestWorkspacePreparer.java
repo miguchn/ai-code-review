@@ -121,14 +121,14 @@ public class GiteaPullRequestWorkspacePreparer implements GitPullRequestWorkspac
     private void fetchCommit(Path workspace, String sha)
         throws IOException, InterruptedException, WorkspacePrepareException
     {
-        try
-        {
-            runGit(workspace, "fetch", "--depth", "1", "origin", sha);
-        }
-        catch (WorkspacePrepareException shallowFailure)
-        {
-            runGit(workspace, "fetch", "origin", sha);
-        }
+        // 禁止 --depth：浅拉取会使 base/head 成为互不连通的浅根，OCR 无法选择 base..head 变更。
+        runGit(workspace, buildFetchArgs("origin", sha));
+    }
+
+    /** 完整按 SHA fetch；供单测断言不含 --depth。 */
+    static String[] buildFetchArgs(String remote, String sha)
+    {
+        return new String[] { "fetch", remote, sha };
     }
 
     private void ensureCommitExists(Path workspace, String sha)

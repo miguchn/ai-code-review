@@ -8,6 +8,16 @@ import com.acr.review.git.GitRepositoryCoordinates;
 class GiteePullRequestWorkspacePreparerTest
 {
     @Test
+    void buildsFullFetchArgsWithoutDepth()
+    {
+        String[] args = GiteePullRequestWorkspacePreparer.buildFetchArgs(
+            "https://oauth2:tok@gitee.com/acme/demo.git", "abc1234");
+        org.junit.jupiter.api.Assertions.assertArrayEquals(
+            new String[] { "fetch", "https://oauth2:tok@gitee.com/acme/demo.git", "abc1234" }, args);
+        org.junit.jupiter.api.Assertions.assertFalse(java.util.Arrays.asList(args).contains("--depth"));
+    }
+
+    @Test
     void resolveRemoteUrlUsesOauth2Token()
     {
         GitRepositoryCoordinates repo = new GitRepositoryCoordinates("acme", "demo", "https://gitee.com/acme/demo");

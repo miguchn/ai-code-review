@@ -191,15 +191,74 @@ public class OpenCodeReviewCliAdapter implements ReviewEngine
 
     private String summarizeFailure(String stderr, String stdout)
     {
+        return summarizeFailureMessage(stderr, stdout);
+    }
+
+    /**
+     * 优先从 OCR JSON 错误输出提取 {@code message}；否则取完整输出截断至 480 字符。
+     * 不再只取首行（JSON 报错首行常为「{」，信息不可用）。
+     */
+    static String summarizeFailureMessage(String stderr, String stdout)
+    {
+        String fromJson = extractJsonMessage(stderr);
+        if (fromJson == null || fromJson.isBlank())
+        {
+            fromJson = extractJsonMessage(stdout);
+        }
+        if (fromJson != null && !fromJson.isBlank())
+        {
+            return truncateFailure(fromJson);
+        }
         if (stderr != null && !stderr.isBlank())
         {
-            return stderr.lines().findFirst().orElse(stderr).trim();
+            return truncateFailure(stderr.trim());
         }
         if (stdout != null && !stdout.isBlank())
         {
-            return stdout.lines().findFirst().orElse(stdout).trim();
+            return truncateFailure(stdout.trim());
         }
         return "CLI 执行失败";
+    }
+
+    private static String extractJsonMessage(String text)
+    {
+        if (text == null || text.isBlank())
+        {
+            return null;
+        }
+        String trimmed = text.trim();
+        int start = trimmed.indexOf('{');
+        if (start < 0)
+        {
+            return null;
+        }
+        String candidate = trimmed.substring(start);
+        try
+        {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> map = new com.fasterxml.jackson.databind.ObjectMapper()
+                .readValue(candidate, Map.class);
+            Object message = map.get("message");
+            if (message == null)
+            {
+                return null;
+            }
+            String value = String.valueOf(message).trim();
+            return value.isEmpty() ? null : value;
+        }
+        catch (Exception ignored)
+        {
+            return null;
+        }
+    }
+
+    private static String truncateFailure(String message)
+    {
+        if (message.length() <= 480)
+        {
+            return message;
+        }
+        return message.substring(0, 480);
     }
 
     /** 尽量关闭 CLI 颜色输出；即使 CLI 仍输出 ANSI，也会在返回前再剥离一次。 */
