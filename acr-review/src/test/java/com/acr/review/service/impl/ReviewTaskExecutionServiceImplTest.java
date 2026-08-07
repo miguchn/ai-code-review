@@ -337,13 +337,16 @@ class ReviewTaskExecutionServiceImplTest
     }
 
     @Test
-    void pushTaskSkipsApplyPrMetadata()
+    void pushTaskFillsCommitMessagesFromTitleWithoutFetchingPrMetadata()
     {
-        // 有有效审查范围时才会走到 applyPrMetadata；PUSH 任务应直接跳过，不触碰 metadataFetcher。
+        // PUSH 跳过 PR 元数据拉取，但用建单时的 prTitle（最新提交摘要）填充 run.commitMessages。
         ReviewTask task = llmTask(28L);
         task.setEventSource(ReviewPipelineConstants.EVENT_SOURCE_PUSH);
         task.setPrNumber(0);
         task.setTargetBranch("main");
+        task.setPrTitle("feat: tighten webhook form unwrap");
+        task.setSnapshotPromptContent(
+            "描述：{{pr_description}}\n提交：{{commit_messages}}\n变更：\n{{diff}}");
         stubLlmPathPrerequisites(task);
         when(diffFetcher.fetchDiff(any(), any(), eq("abc1234"), eq("def5678")))
             .thenReturn(GitPullRequestDiffResult.ok(scopeTestDiff()));
@@ -359,6 +362,25 @@ class ReviewTaskExecutionServiceImplTest
 
         // setUp 会对 requireMetadataFetcher 做 stubbing 调用；此处只断言业务路径未真正 fetch。
         verify(metadataFetcher, never()).fetch(any(), any(), anyInt());
+        org.mockito.ArgumentCaptor<ReviewTaskRun> runCaptor = org.mockito.ArgumentCaptor.forClass(ReviewTaskRun.class);
+        verify(runMapper, org.mockito.Mockito.atLeastOnce()).updateReviewTaskRun(runCaptor.capture());
+        ReviewTaskRun run = runCaptor.getAllValues().stream()
+            .filter(r -> "feat: tighten webhook form unwrap".equals(r.getCommitMessages()))
+            .findFirst()
+            .orElseThrow(() -> new AssertionError("run.commitMessages 未被任务标题填充"));
+        org.junit.jupiter.api.Assertions.assertEquals(
+            "feat: tighten webhook form unwrap", run.getCommitMessages());
+        org.junit.jupiter.api.Assertions.assertNull(run.getPrDescription());
+        String prompt = run.getRenderedPrompt();
+        org.junit.jupiter.api.Assertions.assertNotNull(prompt);
+        assertTrue(prompt.contains("（推送审查无合并请求描述）"), "PUSH 应用 push 语义描述兜底");
+        assertTrue(prompt.contains("feat: tighten webhook form unwrap"), "提交信息应进入提示词");
+        org.junit.jupiter.api.Assertions.assertFalse(prompt.contains("（未获取到 PR 描述）"));
+        assertTrue(prompt.contains("推送审查场景：结合推送携带的 Commit Message 判断"),
+            "协议附录 COMMIT_QUALITY 应为 push 版括注");
+        assertTrue(prompt.contains("禁止以缺少 PR/合并请求描述为由输出问题或扣分"));
+        org.junit.jupiter.api.Assertions.assertFalse(
+            prompt.contains("必须结合 PR 标题、PR 描述与 Commit Message 判断"));
     }
 
     @Test

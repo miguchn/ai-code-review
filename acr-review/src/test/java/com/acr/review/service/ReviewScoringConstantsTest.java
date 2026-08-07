@@ -56,4 +56,20 @@ class ReviewScoringConstantsTest
         assertFalse(String.valueOf(rules.getUiHint()).toLowerCase().contains("schema"));
         assertTrue(appendix.contains("protocolVersion"));
     }
+
+    @Test
+    void protocolAppendixPushReviewUsesPushCommitQualityNote()
+    {
+        String pushAppendix = ReviewScoringConstants.protocolAppendix(true);
+        String prAppendix = ReviewScoringConstants.protocolAppendix(false);
+
+        assertTrue(pushAppendix.contains("推送审查场景：结合推送携带的 Commit Message 判断"));
+        assertTrue(pushAppendix.contains("禁止以缺少 PR/合并请求描述为由输出问题或扣分"));
+        assertTrue(pushAppendix.contains("推送审查无合并请求描述"));
+        assertFalse(pushAppendix.contains("必须结合 PR 标题、PR 描述与 Commit Message 判断"));
+
+        assertTrue(prAppendix.contains("必须结合 PR 标题、PR 描述与 Commit Message 判断"));
+        assertFalse(prAppendix.contains("推送审查场景"));
+        assertEquals(ReviewScoringConstants.protocolAppendix(), prAppendix);
+    }
 }

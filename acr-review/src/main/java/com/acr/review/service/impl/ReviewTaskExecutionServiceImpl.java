@@ -407,15 +407,18 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         }
 
         applyPrMetadata(task, run, plan);
+        boolean pushTask = ReviewPipelineConstants.EVENT_SOURCE_PUSH.equals(task.getEventSource());
         String prDescription = StringUtils.isEmpty(run.getPrDescription())
-            ? "（未获取到 PR 描述）" : run.getPrDescription();
+            ? (pushTask ? "（推送审查无合并请求描述）" : "（未获取到 PR 描述）")
+            : run.getPrDescription();
         String commitMessages = StringUtils.isEmpty(run.getCommitMessages())
             ? "（未获取到 Commit Message）" : run.getCommitMessages();
 
         String templateBody = promptComposer.stripConflictingOutputInstructions(plan.promptContent());
         String renderedBody = promptRenderer.render(
             templateBody, task, scope.diffForPrompt(), prDescription, commitMessages);
-        String finalPrompt = promptComposer.composeWithScope(renderedBody, scope.scopeApplied(), scope.hasFullContent());
+        String finalPrompt = promptComposer.composeWithScope(
+            renderedBody, scope.scopeApplied(), scope.hasFullContent(), pushTask);
         run.setRenderedPrompt(truncate(finalPrompt, ReviewScoringConstants.MAX_RENDERED_PROMPT_CHARS));
         run.setProtocolVersion(ReviewScoringConstants.PROTOCOL_VERSION);
         run.setScoreWeightsJson(toJsonQuietly(ReviewScoringConstants.scoreWeights()));
@@ -993,11 +996,13 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
 
     /**
      * 拉取并落库 PR 元数据。PR 详情接口一次拿齐描述/作者/增删行；提交说明失败不阻断。
+     * PUSH 任务无 PR 元数据可拉：用建单时写入 prTitle 的最新提交摘要填充 commitMessages。
      */
     private void applyPrMetadata(ReviewTask task, ReviewTaskRun run, ExecutionPlan plan)
     {
         if (ReviewPipelineConstants.EVENT_SOURCE_PUSH.equals(task.getEventSource()))
         {
+            run.setCommitMessages(truncate(task.getPrTitle(), ReviewScoringConstants.MAX_COMMIT_MESSAGES_CHARS));
             return;
         }
         GitPullRequestMetadata metadata = adapterRegistry.requireMetadataFetcher(plan.provider()).fetch(

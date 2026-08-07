@@ -134,8 +134,18 @@ public final class ReviewScoringConstants
         return sb.toString();
     }
 
-    /** 追加到最终 Prompt 的公共协议附录（中文，含模型输出技术要求）。 */
+    /** 追加到最终 Prompt 的公共协议附录（中文，含模型输出技术要求）；默认按 PR 审查语义。 */
     public static String protocolAppendix()
+    {
+        return protocolAppendix(false);
+    }
+
+    /**
+     * 追加到最终 Prompt 的公共协议附录。
+     *
+     * @param pushReview true 时 COMMIT_QUALITY 括注切换为推送审查语义，禁止以缺少 PR 描述为由扣分
+     */
+    public static String protocolAppendix(boolean pushReview)
     {
         StringBuilder sb = new StringBuilder();
         sb.append("【平台公共评分标准与输出协议 v").append(PROTOCOL_VERSION).append(" — 不可忽略】\n");
@@ -151,7 +161,16 @@ public final class ReviewScoringConstants
                 .append(dimension.description());
             if (DIM_COMMIT_QUALITY.equals(dimension.code()))
             {
-                sb.append("（必须结合 PR 标题、PR 描述与 Commit Message 判断）");
+                if (pushReview)
+                {
+                    sb.append("（推送审查场景：结合推送携带的 Commit Message 判断；推送没有合并请求描述，")
+                        .append("上下文中标注「推送审查无合并请求描述」属正常现象，")
+                        .append("禁止以缺少 PR/合并请求描述为由输出问题或扣分）");
+                }
+                else
+                {
+                    sb.append("（必须结合 PR 标题、PR 描述与 Commit Message 判断）");
+                }
             }
             sb.append('\n');
         }

@@ -1,5 +1,6 @@
 package com.acr.review.service.impl;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -10,10 +11,12 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.dao.DuplicateKeyException;
 import com.acr.review.domain.ReviewProject;
 import com.acr.review.domain.ReviewWebhookEvent;
@@ -24,6 +27,7 @@ import com.acr.review.git.GitPushEvent;
 import com.acr.review.git.GitRepositoryCoordinates;
 import com.acr.review.git.GitWebhookAdapter;
 import com.acr.review.git.WebhookRequestHeaders;
+import com.acr.review.git.github.GitHubWebhookAdapter;
 import com.acr.review.mapper.ReviewProjectMapper;
 import com.acr.review.mapper.ReviewWebhookEventMapper;
 import com.acr.review.security.CredentialCryptoService;
@@ -81,6 +85,8 @@ class ReviewWebhookServiceImplTest
         when(webhookAdapter.isPushEventType("push")).thenReturn(true);
         when(webhookAdapter.isPushEventType("ping")).thenReturn(false);
         when(webhookAdapter.isPushEventType("pull_request")).thenReturn(false);
+        // mock 不走接口 default；默认恒等，与其它平台 JSON 体行为一致。
+        when(webhookAdapter.unwrapPayload(any())).thenAnswer(inv -> inv.getArgument(0));
         when(webhookAdapter.parseRepository(PAYLOAD)).thenReturn(REPO);
         when(configService.selectConfigByKey("review.github.prEvents")).thenReturn("opened,reopened,synchronize");
         when(configService.selectConfigByKey("review.github.pushEvents")).thenReturn("push");
@@ -484,6 +490,85 @@ class ReviewWebhookServiceImplTest
         assertEquals(200, result.httpStatus());
         verify(eventMapper).updateProcessResult(argMatchesStatus("IGNORED"));
         verify(taskCreateService, never()).createTaskFromPushEvent(any(), any(), any());
+    }
+
+    @Test
+    void acceptsFormEncodedPushAndVerifiesRawBody()
+    {
+        GitHubWebhookAdapter realAdapter = new GitHubWebhookAdapter();
+        String pushJson = """
+            {
+              "ref": "refs/heads/dev",
+              "before": "aaaabbbbccccddddeeeeffff0000111122223333",
+              "after": "ffffeeeeddddccccbbbbaaaa3333222211110000",
+              "repository": { "name": "demo", "owner": { "login": "miguchn" } }
+            }
+            """;
+        byte[] formPayload = ("payload=" + URLEncoder.encode(pushJson, StandardCharsets.UTF_8))
+            .getBytes(StandardCharsets.UTF_8);
+        byte[] parsePayload = realAdapter.unwrapPayload(formPayload);
+        ReviewProject project = pushEnabledProject();
+        when(webhookAdapter.unwrapPayload(any())).thenAnswer(inv -> realAdapter.unwrapPayload(inv.getArgument(0)));
+        when(webhookAdapter.resolveDeliveryId(any(), eq(formPayload))).thenReturn("d-1");
+        when(webhookAdapter.parseRepository(eq(parsePayload))).thenReturn(REPO);
+        when(projectMapper.selectByFullPath("GITHUB", "miguchn/demo", null)).thenReturn(project);
+        when(cryptoService.decryptWebhookSecret("cipher")).thenReturn("secret");
+        when(webhookAdapter.verify(eq("secret"), eq(formPayload), any())).thenReturn(true);
+        when(webhookAdapter.parsePushEvent("push", "d-1", parsePayload)).thenReturn(PUSH_EVENT);
+        when(taskCreateService.createTaskFromPushEvent(eq(project), any(), eq(PUSH_EVENT))).thenReturn(310L);
+
+        WebhookHandleResult result = service.handleGitHubWebhook("push", "d-1", "sig", formPayload);
+
+        assertEquals(200, result.httpStatus());
+        assertTrue(result.message().contains("310"));
+        ArgumentCaptor<byte[]> verifyPayload = ArgumentCaptor.forClass(byte[].class);
+        verify(webhookAdapter).verify(eq("secret"), verifyPayload.capture(), any());
+        assertArrayEquals(formPayload, verifyPayload.getValue());
+        verify(webhookAdapter).parseRepository(parsePayload);
+        verify(webhookAdapter).parsePushEvent("push", "d-1", parsePayload);
+        verify(taskCreateService).createTaskFromPushEvent(eq(project), any(), eq(PUSH_EVENT));
+    }
+
+    @Test
+    void acceptsFormEncodedPullRequestAndVerifiesRawBody()
+    {
+        GitHubWebhookAdapter realAdapter = new GitHubWebhookAdapter();
+        String prJson = """
+            {
+              "action": "opened",
+              "number": 12,
+              "pull_request": {
+                "number": 12,
+                "title": "feat: login",
+                "base": { "ref": "dev", "sha": "aaaabbbbccccddddeeeeffff0000111122223333" },
+                "head": { "ref": "feature/login", "sha": "ffffeeeeddddccccbbbbaaaa3333222211110000" }
+              },
+              "repository": { "name": "demo", "owner": { "login": "miguchn" } }
+            }
+            """;
+        byte[] formPayload = ("payload=" + URLEncoder.encode(prJson, StandardCharsets.UTF_8))
+            .getBytes(StandardCharsets.UTF_8);
+        byte[] parsePayload = realAdapter.unwrapPayload(formPayload);
+        ReviewProject project = enabledProject();
+        when(webhookAdapter.unwrapPayload(any())).thenAnswer(inv -> realAdapter.unwrapPayload(inv.getArgument(0)));
+        when(webhookAdapter.resolveDeliveryId(any(), eq(formPayload))).thenReturn("d-1");
+        when(webhookAdapter.parseRepository(eq(parsePayload))).thenReturn(REPO);
+        when(projectMapper.selectByFullPath("GITHUB", "miguchn/demo", null)).thenReturn(project);
+        when(cryptoService.decryptWebhookSecret("cipher")).thenReturn("secret");
+        when(webhookAdapter.verify(eq("secret"), eq(formPayload), any())).thenReturn(true);
+        when(webhookAdapter.parsePullRequestEvent("pull_request", "d-1", parsePayload)).thenReturn(PR_EVENT);
+        when(taskCreateService.createTaskFromEvent(eq(project), any(), eq(PR_EVENT))).thenReturn(311L);
+
+        WebhookHandleResult result = service.handleGitHubWebhook("pull_request", "d-1", "sig", formPayload);
+
+        assertEquals(200, result.httpStatus());
+        assertTrue(result.message().contains("311"));
+        ArgumentCaptor<byte[]> verifyPayload = ArgumentCaptor.forClass(byte[].class);
+        verify(webhookAdapter).verify(eq("secret"), verifyPayload.capture(), any());
+        assertArrayEquals(formPayload, verifyPayload.getValue());
+        verify(webhookAdapter).parseRepository(parsePayload);
+        verify(webhookAdapter).parsePullRequestEvent("pull_request", "d-1", parsePayload);
+        verify(taskCreateService).createTaskFromEvent(eq(project), any(), eq(PR_EVENT));
     }
 
     @Test

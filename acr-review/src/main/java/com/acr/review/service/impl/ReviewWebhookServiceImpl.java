@@ -144,7 +144,9 @@ public class ReviewWebhookServiceImpl implements IReviewWebhookService
     private WebhookHandleResult process(ReviewWebhookEvent event, GitWebhookAdapter webhookAdapter,
                                         WebhookRequestHeaders headers, byte[] payload)
     {
-        GitRepositoryCoordinates repository = webhookAdapter.parseRepository(payload);
+        // 验签必须用原始 body；JSON 解析用 unwrap 后的字节（GitHub form 编码 push/ping）。
+        byte[] parsePayload = webhookAdapter.unwrapPayload(payload);
+        GitRepositoryCoordinates repository = webhookAdapter.parseRepository(parsePayload);
         if (repository == null)
         {
             finishEvent(event, "FAILED", "Webhook 载荷非法，无法解析仓库信息");
@@ -184,11 +186,11 @@ public class ReviewWebhookServiceImpl implements IReviewWebhookService
 
         if (webhookAdapter.isPullRequestEventType(event.getEventType()))
         {
-            return processPullRequest(event, project, webhookAdapter, payload);
+            return processPullRequest(event, project, webhookAdapter, parsePayload);
         }
         if (webhookAdapter.isPushEventType(event.getEventType()))
         {
-            return processPush(event, project, webhookAdapter, payload);
+            return processPush(event, project, webhookAdapter, parsePayload);
         }
         finishEventWithProject(event, project, "IGNORED", "非合并请求事件（" + event.getEventType() + "），已忽略");
         return WebhookHandleResult.ok("非合并请求事件，已忽略");

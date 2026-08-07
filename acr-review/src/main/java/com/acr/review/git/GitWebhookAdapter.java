@@ -31,9 +31,22 @@ public interface GitWebhookAdapter
     boolean verify(String secret, byte[] payload, WebhookRequestHeaders headers);
 
     /**
-     * 解析载荷中的仓库坐标（用于项目匹配）。
+     * 将请求体解包为可 JSON 解析的载荷字节。默认原样返回；
+     * 平台若以 form-urlencoded 包裹 JSON（如 GitHub push/ping），由适配器覆写解包。
+     * 验签仍必须对原始请求字节，不得对本方法结果验签。
      *
      * @param payload 请求原始字节
+     * @return 供 parse* 使用的载荷字节
+     */
+    default byte[] unwrapPayload(byte[] payload)
+    {
+        return payload;
+    }
+
+    /**
+     * 解析载荷中的仓库坐标（用于项目匹配）。
+     *
+     * @param payload 请求原始字节（或已 unwrap 的 JSON 字节）
      * @return 仓库坐标；无法解析时返回 null
      */
     GitRepositoryCoordinates parseRepository(byte[] payload);
