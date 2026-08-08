@@ -24,12 +24,14 @@ import com.acr.review.domain.ReviewTaskRun;
 import com.acr.review.domain.result.ReviewScoreDimension;
 import com.acr.review.domain.result.ReviewScoreResult;
 import com.acr.review.domain.result.ReviewScopeStats;
+import com.acr.review.domain.result.ReviewTopIssue;
 import com.acr.review.engine.OpenCodeReviewCliAdapter;
 import com.acr.review.engine.OcrModelConfigMapper;
 import com.acr.review.engine.ReviewEngineFailureType;
 import com.acr.review.engine.ReviewEngineInvocationType;
 import com.acr.review.engine.ReviewEngineRequest;
 import com.acr.review.engine.ReviewEngineResult;
+import com.acr.review.engine.ReviewEngineResultMapper;
 import com.acr.review.engine.ReviewEngineWorkspaceManager;
 import com.acr.review.engine.config.ReviewEngineProperties;
 import com.acr.review.git.GitAccessContext;
@@ -86,6 +88,7 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
     private final ISysAiModelConfigService aiModelConfigService;
     private final OcrModelConfigMapper modelConfigMapper;
     private final OpenCodeReviewCliAdapter reviewEngine;
+    private final ReviewEngineResultMapper engineResultMapper;
     private final ReviewEngineWorkspaceManager workspaceManager;
     private final ReviewEngineProperties engineProperties;
     private final ReviewConclusionResolver conclusionResolver;
@@ -113,6 +116,7 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
                                           ISysAiModelConfigService aiModelConfigService,
                                           OcrModelConfigMapper modelConfigMapper,
                                           OpenCodeReviewCliAdapter reviewEngine,
+                                          ReviewEngineResultMapper engineResultMapper,
                                           ReviewEngineWorkspaceManager workspaceManager,
                                           ReviewEngineProperties engineProperties,
                                           ReviewConclusionResolver conclusionResolver,
@@ -138,6 +142,7 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         this.aiModelConfigService = aiModelConfigService;
         this.modelConfigMapper = modelConfigMapper;
         this.reviewEngine = reviewEngine;
+        this.engineResultMapper = engineResultMapper;
         this.workspaceManager = workspaceManager;
         this.engineProperties = engineProperties;
         this.conclusionResolver = conclusionResolver;
@@ -831,6 +836,9 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
             }
         }
         String summary = conclusionResolver.summarize(structured, conclusion);
+        List<ReviewTopIssue> topIssues = engineResultMapper.mapTopIssues(structured);
+        int focusIssueCount = ReviewScoreResultParser.countFocusIssues(topIssues);
+        String hasCriticalSecurity = hasCriticalSecurityIssue(topIssues) ? "1" : "0";
         long duration = Math.max(durationHint, System.currentTimeMillis() - beginMs);
         Date finished = new Date();
 
@@ -839,6 +847,11 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         run.setReviewConclusion(conclusion);
         run.setResultSummary(summary);
         run.setResultJson(toResultJson(structured));
+        run.setTopIssuesJson(toJsonQuietly(topIssues));
+        run.setFocusIssueCount(focusIssueCount);
+        run.setHasCriticalSecurity(hasCriticalSecurity);
+        run.setParseStatus(ReviewScoringConstants.PARSE_SUCCESS);
+        run.setParseError(null);
         run.setDurationMs(duration);
         run.setFinishedTime(finished);
         run.setFailureStep(null);
@@ -854,8 +867,28 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         task.setFailureMessage(null);
         task.setFinishedTime(finished);
         task.setDurationMs(duration);
+        task.setFocusIssueCount(focusIssueCount);
+        task.setHasCriticalSecurity(hasCriticalSecurity);
+        task.setParseStatus(ReviewScoringConstants.PARSE_SUCCESS);
         taskMapper.updateTaskExecution(task);
         deliverQuietly(task, run);
+    }
+
+    private static boolean hasCriticalSecurityIssue(List<ReviewTopIssue> issues)
+    {
+        if (issues == null || issues.isEmpty())
+        {
+            return false;
+        }
+        for (ReviewTopIssue issue : issues)
+        {
+            if (ReviewScoringConstants.SEVERITY_CRITICAL.equals(issue.getSeverity())
+                && ReviewScoringConstants.DIM_SECURITY.equals(issue.getCategory()))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void persistLlmSuccess(ReviewTask task, ReviewTaskRun run, long beginMs,

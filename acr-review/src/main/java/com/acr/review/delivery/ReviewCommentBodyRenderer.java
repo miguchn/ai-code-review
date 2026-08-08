@@ -31,7 +31,6 @@ public final class ReviewCommentBodyRenderer
             content = ReviewSummaryContent.builder().build();
         }
         String conclusion = StringUtils.defaultIfEmpty(content.getConclusionLabel(), "--");
-        String scoreText = content.getTotalScore() == null ? "--" : content.getTotalScore() + " / 100";
         Long taskId = content.getTaskId();
         String headSha = StringUtils.defaultIfEmpty(content.getHeadShaShort(), "--");
 
@@ -44,7 +43,11 @@ public final class ReviewCommentBodyRenderer
         sb.append("| 项目 | 内容 |\n");
         sb.append("|---|---|\n");
         sb.append("| 结论 | ").append(conclusion).append(" |\n");
-        sb.append("| 总分 | ").append(scoreText).append(" |\n");
+        String scoreCell = ReviewSummaryContentFactory.scoreTableCell(content.getTotalScore());
+        if (scoreCell != null)
+        {
+            sb.append("| 总分 | ").append(scoreCell).append(" |\n");
+        }
         sb.append("| 任务 | #").append(taskId == null ? "--" : taskId)
             .append(" · `").append(headSha).append("` |\n");
         sb.append("\n### Top 3 重点问题\n\n");

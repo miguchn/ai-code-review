@@ -184,6 +184,31 @@ public class ReviewSummaryContentFactory
         return sha.length() <= 7 ? sha : sha.substring(0, 7);
     }
 
+    /**
+     * IM/评论标题分数段：有总分时返回 {@code " · N/100"}，否则空串。
+     * 避免 OCR 等无评分路径渲染出「· —」。
+     */
+    public static String scoreHeaderSuffix(Integer totalScore)
+    {
+        if (totalScore == null)
+        {
+            return "";
+        }
+        return " · " + totalScore + "/100";
+    }
+
+    /**
+     * 评论表格「总分」单元格；{@code null} 表示整行不渲染。
+     */
+    public static String scoreTableCell(Integer totalScore)
+    {
+        if (totalScore == null)
+        {
+            return null;
+        }
+        return totalScore + " / 100";
+    }
+
     private String buildDetailUrl(ReviewTask task)
     {
         if (task == null || task.getTaskId() == null)

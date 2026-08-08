@@ -62,6 +62,7 @@ class ReviewNotifyMessageRendererTest
         String body = ReviewNotifyMessageRenderer.renderSuccess(content);
 
         assertTrue(body.startsWith("### ⚠️ AI Code Review · 建议修改 · 78/100"));
+        assertTrue(!body.contains("· —"));
         assertTrue(body.contains(
             "**长寿官网系统 · Demo 项目 · [PR #4](https://github.com/acme/demo/pull/4)**"));
         assertTrue(body.contains("Fix login exception handling"));
@@ -91,6 +92,28 @@ class ReviewNotifyMessageRendererTest
         assertTrue(body.contains("[查看审查详情](https://acr.example.com/review/record-detail/index/42)"));
         assertFalse(body.contains("```"));
         assertFalse(body.contains("|---|"));
+    }
+
+    @Test
+    void omitsScoreSegmentWhenTotalScoreNull()
+    {
+        ReviewSummaryContent content = ReviewSummaryContent.builder()
+            .taskId(17L)
+            .conclusionLabel("高风险")
+            .totalScore(null)
+            .prNumber(3)
+            .projectName("Demo")
+            .summaryText("审查结论：阻断；高风险 1 项，警告 0 项")
+            .topIssues(List.of())
+            .build();
+
+        String body = ReviewNotifyMessageRenderer.renderSuccess(content);
+        String header = body.lines().findFirst().orElse("");
+
+        assertEquals("### 🚨 AI Code Review · 高风险", header);
+        assertFalse(header.contains("/100"));
+        assertFalse(header.contains("—"));
+        assertTrue(body.contains("**审查问题 (0)**"));
     }
 
     @Test

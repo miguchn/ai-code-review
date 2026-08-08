@@ -99,10 +99,28 @@ class ReviewCommentBodyRendererTest
         String body = ReviewCommentBodyRenderer.render(task, run);
 
         assertTrue(body.contains("| 结论 | 通过 |"));
-        assertTrue(body.contains("| 总分 | -- |"));
+        assertTrue(!body.contains("| 总分 |"), "无分数时不渲染总分行");
         assertTrue(body.contains("暂无重点问题"));
         assertTrue(body.contains("范围统计：—"));
         assertTrue(body.contains(ReviewDeliveryConstants.COMMENT_MARKER));
+    }
+
+    @Test
+    void omitsScoreRowWhenTotalScoreNull()
+    {
+        ReviewSummaryContent content = ReviewSummaryContent.builder()
+            .taskId(9L)
+            .conclusionLabel("高风险")
+            .totalScore(null)
+            .headShaShort("abc1234")
+            .build();
+
+        String body = ReviewCommentBodyRenderer.render(content);
+
+        assertTrue(body.contains("| 结论 | 高风险 |"));
+        assertTrue(!body.contains("| 总分 |"));
+        assertTrue(!body.contains("· —"));
+        assertTrue(body.contains("| 任务 | #9 · `abc1234` |"));
     }
 
     @Test

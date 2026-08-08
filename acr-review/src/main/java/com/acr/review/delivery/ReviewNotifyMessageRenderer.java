@@ -35,11 +35,11 @@ public final class ReviewNotifyMessageRenderer
         }
         String conclusionLabel = StringUtils.defaultIfEmpty(content.getConclusionLabel(), EMPTY);
         String icon = conclusionIcon(conclusionLabel);
-        String score = content.getTotalScore() == null ? EMPTY : content.getTotalScore() + "/100";
 
         StringBuilder sb = new StringBuilder();
-        sb.append("### ").append(icon).append(" AI Code Review · ")
-            .append(conclusionLabel).append(" · ").append(score).append("\n\n");
+        sb.append("### ").append(icon).append(" AI Code Review · ").append(conclusionLabel)
+            .append(ReviewSummaryContentFactory.scoreHeaderSuffix(content.getTotalScore()))
+            .append("\n\n");
 
         appendAttributionLine(sb, content);
         appendSubmissionInfo(sb, content);
