@@ -307,7 +307,8 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
         {
             return false;
         }
-        return ReviewPipelineConstants.isLlmDirectMode(task.getSnapshotReviewMode());
+        return ReviewPipelineConstants.isLlmDirectMode(task.getSnapshotReviewMode())
+            || ReviewPipelineConstants.isOcrEngineMode(task.getSnapshotReviewMode());
     }
 
     @Override

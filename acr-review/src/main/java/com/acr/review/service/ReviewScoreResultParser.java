@@ -345,7 +345,7 @@ public class ReviewScoreResultParser
     }
 
     /** NEW（或未打标）问题中 CRITICAL/HIGH 数量。 */
-    static int countFocusIssues(List<ReviewTopIssue> issues)
+    public static int countFocusIssues(List<ReviewTopIssue> issues)
     {
         if (issues == null || issues.isEmpty())
         {

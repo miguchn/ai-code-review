@@ -23,6 +23,7 @@ import com.acr.review.domain.ReviewTaskRun;
 import com.acr.review.domain.ReviewTemplate;
 import com.acr.review.engine.OpenCodeReviewCliAdapter;
 import com.acr.review.engine.OcrModelConfigMapper;
+import com.acr.review.engine.ReviewEngineResultMapper;
 import com.acr.review.engine.ReviewEngineWorkspaceManager;
 import com.acr.review.engine.config.ReviewEngineProperties;
 import com.acr.review.git.GitAdapterRegistry;
@@ -81,6 +82,7 @@ class ReviewTaskExecutionServiceImplTest
             modelConfigService,
             modelConfigMapper,
             reviewEngine,
+            new ReviewEngineResultMapper(),
             workspaceManager,
             properties,
             new ReviewConclusionResolver(),
@@ -428,6 +430,7 @@ class ReviewTaskExecutionServiceImplTest
             modelConfigService,
             mock(OcrModelConfigMapper.class),
             mock(OpenCodeReviewCliAdapter.class),
+            new ReviewEngineResultMapper(),
             mock(ReviewEngineWorkspaceManager.class),
             engineProperties(),
             new ReviewConclusionResolver(),
@@ -586,6 +589,57 @@ class ReviewTaskExecutionServiceImplTest
     }
 
     // ---------- 步 6：OCR 路径范围排除与决策快照 ----------
+
+    @Test
+    void ocrPathPersistsTopIssuesAndTriggersReconcile()
+    {
+        ReviewTask task = ocrTask(30L);
+        stubOcrPathPrerequisites(task);
+        when(diffFetcher.fetchDiff(any(), any(), eq("abc1234"), eq("def5678")))
+            .thenReturn(GitPullRequestDiffResult.ok(scopeTestDiff()));
+        java.util.Map<String, Object> comment = new java.util.HashMap<>();
+        comment.put("path", "src/Auth.java");
+        comment.put("content", "**SQL 注入**: 未参数化查询。建议使用 PreparedStatement。");
+        comment.put("existing_code", "String sql = \"select * from t where id=\" + id;");
+        comment.put("suggestion_code", "PreparedStatement ps = conn.prepareStatement(\"?\");");
+        comment.put("start_line", 12);
+        comment.put("end_line", 14);
+        comment.put("category", "security");
+        comment.put("severity", "critical");
+        when(reviewEngine.execute(any())).thenReturn(com.acr.review.engine.ReviewEngineResult.success(
+            "open-code-review", "1.8.3", 5L, "{}", "",
+            java.util.Map.of("comments", java.util.List.of(comment)), 0));
+        when(issueService.reconcileAfterSuccess(any(), any()))
+            .thenReturn(com.acr.review.domain.ReviewRoundReconcileResult.empty());
+
+        service.executeTask(30L);
+
+        org.mockito.ArgumentCaptor<ReviewTaskRun> runCaptor = org.mockito.ArgumentCaptor.forClass(ReviewTaskRun.class);
+        verify(runMapper, org.mockito.Mockito.atLeastOnce()).updateReviewTaskRun(runCaptor.capture());
+        ReviewTaskRun run = runCaptor.getAllValues().get(runCaptor.getAllValues().size() - 1);
+        org.junit.jupiter.api.Assertions.assertEquals(ReviewPipelineConstants.RUN_SUCCESS, run.getRunStatus());
+        org.junit.jupiter.api.Assertions.assertNotNull(run.getTopIssuesJson());
+        assertTrue(run.getTopIssuesJson().contains("SQL 注入"), run.getTopIssuesJson());
+        assertTrue(run.getTopIssuesJson().contains("\"category\":\"SECURITY\""), run.getTopIssuesJson());
+        org.junit.jupiter.api.Assertions.assertEquals(1, run.getFocusIssueCount());
+        org.junit.jupiter.api.Assertions.assertEquals("1", run.getHasCriticalSecurity());
+        org.junit.jupiter.api.Assertions.assertEquals(
+            com.acr.review.service.ReviewScoringConstants.PARSE_SUCCESS, run.getParseStatus());
+
+        org.mockito.ArgumentCaptor<ReviewTask> taskCaptor = org.mockito.ArgumentCaptor.forClass(ReviewTask.class);
+        verify(taskMapper, org.mockito.Mockito.atLeastOnce()).updateTaskExecution(taskCaptor.capture());
+        ReviewTask finished = taskCaptor.getAllValues().get(taskCaptor.getAllValues().size() - 1);
+        org.junit.jupiter.api.Assertions.assertEquals(1, finished.getFocusIssueCount());
+        org.junit.jupiter.api.Assertions.assertEquals("1", finished.getHasCriticalSecurity());
+        org.junit.jupiter.api.Assertions.assertEquals(
+            com.acr.review.service.ReviewScoringConstants.PARSE_SUCCESS, finished.getParseStatus());
+
+        org.mockito.ArgumentCaptor<ReviewTaskRun> reconcileRun =
+            org.mockito.ArgumentCaptor.forClass(ReviewTaskRun.class);
+        verify(issueService).reconcileAfterSuccess(any(ReviewTask.class), reconcileRun.capture());
+        assertTrue(reconcileRun.getValue().getTopIssuesJson().contains("SQL 注入"));
+        verify(deliveryService).deliverAfterSuccess(any(ReviewTask.class), any(ReviewTaskRun.class), any());
+    }
 
     @Test
     void ocrPathPassesExcludePatternsAndPersistsScopeSnapshot()

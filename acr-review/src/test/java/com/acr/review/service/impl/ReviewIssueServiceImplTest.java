@@ -322,16 +322,25 @@ class ReviewIssueServiceImplTest
     }
 
     @Test
-    void reconcileSkipsOcrMode()
+    void reconcileMaterializesOcrEngineIssues()
     {
         ReviewTask task = successLlmTask(11L, 10L, 8, "jjj");
         task.setSnapshotReviewMode(ReviewPipelineConstants.REVIEW_MODE_OCR_ENGINE);
-        ReviewTaskRun run = runWithIssues(110L, top("SEC", "a.java", "leak", 1));
+        ReviewTaskRun run = runWithIssues(110L, top("SECURITY", "a.java", "leak", 1));
+        when(issueMapper.selectByProjectAndPr(10L, 8, "")).thenReturn(new ArrayList<>());
+        when(issueMapper.insertIssue(any())).thenAnswer(inv -> {
+            ReviewIssue created = inv.getArgument(0);
+            created.setIssueId(601L);
+            return 1;
+        });
 
         ReviewRoundReconcileResult result = service.reconcileAfterSuccess(task, run);
 
-        assertTrue(result.getNewlyMaterialized().isEmpty());
-        verify(issueMapper, never()).selectByProjectAndPr(any(), any(), any());
+        assertEquals(1, result.getNewlyMaterialized().size());
+        ArgumentCaptor<ReviewIssue> captor = ArgumentCaptor.forClass(ReviewIssue.class);
+        verify(issueMapper).insertIssue(captor.capture());
+        assertEquals("leak", captor.getValue().getTitle());
+        assertEquals("SECURITY", captor.getValue().getCategory());
     }
 
     @Test
