@@ -147,6 +147,14 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         order by attempt_no desc
     </select>
 
+    <update id="updateTopIssuesJson">
+        update review_task_run
+        set top_issues_json = #{topIssuesJson},
+            update_by = 'system',
+            update_time = sysdate()
+        where run_id = #{runId}
+    </update>
+
     <select id="selectMaxAttemptNo" resultType="java.lang.Integer">
         select max(attempt_no) from review_task_run where task_id = #{taskId}
     </select>

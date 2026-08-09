@@ -8,6 +8,10 @@ export function getIssueStats(query) {
   return request({ url: '/review/issue/stats', method: 'get', params: query })
 }
 
+export function getIssueRecordContext(taskId, query) {
+  return request({ url: '/review/issue/record/' + taskId, method: 'get', params: query })
+}
+
 export function getIssue(issueId) {
   return request({ url: '/review/issue/' + issueId, method: 'get' })
 }

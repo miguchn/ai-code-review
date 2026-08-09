@@ -9,7 +9,9 @@
   >
     <template #header>
       <div class="drawer-head">
-        <span class="drawer-head-title">{{ detailIssue?.title || '问题详情' }}</span>
+        <span class="drawer-head-title">
+          {{ detailIssue ? ('问题 #' + detailIssue.issueId + ' · ' + (detailIssue.title || '问题详情')) : '问题详情' }}
+        </span>
         <dict-tag v-if="detailIssue?.status" :options="review_issue_status" :value="detailIssue.status" />
       </div>
     </template>
@@ -39,15 +41,38 @@
           </div>
         </section>
 
+        <el-alert
+          class="lifecycle-hint"
+          :type="lifecycleHint.type"
+          :closable="false"
+          show-icon
+          :title="lifecycleHint.title"
+          :description="lifecycleHint.description"
+        />
+
         <section class="detail-section">
-          <div class="detail-meta">
-            <span>{{ emptyDash(detailIssue.projectName) }}</span>
-            <span class="meta-sep">·</span>
-            <span v-if="isPushIssue(detailIssue)">{{ emptyDash(detailIssue.refBranch) }}</span>
-            <span v-else>合并请求 #{{ detailIssue.prNumber }}</span>
-            <span v-if="detailIssue.category" class="meta-sep">·</span>
-            <span v-if="detailIssue.category">{{ detailIssue.category }}</span>
-          </div>
+          <el-descriptions :column="2" border size="small" class="context-descriptions">
+            <el-descriptions-item label="所属项目">{{ emptyDash(detailIssue.projectName) }}</el-descriptions-item>
+            <el-descriptions-item label="业务系统">{{ emptyDash(detailIssue.businessSystemName) }}</el-descriptions-item>
+            <el-descriptions-item label="变更来源">
+              <el-button v-if="detailMergeRequestUrl" link type="primary" @click="openMergeRequest">
+                {{ mergeRequestLabel(detailIssue.provider) }} #{{ detailIssue.prNumber }} · {{ emptyDash(detailIssue.prTitle) }}
+              </el-button>
+              <span v-else>{{ changeSourceLabel }}</span>
+            </el-descriptions-item>
+            <el-descriptions-item label="发起人">{{ emptyDash(detailIssue.prAuthor) }}</el-descriptions-item>
+            <el-descriptions-item label="分支">{{ branchLabel }}</el-descriptions-item>
+            <el-descriptions-item label="最近提交"><code>{{ shortSha(detailIssue.headSha || detailIssue.lastSeenHeadSha) }}</code></el-descriptions-item>
+            <el-descriptions-item label="发现时间">{{ formatDateTime(detailIssue.createTime) }}</el-descriptions-item>
+            <el-descriptions-item label="阶段进入">{{ formatDateTime(detailIssue.stageEnteredTime) }}</el-descriptions-item>
+            <el-descriptions-item v-if="detailIssue.closedTime" label="关闭时间">
+              {{ formatDateTime(detailIssue.closedTime) }}
+            </el-descriptions-item>
+            <el-descriptions-item v-if="detailIssue.closeSource" label="关闭来源">
+              {{ closeSourceLabel(detailIssue.closeSource) }}
+            </el-descriptions-item>
+          </el-descriptions>
+          <div v-if="detailIssue.category" class="detail-category">分类：{{ detailIssue.category }}</div>
           <p v-if="detailIssue.description" class="detail-desc">{{ detailIssue.description }}</p>
         </section>
 
@@ -75,12 +100,19 @@
           <dict-tag :options="review_issue_origin" :value="detailIssue.origin" />
         </section>
 
-        <section v-if="detailSourceTask" class="detail-block">
-          <div class="detail-block-title">来源任务</div>
-          <div class="source-task">
-            <el-button link type="primary" @click="goSourceTask">任务 #{{ detailSourceTask.taskId }}</el-button>
-            <span v-if="detailSourceTask.prTitle" class="source-task-title">{{ detailSourceTask.prTitle }}</span>
-            <span class="source-task-time">{{ formatDateTime(detailSourceTask.finishedTime) }}</span>
+        <section v-if="detailFirstTask || detailLastTask" class="detail-block">
+          <div class="detail-block-title">关联审查记录</div>
+          <div class="review-record-links">
+            <div v-if="detailFirstTask" class="source-task">
+              <span class="record-link-label">首次发现</span>
+              <el-button link type="primary" @click="goTask(detailFirstTask)">审查记录 #{{ detailFirstTask.taskId }}</el-button>
+              <span class="source-task-time">{{ formatDateTime(detailFirstTask.finishedTime) }}</span>
+            </div>
+            <div v-if="detailLastTask" class="source-task">
+              <span class="record-link-label">最近审查</span>
+              <el-button link type="primary" @click="goTask(detailLastTask)">审查记录 #{{ detailLastTask.taskId }}</el-button>
+              <span class="source-task-time">{{ formatDateTime(detailLastTask.finishedTime) }}</span>
+            </div>
           </div>
         </section>
 
@@ -157,6 +189,9 @@
               placement="top"
             >
               <div class="action-item">
+                <el-tag :type="actionSourceTagType(action)" size="small" effect="plain" class="action-source">
+                  {{ actionSourceLabel(action) }}
+                </el-tag>
                 <span class="action-type">{{ actionTypeLabel(action) }}</span>
                 <span class="action-operator">{{ operatorLabel(action.operator) }}</span>
                 <div
@@ -250,7 +285,8 @@ import { useRouter } from 'vue-router'
 import { listIssue, getIssue, confirmIssue, closeIssue, dismissIssue, reopenIssue } from '@/api/review/issue'
 import auth from '@/plugins/auth'
 import {
-  emptyDash, formatDateTime, formatIssueLines, shortSha, isPushTask
+  emptyDash, formatDateTime, formatIssueLines, shortSha, isPushTask,
+  buildMergeRequestUrl, formatPushRefDisplay, mergeRequestLabel
 } from '@/utils/reviewDisplay'
 import { buildLifecycleNodes } from './issueLifecycle'
 
@@ -290,7 +326,8 @@ const ACTION_TYPE_LABELS = {
 
 const detailLoading = ref(false)
 const detailIssue = ref(null)
-const detailSourceTask = ref(null)
+const detailFirstTask = ref(null)
+const detailLastTask = ref(null)
 const detailActions = ref([])
 const detailSummaryDelivery = ref(null)
 const relatedIssues = ref([])
@@ -325,6 +362,43 @@ const showDetailActions = computed(() => {
 const canOpenDeliveryList = computed(() => auth.hasPermi('review:delivery:list'))
 
 const lifecycleNodes = computed(() => buildLifecycleNodes(detailIssue.value, detailActions.value, formatDateTime))
+const detailMergeRequestUrl = computed(() => buildMergeRequestUrl(detailLastTask.value || detailIssue.value || {}))
+const changeSourceLabel = computed(() => {
+  const issue = detailIssue.value
+  if (!issue) return '—'
+  if (isPushIssue(issue)) return `Push ${formatPushRefDisplay(issue)}`
+  return `${mergeRequestLabel(issue.provider)} #${issue.prNumber} · ${emptyDash(issue.prTitle)}`
+})
+const branchLabel = computed(() => {
+  const issue = detailIssue.value
+  if (!issue) return '—'
+  if (isPushIssue(issue)) return issue.targetBranch || issue.refBranch || issue.sourceBranch || '—'
+  return `${emptyDash(issue.sourceBranch)} → ${emptyDash(issue.targetBranch)}`
+})
+const lifecycleHint = computed(() => {
+  const status = detailIssue.value?.status
+  const hints = {
+    AWAITING_CONFIRM: {
+      type: 'info', title: '系统已发现，等待人工确认', description: '请判断该问题是否需要进入修复治理；确认后将转为待修复。'
+    },
+    AWAITING_FIX: {
+      type: 'warning', title: '问题已确认，等待代码修复', description: '下一次审查会继续跟踪是否命中；未命中达到阈值后进入待复核。'
+    },
+    RECHECKING: {
+      type: 'warning', title: '疑似已修复，等待人工验证', description: '系统仅确认新代码中未再次命中，尚不能替代人工验证；请确认关闭或恢复为待修复。'
+    },
+    CLOSED: {
+      type: 'success', title: '问题已关闭', description: '问题已完成验证或随合并请求关闭，可通过时间线追溯处置过程。'
+    },
+    IGNORED: {
+      type: 'info', title: '问题已忽略', description: '该问题不再进入活跃治理，原因可在处置说明和时间线中查看。'
+    },
+    FALSE_POSITIVE: {
+      type: 'info', title: '问题已标记为误报', description: '该问题不再进入活跃治理，原因可在处置说明和时间线中查看。'
+    }
+  }
+  return hints[status] || { type: 'info', title: '问题生命周期', description: '通过审查记录和处置时间线追溯问题变化。' }
+})
 
 watch(() => [props.modelValue, props.issueId], ([visible, issueId]) => {
   if (visible && issueId) {
@@ -358,9 +432,33 @@ function showStatusPair(action) {
   return action.fromStatus !== action.toStatus
 }
 
+function isSystemAction(action) {
+  if (String(action?.operator || '').toLowerCase() === 'system') return true
+  return ['AUTO_RECHECK', 'AUTO_REOPEN', 'DETECTED', 'ROUND_HIT', 'ROUND_MISS'].includes(action?.actionType)
+}
+
+function actionSourceLabel(action) {
+  return isSystemAction(action) ? '系统事件' : '人工处置'
+}
+
+function actionSourceTagType(action) {
+  return isSystemAction(action) ? 'info' : 'primary'
+}
+
+function closeSourceLabel(source) {
+  const labels = {
+    manual: '人工关闭',
+    auto_recheck: '复核确认关闭',
+    pr_merged: '合并请求已合并',
+    pr_closed: '合并请求已关闭'
+  }
+  return labels[source] || source || '—'
+}
+
 function resetDetail() {
   detailIssue.value = null
-  detailSourceTask.value = null
+  detailFirstTask.value = null
+  detailLastTask.value = null
   detailActions.value = []
   detailSummaryDelivery.value = null
   relatedIssues.value = []
@@ -373,7 +471,9 @@ function loadDetail(issueId) {
   getIssue(issueId).then(response => {
     const payload = response.data || {}
     detailIssue.value = payload.issue || null
-    detailSourceTask.value = payload.sourceTask || null
+    detailFirstTask.value = payload.firstTask
+      || (payload.issue?.firstTaskId === payload.issue?.lastTaskId ? payload.sourceTask : null)
+    detailLastTask.value = payload.lastTask || payload.sourceTask || null
     detailActions.value = payload.actions || []
     detailSummaryDelivery.value = payload.summaryDelivery || null
     if (detailIssue.value?.status === 'RECHECKING') {
@@ -416,10 +516,16 @@ function openRelated(issueId) {
   emit('update:issueId', issueId)
 }
 
-function goSourceTask() {
-  const taskId = detailSourceTask.value?.taskId
+function goTask(task) {
+  const taskId = task?.taskId
   if (!taskId) return
   proxy.$router.push('/review/record-detail/index/' + taskId)
+}
+
+function openMergeRequest() {
+  if (detailMergeRequestUrl.value) {
+    window.open(detailMergeRequestUrl.value, '_blank', 'noopener,noreferrer')
+  }
 }
 
 function goRecheckTask() {
@@ -528,6 +634,7 @@ function submitDismiss() {
   color: var(--el-text-color-primary);
 }
 .drawer-body { padding: 0 4px 24px; }
+.lifecycle-hint { margin: -8px 0 16px; }
 
 .lifecycle-bar {
   display: flex;
@@ -604,6 +711,12 @@ function submitDismiss() {
 .lifecycle-round { margin-left: 4px; }
 
 .detail-section { margin-bottom: 16px; }
+.context-descriptions { margin-bottom: 12px; }
+.context-descriptions code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+}
+.detail-category { margin-bottom: 8px; font-size: 12px; color: var(--el-text-color-secondary); }
 .detail-meta {
   font-size: 13px;
   color: var(--el-text-color-secondary);
@@ -680,6 +793,8 @@ function submitDismiss() {
 }
 .source-task-title { color: var(--el-text-color-regular); }
 .source-task-time { font-size: 12px; color: var(--el-text-color-secondary); }
+.review-record-links { display: flex; flex-direction: column; gap: 8px; }
+.record-link-label { min-width: 58px; color: var(--el-text-color-secondary); }
 .recheck-evidence {
   display: flex;
   flex-direction: column;
@@ -710,6 +825,7 @@ function submitDismiss() {
 .action-timeline { padding-left: 4px; }
 .action-item { font-size: 13px; }
 .action-type { font-weight: 500; margin-right: 8px; color: var(--el-text-color-primary); }
+.action-source { margin-right: 8px; }
 .action-operator { font-size: 12px; color: var(--el-text-color-secondary); }
 .action-status {
   display: flex;

@@ -15,5 +15,8 @@ public interface ReviewTaskRunMapper
 
     List<ReviewTaskRun> selectRunsByTaskId(@Param("taskId") Long taskId);
 
+    /** 对账后固化运行结果与台账问题的关联，不改动原始结果正文。 */
+    int updateTopIssuesJson(@Param("runId") Long runId, @Param("topIssuesJson") String topIssuesJson);
+
     Integer selectMaxAttemptNo(@Param("taskId") Long taskId);
 }

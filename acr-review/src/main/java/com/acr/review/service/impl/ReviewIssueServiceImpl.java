@@ -27,6 +27,7 @@ import com.acr.review.domain.ReviewIssueBatchRequest;
 import com.acr.review.domain.ReviewIssueBatchResult;
 import com.acr.review.domain.ReviewIssueConstants;
 import com.acr.review.domain.ReviewIssueDetail;
+import com.acr.review.domain.ReviewIssueRecordContext;
 import com.acr.review.domain.ReviewIssueStats;
 import com.acr.review.domain.ReviewPipelineConstants;
 import com.acr.review.domain.ReviewProject;
@@ -38,6 +39,7 @@ import com.acr.review.mapper.ReviewIssueActionMapper;
 import com.acr.review.mapper.ReviewIssueMapper;
 import com.acr.review.mapper.ReviewProjectMapper;
 import com.acr.review.mapper.ReviewTaskMapper;
+import com.acr.review.mapper.ReviewTaskRunMapper;
 import com.acr.review.service.IReviewDeliveryService;
 import com.acr.review.service.IReviewIssueService;
 import com.acr.review.service.ReviewIssueDispositionEnricher;
@@ -60,6 +62,7 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
     private final ReviewIssueActionMapper actionMapper;
     private final ReviewProjectMapper projectMapper;
     private final ReviewTaskMapper taskMapper;
+    private final ReviewTaskRunMapper runMapper;
     private final ISysDeptService deptService;
     private final IReviewDeliveryService deliveryService;
     private final ISysConfigService configService;
@@ -68,6 +71,7 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
                                   ReviewIssueActionMapper actionMapper,
                                   ReviewProjectMapper projectMapper,
                                   ReviewTaskMapper taskMapper,
+                                  ReviewTaskRunMapper runMapper,
                                   ISysDeptService deptService,
                                   IReviewDeliveryService deliveryService,
                                   ISysConfigService configService)
@@ -76,6 +80,7 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
         this.actionMapper = actionMapper;
         this.projectMapper = projectMapper;
         this.taskMapper = taskMapper;
+        this.runMapper = runMapper;
         this.deptService = deptService;
         this.deliveryService = deliveryService;
         this.configService = configService;
@@ -123,6 +128,7 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
                 continue;
             }
             consumedRoundIndexes.add(i);
+            top.setIssueId(existing.getIssueId());
             if (ReviewIssueConstants.isTerminal(existing.getStatus()))
             {
                 continue;
@@ -186,6 +192,7 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
                 continue;
             }
             applyHit(target, task, run, top, headSha, ReviewIssueConstants.OPERATOR_SYSTEM);
+            top.setIssueId(target.getIssueId());
             target.setFingerprint(newFp);
             target.setFamilyKey(fk);
             if (ReviewIssueConstants.STATUS_RECHECKING.equals(target.getStatus()))
@@ -236,6 +243,7 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
             usedFingerprints.add(fp);
             ReviewIssue created = buildNewIssue(task, run, top, fp, headSha, ReviewIssueConstants.OPERATOR_SYSTEM);
             issueMapper.insertIssue(created);
+            top.setIssueId(created.getIssueId());
             String status = created.getStatus();
             insertSystemAction(created.getIssueId(), ReviewIssueConstants.ACTION_DETECTED, status, status,
                 "第 " + roundNo + " 轮审查发现 · commit " + displayShortSha(headSha));
@@ -292,6 +300,7 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
             }
         }
 
+        persistRunIssueLinks(run, roundIssues);
         return new ReviewRoundReconcileResult(newlyMaterialized, movedToRechecking, reopened);
     }
 
@@ -319,15 +328,105 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
     }
 
     @Override
+    @DataScope(deptAlias = "d", userAlias = "owner", permission = "review:issue:list")
+    public ReviewIssueRecordContext selectRecordContext(ReviewIssue query)
+    {
+        if (query == null || query.getReviewTaskId() == null)
+        {
+            throw new ServiceException("审查记录编号不能为空");
+        }
+        ReviewTask task = taskMapper.selectReviewTaskById(query.getReviewTaskId());
+        if (task == null)
+        {
+            throw new ServiceException("审查记录不存在");
+        }
+        if (!ReviewPipelineConstants.TASK_SUCCESS.equals(task.getTaskStatus())
+            && !ReviewPipelineConstants.TASK_FAILED.equals(task.getTaskStatus()))
+        {
+            throw new ServiceException("审查任务尚未结束");
+        }
+
+        ReviewIssue scopeCarrier = new ReviewIssue();
+        scopeCarrier.setProjectId(task.getProjectId());
+        checkIssueDataScope(scopeCarrier);
+
+        ReviewIssueRecordContext context = new ReviewIssueRecordContext();
+        context.setRecord(task);
+        ReviewTaskRun successRun = latestSuccessRun(runMapper.selectRunsByTaskId(task.getTaskId()));
+        context.setRun(successRun);
+        if (successRun == null)
+        {
+            return context;
+        }
+
+        List<ReviewTopIssue> resultIssues = ReviewSummaryContentFactory.resolveTopIssues(successRun);
+        context.setResultIssueCount(resultIssues.size());
+        if (resultIssues.isEmpty())
+        {
+            return context;
+        }
+        // 历史结果可能尚未固化 issueId，使用既有指纹关系尽力补全。
+        enrichTopIssues(resultIssues, task.getProjectId(), task.getPrNumber(), resolveRefBranch(task));
+
+        List<Long> issueIds = new ArrayList<>();
+        List<ReviewTopIssue> untracked = new ArrayList<>();
+        for (ReviewTopIssue resultIssue : resultIssues)
+        {
+            if (resultIssue.getIssueId() == null)
+            {
+                untracked.add(resultIssue);
+            }
+            else if (!issueIds.contains(resultIssue.getIssueId()))
+            {
+                issueIds.add(resultIssue.getIssueId());
+            }
+        }
+        context.setUntrackedIssues(untracked);
+        if (issueIds.isEmpty())
+        {
+            return context;
+        }
+
+        query.setIssueIds(issueIds);
+        List<ReviewIssue> matched = issueMapper.selectIssueList(query);
+        Map<Long, ReviewIssue> byId = new LinkedHashMap<>();
+        for (ReviewIssue issue : matched)
+        {
+            byId.put(issue.getIssueId(), issue);
+        }
+        List<ReviewIssue> ordered = new ArrayList<>();
+        for (Long issueId : issueIds)
+        {
+            ReviewIssue issue = byId.get(issueId);
+            if (issue != null)
+            {
+                ordered.add(issue);
+            }
+        }
+        context.setIssues(ordered);
+        return context;
+    }
+
+    @Override
     public ReviewIssueDetail selectIssueDetail(Long issueId)
     {
         ReviewIssue issue = requireIssue(issueId);
         checkIssueDataScope(issue);
         ReviewIssueDetail detail = new ReviewIssueDetail();
         detail.setIssue(issue);
+        ReviewTask firstTask = null;
+        if (issue.getFirstTaskId() != null)
+        {
+            firstTask = taskMapper.selectReviewTaskById(issue.getFirstTaskId());
+            detail.setFirstTask(firstTask);
+        }
         if (issue.getLastTaskId() != null)
         {
-            detail.setSourceTask(taskMapper.selectReviewTaskById(issue.getLastTaskId()));
+            ReviewTask lastTask = Objects.equals(issue.getFirstTaskId(), issue.getLastTaskId())
+                ? firstTask
+                : taskMapper.selectReviewTaskById(issue.getLastTaskId());
+            detail.setLastTask(lastTask);
+            detail.setSourceTask(lastTask);
         }
         detail.setActions(actionMapper.selectByIssueId(issueId));
         detail.setSummaryDelivery(deliveryService.selectSummaryDelivery(issue.getProjectId(), issue.getPrNumber()));
@@ -616,6 +715,47 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
             }
             enrichTopIssues(issues, projectId, prNumber, refBranch);
             run.setTopIssuesJson(JSON.toJSONString(issues));
+        }
+    }
+
+    private ReviewTaskRun latestSuccessRun(List<ReviewTaskRun> runs)
+    {
+        if (runs == null)
+        {
+            return null;
+        }
+        ReviewTaskRun latest = null;
+        for (ReviewTaskRun run : runs)
+        {
+            if (ReviewPipelineConstants.RUN_SUCCESS.equals(run.getRunStatus()))
+            {
+                int currentAttempt = run.getAttemptNo() == null ? 0 : run.getAttemptNo();
+                int latestAttempt = latest == null || latest.getAttemptNo() == null ? 0 : latest.getAttemptNo();
+                if (latest == null || currentAttempt > latestAttempt)
+                {
+                    latest = run;
+                }
+            }
+        }
+        return latest;
+    }
+
+    private void persistRunIssueLinks(ReviewTaskRun run, List<ReviewTopIssue> issues)
+    {
+        if (run == null || run.getRunId() == null || issues == null)
+        {
+            return;
+        }
+        String topIssuesJson = JSON.toJSONString(issues);
+        run.setTopIssuesJson(topIssuesJson);
+        try
+        {
+            runMapper.updateTopIssuesJson(run.getRunId(), topIssuesJson);
+        }
+        catch (Exception ex)
+        {
+            // 关联快照是追溯增强，失败不能回滚已完成的问题对账。
+            log.warn("固化审查运行与问题台账关联失败，已保留本次响应中的关联, runId={}", run.getRunId(), ex);
         }
     }
 

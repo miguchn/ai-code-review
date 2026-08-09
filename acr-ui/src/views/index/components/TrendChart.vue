@@ -74,7 +74,26 @@ function buildOption() {
     },
     tooltip: {
       trigger: 'axis',
-      axisPointer: { type: 'shadow', shadowStyle: { color: cssVar('--bg-hover') } },
+      confine: true,
+      position(point, params, dom, rect, size) {
+        const [viewWidth, viewHeight] = size.viewSize
+        const [contentWidth, contentHeight] = size.contentSize
+        const gap = 12
+        const preferLeft = point[0] > viewWidth / 2
+        let x = preferLeft ? point[0] - contentWidth - gap : point[0] + gap
+        let y = point[1] - contentHeight - gap
+        if (x < 8) x = point[0] + gap
+        if (x + contentWidth > viewWidth - 8) x = point[0] - contentWidth - gap
+        if (y < 36) y = point[1] + gap
+        return [
+          Math.max(8, Math.min(x, viewWidth - contentWidth - 8)),
+          Math.max(8, Math.min(y, viewHeight - contentHeight - 8))
+        ]
+      },
+      axisPointer: {
+        type: 'line',
+        lineStyle: { color: cssVar('--text-assist'), width: 1, type: 'dashed' }
+      },
       backgroundColor: cssVar('--neutral-overlay'),
       borderColor: cssVar('--border-light'),
       borderWidth: 1,

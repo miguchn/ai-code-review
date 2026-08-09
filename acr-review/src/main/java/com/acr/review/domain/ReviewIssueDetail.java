@@ -7,6 +7,9 @@ import java.util.List;
 public class ReviewIssueDetail
 {
     private ReviewIssue issue;
+    private ReviewTask firstTask;
+    private ReviewTask lastTask;
+    /** 兼容旧前端，语义等同 lastTask。 */
     private ReviewTask sourceTask;
     private List<ReviewIssueAction> actions = new ArrayList<>();
     /** 评论同步结果：SUCCESS / FAILED / SKIPPED，可选（处置响应使用）。 */
@@ -16,6 +19,10 @@ public class ReviewIssueDetail
 
     public ReviewIssue getIssue() { return issue; }
     public void setIssue(ReviewIssue issue) { this.issue = issue; }
+    public ReviewTask getFirstTask() { return firstTask; }
+    public void setFirstTask(ReviewTask firstTask) { this.firstTask = firstTask; }
+    public ReviewTask getLastTask() { return lastTask; }
+    public void setLastTask(ReviewTask lastTask) { this.lastTask = lastTask; }
     public ReviewTask getSourceTask() { return sourceTask; }
     public void setSourceTask(ReviewTask sourceTask) { this.sourceTask = sourceTask; }
     public List<ReviewIssueAction> getActions() { return actions; }

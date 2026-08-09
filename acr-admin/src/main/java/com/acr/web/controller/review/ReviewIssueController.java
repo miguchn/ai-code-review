@@ -51,6 +51,14 @@ public class ReviewIssueController extends BaseController
         return success(issueService.selectIssueStats(query));
     }
 
+    @PreAuthorize("@ss.hasPermi('review:issue:list')")
+    @GetMapping("/record/{taskId}")
+    public AjaxResult recordContext(@PathVariable Long taskId, ReviewIssue query)
+    {
+        query.setReviewTaskId(taskId);
+        return success(issueService.selectRecordContext(query));
+    }
+
     @PreAuthorize("@ss.hasPermi('review:issue:query')")
     @GetMapping("/{issueId}")
     public AjaxResult getInfo(@PathVariable Long issueId)

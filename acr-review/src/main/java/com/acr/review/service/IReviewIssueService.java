@@ -7,6 +7,7 @@ import com.acr.review.domain.ReviewIssue;
 import com.acr.review.domain.ReviewIssueBatchRequest;
 import com.acr.review.domain.ReviewIssueBatchResult;
 import com.acr.review.domain.ReviewIssueDetail;
+import com.acr.review.domain.ReviewIssueRecordContext;
 import com.acr.review.domain.ReviewIssueStats;
 import com.acr.review.domain.ReviewRoundReconcileResult;
 import com.acr.review.domain.ReviewTask;
@@ -23,6 +24,9 @@ public interface IReviewIssueService
     ReviewRoundReconcileResult reconcileAfterSuccess(ReviewTask task, ReviewTaskRun run);
 
     List<ReviewIssue> selectIssueList(ReviewIssue query);
+
+    /** 按一次已结束审查记录返回其实际结果中的台账问题。 */
+    ReviewIssueRecordContext selectRecordContext(ReviewIssue query);
 
     ReviewIssueDetail selectIssueDetail(Long issueId);
 

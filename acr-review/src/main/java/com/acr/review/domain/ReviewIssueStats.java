@@ -6,7 +6,7 @@ public class ReviewIssueStats
     private int awaitingConfirm;
     private int awaitingFix;
     private int rechecking;
-    /** 需处理 = awaitingConfirm + rechecking */
+    /** 待人工处置 = awaitingConfirm + rechecking */
     private int pending;
     private int closed;
 

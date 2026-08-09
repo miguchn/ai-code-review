@@ -1,6 +1,7 @@
 package com.acr.review.domain;
 
 import java.util.Date;
+import java.util.List;
 import com.acr.common.core.domain.BaseEntity;
 import com.fasterxml.jackson.annotation.JsonFormat;
 
@@ -49,6 +50,21 @@ public class ReviewIssue extends BaseEntity
 
     /** 列表展示 */
     private String projectName;
+    private String businessSystemName;
+    private String eventSource;
+    private String prTitle;
+    private String prAuthor;
+    private String sourceBranch;
+    private String targetBranch;
+    private String headSha;
+    private String repositoryOwner;
+    private String repositoryName;
+    private String repositoryUrl;
+
+    /** 查询专用：按审查记录查看时由服务层设置精确问题 ID 集合。 */
+    private Long reviewTaskId;
+    private List<Long> issueIds;
+    private String branchKeyword;
     private String keyword;
     private String beginTime;
     private String endTime;
@@ -58,7 +74,7 @@ public class ReviewIssue extends BaseEntity
      */
     private String activeFlag;
     /**
-     * 需处理筛选：Y 时筛选 AWAITING_CONFIRM / RECHECKING；
+     * 待人工处置筛选：Y 时筛选 AWAITING_CONFIRM / RECHECKING；
      * 与 status 并存时 status 优先。
      */
     private String pendingOnly;
@@ -140,6 +156,32 @@ public class ReviewIssue extends BaseEntity
     public void setRecheckCommitSha(String recheckCommitSha) { this.recheckCommitSha = recheckCommitSha; }
     public String getProjectName() { return projectName; }
     public void setProjectName(String projectName) { this.projectName = projectName; }
+    public String getBusinessSystemName() { return businessSystemName; }
+    public void setBusinessSystemName(String businessSystemName) { this.businessSystemName = businessSystemName; }
+    public String getEventSource() { return eventSource; }
+    public void setEventSource(String eventSource) { this.eventSource = eventSource; }
+    public String getPrTitle() { return prTitle; }
+    public void setPrTitle(String prTitle) { this.prTitle = prTitle; }
+    public String getPrAuthor() { return prAuthor; }
+    public void setPrAuthor(String prAuthor) { this.prAuthor = prAuthor; }
+    public String getSourceBranch() { return sourceBranch; }
+    public void setSourceBranch(String sourceBranch) { this.sourceBranch = sourceBranch; }
+    public String getTargetBranch() { return targetBranch; }
+    public void setTargetBranch(String targetBranch) { this.targetBranch = targetBranch; }
+    public String getHeadSha() { return headSha; }
+    public void setHeadSha(String headSha) { this.headSha = headSha; }
+    public String getRepositoryOwner() { return repositoryOwner; }
+    public void setRepositoryOwner(String repositoryOwner) { this.repositoryOwner = repositoryOwner; }
+    public String getRepositoryName() { return repositoryName; }
+    public void setRepositoryName(String repositoryName) { this.repositoryName = repositoryName; }
+    public String getRepositoryUrl() { return repositoryUrl; }
+    public void setRepositoryUrl(String repositoryUrl) { this.repositoryUrl = repositoryUrl; }
+    public Long getReviewTaskId() { return reviewTaskId; }
+    public void setReviewTaskId(Long reviewTaskId) { this.reviewTaskId = reviewTaskId; }
+    public List<Long> getIssueIds() { return issueIds; }
+    public void setIssueIds(List<Long> issueIds) { this.issueIds = issueIds; }
+    public String getBranchKeyword() { return branchKeyword; }
+    public void setBranchKeyword(String branchKeyword) { this.branchKeyword = branchKeyword; }
     public String getKeyword() { return keyword; }
     public void setKeyword(String keyword) { this.keyword = keyword; }
     public String getBeginTime() { return beginTime; }

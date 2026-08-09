@@ -101,7 +101,7 @@
             </template>
          </el-table-column>
          <el-table-column label="调用目标字符串" align="center" prop="invokeTarget" :show-overflow-tooltip="true" />
-         <el-table-column label="cron执行表达式" align="center" prop="cronExpression" :show-overflow-tooltip="true" />
+         <el-table-column label="Cron 表达式" align="center" prop="cronExpression" :show-overflow-tooltip="true" />
          <el-table-column label="状态" align="center">
             <template #default="scope">
                <el-switch
@@ -179,8 +179,8 @@
                   </el-form-item>
                </el-col>
                <el-col :span="24">
-                  <el-form-item label="cron表达式" prop="cronExpression">
-                     <el-input v-model="form.cronExpression" placeholder="请输入cron执行表达式">
+                  <el-form-item label="Cron 表达式" prop="cronExpression">
+                     <el-input v-model="form.cronExpression" placeholder="请输入 Cron 表达式">
                         <template #append>
                            <el-button type="primary" @click="handleShowCron">
                               生成表达式
@@ -201,7 +201,7 @@
                      </el-radio-group>
                   </el-form-item>
                </el-col>
-               <el-col :span="12">
+               <el-col :xs="24" :md="14" class="job-policy-col">
                   <el-form-item label="执行策略" prop="misfirePolicy">
                      <el-radio-group v-model="form.misfirePolicy">
                         <el-radio-button value="1">立即执行</el-radio-button>
@@ -210,7 +210,7 @@
                      </el-radio-group>
                   </el-form-item>
                </el-col>
-               <el-col :span="12">
+               <el-col :xs="24" :md="10" class="job-policy-col">
                   <el-form-item label="是否并发" prop="concurrent">
                      <el-radio-group v-model="form.concurrent">
                         <el-radio-button value="0">允许</el-radio-button>
@@ -228,7 +228,7 @@
          </template>
       </el-dialog>
 
-     <el-dialog title="Cron表达式生成器" v-model="openCron" append-to-body destroy-on-close>
+     <el-dialog title="Cron 表达式生成器" v-model="openCron" append-to-body destroy-on-close>
        <crontab ref="crontabRef" @hide="openCron=false" @fill="crontabFill" :expression="expression"></crontab>
      </el-dialog>
 
@@ -432,3 +432,18 @@ function handleExport() {
 
 getList()
 </script>
+
+<style scoped>
+.job-policy-col :deep(.el-radio-group) {
+   display: flex;
+   flex-wrap: nowrap;
+}
+
+.job-policy-col :deep(.el-radio-button) {
+   flex: 0 0 auto;
+}
+
+.job-policy-col :deep(.el-radio-button__inner) {
+   white-space: nowrap;
+}
+</style>

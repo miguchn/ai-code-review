@@ -8,6 +8,16 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <id property="issueId" column="issue_id" />
         <result property="projectId" column="project_id" />
         <result property="projectName" column="project_name" />
+        <result property="businessSystemName" column="business_system_name" />
+        <result property="eventSource" column="event_source" />
+        <result property="prTitle" column="pr_title" />
+        <result property="prAuthor" column="pr_author" />
+        <result property="sourceBranch" column="source_branch" />
+        <result property="targetBranch" column="target_branch" />
+        <result property="headSha" column="head_sha" />
+        <result property="repositoryOwner" column="repository_owner" />
+        <result property="repositoryName" column="repository_name" />
+        <result property="repositoryUrl" column="repository_url" />
         <result property="provider" column="provider" />
         <result property="prNumber" column="pr_number" />
         <result property="refBranch" column="ref_branch" />
@@ -47,18 +57,24 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     </resultMap>
 
     <sql id="selectColumns">
-        select i.issue_id, i.project_id, p.project_name, i.provider, i.pr_number, i.ref_branch, i.fingerprint, i.family_key,
+        select i.issue_id, i.project_id, p.project_name, bs.system_name as business_system_name,
+               i.provider, i.pr_number, i.ref_branch, i.fingerprint, i.family_key,
                i.first_task_id, i.first_run_id, i.last_task_id, i.last_run_id, i.issue_rank,
                i.severity, i.category, i.title, i.description, i.file_path, i.start_line, i.end_line,
                i.evidence, i.suggestion, i.origin, i.status, i.resolve_note, i.close_source,
                i.closed_by, i.closed_time, i.missed_streak, i.last_seen_head_sha, i.last_missed_run_id,
                i.recheck_task_id, i.recheck_run_id, i.recheck_commit_sha,
+               last_task.event_source, last_task.pr_title, last_task.pr_author,
+               last_task.source_branch, last_task.target_branch, last_task.head_sha,
+               p.repository_owner, p.repository_name, p.repository_url,
                coalesce((select max(a.create_time) from review_issue_action a
                          where a.issue_id = i.issue_id and a.from_status &lt;&gt; a.to_status),
                         i.create_time) as stage_entered_time,
                i.create_by, i.create_time, i.update_by, i.update_time
         from review_issue i
         left join review_project p on p.project_id = i.project_id
+        left join sys_business_system bs on bs.system_id = p.business_system_id
+        left join review_task last_task on last_task.task_id = i.last_task_id
         left join sys_dept d on d.dept_id = p.dept_id
         left join sys_user owner on owner.user_id = p.owner_user_id
     </sql>
@@ -66,6 +82,12 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     <sql id="issueFilters">
         <if test="projectId != null">
             and i.project_id = #{projectId}
+        </if>
+        <if test="issueIds != null and issueIds.size() > 0">
+            and i.issue_id in
+            <foreach collection="issueIds" item="issueId" open="(" separator="," close=")">
+                #{issueId}
+            </foreach>
         </if>
         <if test="status != null and status != ''">
             and i.status = #{status}
@@ -87,6 +109,14 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         </if>
         <if test="prNumber != null">
             and i.pr_number = #{prNumber}
+        </if>
+        <if test="prAuthor != null and prAuthor != ''">
+            and last_task.pr_author like concat('%', #{prAuthor}, '%')
+        </if>
+        <if test="branchKeyword != null and branchKeyword != ''">
+            and (last_task.source_branch like concat('%', #{branchKeyword}, '%')
+                 or last_task.target_branch like concat('%', #{branchKeyword}, '%')
+                 or i.ref_branch like concat('%', #{branchKeyword}, '%'))
         </if>
         <if test="keyword != null and keyword != ''">
             and (i.title like concat('%', #{keyword}, '%')
@@ -144,6 +174,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         select count(1)
         from review_issue i
         left join review_project p on p.project_id = i.project_id
+        left join review_task last_task on last_task.task_id = i.last_task_id
         left join sys_dept d on d.dept_id = p.dept_id
         left join sys_user owner on owner.user_id = p.owner_user_id
         where 1 = 1

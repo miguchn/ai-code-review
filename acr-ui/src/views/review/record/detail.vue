@@ -123,7 +123,7 @@
                       link
                       type="primary"
                       class="issue-more-link"
-                      @click="goIssueLedgerByPr"
+                      @click="goIssueLedgerByRecord"
                     >共 {{ newIssues.length }} 个问题，其余见问题台账</el-button>
                   </div>
                 </div>
@@ -290,18 +290,17 @@ function openMergeRequest() {
 }
 
 function goIssueLedger(issueId) {
-  proxy.$router.push({ path: '/review/issue', query: { issueId: String(issueId) } })
+  proxy.$router.push({
+    path: '/review/issue',
+    query: { reviewTaskId: String(taskId.value), issueId: String(issueId) }
+  })
 }
 
-function goIssueLedgerByPr() {
-  const task = detailTask.value
-  const query = {}
-  if (isPushTask(task)) {
-    if (task?.targetBranch) query.keyword = task.targetBranch
-  } else if (task?.prNumber != null && task?.prNumber !== '') {
-    query.prNumber = String(task.prNumber)
-  }
-  proxy.$router.push({ path: '/review/issue', query })
+function goIssueLedgerByRecord() {
+  proxy.$router.push({
+    path: '/review/issue',
+    query: { reviewTaskId: String(taskId.value) }
+  })
 }
 
 function handleRetry() {

@@ -3,10 +3,12 @@ package com.acr.review.service.impl;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mockStatic;
@@ -36,6 +38,7 @@ import com.acr.review.domain.ReviewIssueBatchRequest;
 import com.acr.review.domain.ReviewIssueBatchResult;
 import com.acr.review.domain.ReviewIssueConstants;
 import com.acr.review.domain.ReviewIssueDetail;
+import com.acr.review.domain.ReviewIssueRecordContext;
 import com.acr.review.domain.ReviewPipelineConstants;
 import com.acr.review.domain.ReviewProject;
 import com.acr.review.domain.ReviewRoundReconcileResult;
@@ -46,6 +49,7 @@ import com.acr.review.mapper.ReviewIssueActionMapper;
 import com.acr.review.mapper.ReviewIssueMapper;
 import com.acr.review.mapper.ReviewProjectMapper;
 import com.acr.review.mapper.ReviewTaskMapper;
+import com.acr.review.mapper.ReviewTaskRunMapper;
 import com.acr.review.service.IReviewDeliveryService;
 import com.acr.review.service.ReviewIssueFingerprint;
 import com.acr.review.service.ReviewScoringConstants;
@@ -60,6 +64,7 @@ class ReviewIssueServiceImplTest
     @Mock private ReviewIssueActionMapper actionMapper;
     @Mock private ReviewProjectMapper projectMapper;
     @Mock private ReviewTaskMapper taskMapper;
+    @Mock private ReviewTaskRunMapper runMapper;
     @Mock private ISysDeptService deptService;
     @Mock private IReviewDeliveryService deliveryService;
     @Mock private ISysConfigService configService;
@@ -69,7 +74,7 @@ class ReviewIssueServiceImplTest
     @BeforeEach
     void setUp()
     {
-        service = new ReviewIssueServiceImpl(issueMapper, actionMapper, projectMapper, taskMapper,
+        service = new ReviewIssueServiceImpl(issueMapper, actionMapper, projectMapper, taskMapper, runMapper,
             deptService, deliveryService, configService);
         lenient().when(configService.selectConfigByKey(ReviewIssueConstants.CONFIG_MISSED_ROUNDS_THRESHOLD))
             .thenReturn("1");
@@ -107,6 +112,9 @@ class ReviewIssueServiceImplTest
         assertEquals(ReviewIssueConstants.STATUS_AWAITING_CONFIRM, detected.getToStatus());
         assertTrue(detected.getResolveNote().contains("发现"));
         assertTrue(detected.getResolveNote().contains("aaa1111"));
+        ArgumentCaptor<String> snapshotCaptor = ArgumentCaptor.forClass(String.class);
+        verify(runMapper).updateTopIssuesJson(eq(100L), snapshotCaptor.capture());
+        assertTrue(snapshotCaptor.getValue().contains("\"issueId\":501"));
     }
 
     @Test
@@ -344,6 +352,20 @@ class ReviewIssueServiceImplTest
     }
 
     @Test
+    void reconcileDoesNotFailWhenIssueLinkSnapshotCannotBePersisted()
+    {
+        ReviewTask task = successLlmTask(12L, 10L, 8, "snapshotsha");
+        ReviewTaskRun run = runWithIssues(112L);
+        when(issueMapper.selectByProjectAndPr(10L, 8, "")).thenReturn(new ArrayList<>());
+        doThrow(new RuntimeException("db down")).when(runMapper).updateTopIssuesJson(eq(112L), any());
+
+        ReviewRoundReconcileResult result = service.reconcileAfterSuccess(task, run);
+
+        assertTrue(result.getNewlyMaterialized().isEmpty());
+        assertEquals("[]", run.getTopIssuesJson());
+    }
+
+    @Test
     void listRecheckingTitlesFiltersActiveRechecking()
     {
         ReviewIssue a = openIssue(1L, "SEC", "a.java", "sql-injection");
@@ -469,6 +491,140 @@ class ReviewIssueServiceImplTest
 
         assertNotNull(detail.getSummaryDelivery());
         assertEquals(55L, detail.getSummaryDelivery().getDeliveryId());
+    }
+
+    @Test
+    void selectIssueDetailIncludesFirstAndLastReviewRecords()
+    {
+        ReviewIssue issue = openIssue(12L, "SEC", "a.java", "x");
+        issue.setFirstTaskId(101L);
+        issue.setLastTaskId(103L);
+        stubProjectScope(issue);
+        when(issueMapper.selectIssueById(12L)).thenReturn(issue);
+        when(actionMapper.selectByIssueId(12L)).thenReturn(List.of());
+        ReviewTask first = successLlmTask(101L, 10L, 8, "sha1");
+        ReviewTask last = successLlmTask(103L, 10L, 8, "sha3");
+        when(taskMapper.selectReviewTaskById(101L)).thenReturn(first);
+        when(taskMapper.selectReviewTaskById(103L)).thenReturn(last);
+
+        ReviewIssueDetail detail = service.selectIssueDetail(12L);
+
+        assertEquals(101L, detail.getFirstTask().getTaskId());
+        assertEquals(103L, detail.getLastTask().getTaskId());
+        assertEquals(103L, detail.getSourceTask().getTaskId());
+    }
+
+    @Test
+    void selectRecordContextUsesLatestSuccessfulRunAndKeepsResultOrder()
+    {
+        ReviewTask task = successLlmTask(201L, 10L, 8, "recordsha");
+        when(taskMapper.selectReviewTaskById(201L)).thenReturn(task);
+        ReviewIssue first = openIssue(501L, "SEC", "a.java", "first");
+        ReviewIssue second = openIssue(502L, "QUALITY", "b.java", "second");
+        stubProjectScope(first);
+
+        ReviewTopIssue firstTop = top("SEC", "a.java", "first", 1);
+        firstTop.setIssueId(501L);
+        ReviewTopIssue secondTop = top("QUALITY", "b.java", "second", 2);
+        secondTop.setIssueId(502L);
+        ReviewTaskRun failedLatest = runWithIssues(302L, top("SEC", "x.java", "failed", 1));
+        failedLatest.setAttemptNo(2);
+        failedLatest.setRunStatus(ReviewPipelineConstants.RUN_FAILED);
+        ReviewTaskRun success = runWithIssues(301L, firstTop, secondTop);
+        success.setAttemptNo(1);
+        success.setRunStatus(ReviewPipelineConstants.RUN_SUCCESS);
+        when(runMapper.selectRunsByTaskId(201L)).thenReturn(List.of(failedLatest, success));
+        when(issueMapper.selectByProjectAndPr(10L, 8, "")).thenReturn(List.of(first, second));
+        when(issueMapper.selectIssueList(any())).thenReturn(List.of(second, first));
+
+        ReviewIssue query = new ReviewIssue();
+        query.setReviewTaskId(201L);
+        ReviewIssueRecordContext context = service.selectRecordContext(query);
+
+        assertEquals(301L, context.getRun().getRunId());
+        assertEquals(2, context.getResultIssueCount());
+        assertEquals(List.of(501L, 502L), context.getIssues().stream()
+            .map(ReviewIssue::getIssueId).collect(Collectors.toList()));
+        assertTrue(context.getUntrackedIssues().isEmpty());
+        assertEquals(List.of(501L, 502L), query.getIssueIds());
+    }
+
+    @Test
+    void selectRecordContextReportsHistoricalUntrackedIssues()
+    {
+        ReviewTask task = successLlmTask(202L, 10L, 8, "recordsha");
+        when(taskMapper.selectReviewTaskById(202L)).thenReturn(task);
+        ReviewProject project = new ReviewProject();
+        project.setProjectId(10L);
+        project.setDeptId(1L);
+        when(projectMapper.selectReviewProjectById(10L)).thenReturn(project);
+        ReviewTaskRun success = runWithIssues(303L, top("SEC", "old.java", "not materialized", 1));
+        success.setRunStatus(ReviewPipelineConstants.RUN_SUCCESS);
+        when(runMapper.selectRunsByTaskId(202L)).thenReturn(List.of(success));
+        when(issueMapper.selectByProjectAndPr(10L, 8, "")).thenReturn(List.of());
+
+        ReviewIssue query = new ReviewIssue();
+        query.setReviewTaskId(202L);
+        ReviewIssueRecordContext context = service.selectRecordContext(query);
+
+        assertEquals(1, context.getResultIssueCount());
+        assertEquals(1, context.getUntrackedIssues().size());
+        assertTrue(context.getIssues().isEmpty());
+        verify(issueMapper, never()).selectIssueList(any());
+    }
+
+    @Test
+    void selectRecordContextRejectsRunningTask()
+    {
+        ReviewTask task = successLlmTask(203L, 10L, 8, "recordsha");
+        task.setTaskStatus(ReviewPipelineConstants.TASK_RUNNING);
+        when(taskMapper.selectReviewTaskById(203L)).thenReturn(task);
+        ReviewIssue query = new ReviewIssue();
+        query.setReviewTaskId(203L);
+
+        assertThrows(ServiceException.class, () -> service.selectRecordContext(query));
+        verify(runMapper, never()).selectRunsByTaskId(anyLong());
+    }
+
+    @Test
+    void selectRecordContextKeepsFailedRecordWithEmptyIssueSet()
+    {
+        ReviewTask task = successLlmTask(204L, 10L, 8, "recordsha");
+        task.setTaskStatus(ReviewPipelineConstants.TASK_FAILED);
+        when(taskMapper.selectReviewTaskById(204L)).thenReturn(task);
+        ReviewProject project = new ReviewProject();
+        project.setProjectId(10L);
+        project.setDeptId(1L);
+        when(projectMapper.selectReviewProjectById(10L)).thenReturn(project);
+        ReviewTaskRun failed = runWithIssues(304L);
+        failed.setRunStatus(ReviewPipelineConstants.RUN_FAILED);
+        when(runMapper.selectRunsByTaskId(204L)).thenReturn(List.of(failed));
+        ReviewIssue query = new ReviewIssue();
+        query.setReviewTaskId(204L);
+
+        ReviewIssueRecordContext context = service.selectRecordContext(query);
+
+        assertEquals(204L, context.getRecord().getTaskId());
+        assertNull(context.getRun());
+        assertTrue(context.getIssues().isEmpty());
+        verify(issueMapper, never()).selectIssueList(any());
+    }
+
+    @Test
+    void selectRecordContextRejectsProjectOutsideDataScope()
+    {
+        ReviewTask task = successLlmTask(205L, 99L, 8, "recordsha");
+        when(taskMapper.selectReviewTaskById(205L)).thenReturn(task);
+        ReviewProject project = new ReviewProject();
+        project.setProjectId(99L);
+        project.setDeptId(9L);
+        when(projectMapper.selectReviewProjectById(99L)).thenReturn(project);
+        doThrow(new ServiceException("没有权限访问部门数据！")).when(deptService).checkDeptDataScope(9L);
+        ReviewIssue query = new ReviewIssue();
+        query.setReviewTaskId(205L);
+
+        assertThrows(ServiceException.class, () -> service.selectRecordContext(query));
+        verify(runMapper, never()).selectRunsByTaskId(anyLong());
     }
 
     @Test
@@ -852,6 +1008,7 @@ class ReviewIssueServiceImplTest
     {
         ReviewTaskRun run = new ReviewTaskRun();
         run.setRunId(runId);
+        run.setRunStatus(ReviewPipelineConstants.RUN_SUCCESS);
         run.setParseStatus(ReviewScoringConstants.PARSE_SUCCESS);
         run.setTopIssuesJson(JSON.toJSONString(List.of(issues)));
         return run;

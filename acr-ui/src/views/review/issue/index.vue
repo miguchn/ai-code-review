@@ -6,8 +6,17 @@
           <el-option v-for="item in projectOptions" :key="item.projectId" :label="item.projectName" :value="item.projectId" />
         </el-select>
       </el-form-item>
+      <el-form-item label="审查记录" prop="reviewTaskId">
+        <el-input v-model="queryParams.reviewTaskId" placeholder="记录编号" clearable style="width: 130px" @keyup.enter="handleQuery" />
+      </el-form-item>
       <el-form-item label="合并请求" prop="prNumber">
         <el-input v-model="queryParams.prNumber" placeholder="编号" clearable style="width: 120px" @keyup.enter="handleQuery" />
+      </el-form-item>
+      <el-form-item label="发起人" prop="prAuthor">
+        <el-input v-model="queryParams.prAuthor" placeholder="Git 用户名" clearable style="width: 140px" @keyup.enter="handleQuery" />
+      </el-form-item>
+      <el-form-item label="分支" prop="branchKeyword">
+        <el-input v-model="queryParams.branchKeyword" placeholder="源/目标分支" clearable style="width: 160px" @keyup.enter="handleQuery" />
       </el-form-item>
       <el-form-item label="问题状态" prop="status">
         <el-select
@@ -33,18 +42,65 @@
       <el-form-item label="关键词" prop="keyword">
         <el-input v-model="queryParams.keyword" placeholder="标题或文件路径" clearable style="width: 180px" @keyup.enter="handleQuery" />
       </el-form-item>
+      <el-form-item label="发现时间">
+        <el-date-picker
+          v-model="dateRange"
+          type="daterange"
+          range-separator="-"
+          start-placeholder="开始日期"
+          end-placeholder="结束日期"
+          value-format="YYYY-MM-DD"
+          style="width: 240px"
+        />
+      </el-form-item>
       <el-form-item>
         <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
         <el-button icon="Refresh" @click="resetQuery">重置</el-button>
       </el-form-item>
     </el-form>
 
+    <section v-if="inRecordContext" class="record-context-card">
+      <div class="record-context-main">
+        <div class="record-context-title">
+          <el-tag type="primary" effect="plain">审查记录 #{{ recordContext.record.taskId }}</el-tag>
+          <strong>{{ emptyDash(recordContext.record.projectName) }}</strong>
+          <span v-if="recordContext.record.businessSystemName" class="context-muted">
+            {{ recordContext.record.businessSystemName }}
+          </span>
+        </div>
+        <div class="record-context-meta">
+          <span>{{ recordChangeLabel }}</span>
+          <span>发起人：{{ emptyDash(recordContext.record.prAuthor) }}</span>
+          <span>分支：{{ recordBranchLabel }}</span>
+          <span>提交：<code>{{ shortSha(recordContext.record.headSha) }}</code></span>
+          <el-tag :type="recordConclusionTagType(recordContext.record)" size="small">
+            {{ recordConclusionLabel(recordContext.record) }}
+          </el-tag>
+          <span>完成：{{ formatDateTime(recordContext.record.finishedTime) }}</span>
+          <span>结果问题 {{ recordContext.resultIssueCount || 0 }} 个</span>
+        </div>
+      </div>
+      <div class="record-context-actions">
+        <el-button link type="primary" @click="goRecord(recordContext.record.taskId)">查看审查记录</el-button>
+        <el-button v-if="recordMergeRequestUrl" link type="primary" @click="openRecordMergeRequest">打开合并请求</el-button>
+        <el-button link @click="exitRecordContext">退出记录视图</el-button>
+      </div>
+    </section>
+    <el-alert
+      v-if="inRecordContext && recordContext.untrackedIssues?.length"
+      class="mb12"
+      type="warning"
+      :closable="false"
+      show-icon
+      :title="`该历史记录有 ${recordContext.untrackedIssues.length} 个结果问题尚未进入台账，当前仅展示可持续跟踪的问题。`"
+    />
+
     <el-row class="mb8 issue-toolbar-row">
-      <el-radio-group v-model="viewMode" @change="handleQuery">
+      <el-radio-group v-if="!recordModeRequested" v-model="viewMode" @change="handleQuery">
         <el-radio-button value="active">当前活跃</el-radio-button>
         <el-radio-button value="all">全部</el-radio-button>
       </el-radio-group>
-      <div class="issue-stats-bar" aria-label="问题状态总览">
+      <div v-if="!recordModeRequested" class="issue-stats-bar" aria-label="问题状态总览">
         <button
           type="button"
           class="stats-item"
@@ -81,7 +137,9 @@
           :class="{ 'is-active': isStatsActive('pendingOnly', 'Y') }"
           @click="toggleStatsFilter('pendingOnly', 'Y')"
         >
-          <span class="stats-label">需处理</span>
+          <el-tooltip content="待确认 + 待复核，需要人工判断或处置" placement="top">
+            <span class="stats-label">待人工处置</span>
+          </el-tooltip>
           <span class="stats-value">{{ stats.pending }}</span>
         </button>
         <span class="stats-divider stats-divider-strong">║</span>
@@ -112,14 +170,39 @@
       @selection-change="onSelectionChange"
     >
       <el-table-column v-if="canBatch" type="selection" width="48" align="center" />
-      <el-table-column label="项目名称" prop="projectName" min-width="150" :show-overflow-tooltip="true" />
-      <el-table-column label="合并请求" width="120">
+      <el-table-column label="项目 / 业务系统" min-width="170">
         <template #default="scope">
-          <span v-if="isPushIssue(scope.row)">{{ emptyDash(scope.row.refBranch) }}</span>
-          <span v-else>#{{ scope.row.prNumber }}</span>
+          <div class="stacked-cell">
+            <span class="primary-text">{{ emptyDash(scope.row.projectName) }}</span>
+            <span class="secondary-text">{{ emptyDash(scope.row.businessSystemName) }}</span>
+          </div>
         </template>
       </el-table-column>
-      <el-table-column label="问题标题" prop="title" min-width="200" :show-overflow-tooltip="true" />
+      <el-table-column label="变更来源" min-width="210">
+        <template #default="scope">
+          <div class="stacked-cell">
+            <a
+              v-if="mergeRequestUrl(scope.row)"
+              :href="mergeRequestUrl(scope.row)"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="source-link"
+            >{{ mergeRequestLabel(scope.row.provider) }} #{{ scope.row.prNumber }} · {{ emptyDash(scope.row.prTitle) }}</a>
+            <span v-else class="primary-text">
+              {{ isPushIssue(scope.row) ? formatPushRefDisplay(scope.row) : (mergeRequestLabel(scope.row.provider) + ' #' + scope.row.prNumber) }}
+            </span>
+            <span class="secondary-text">{{ branchLabel(scope.row) }}</span>
+          </div>
+        </template>
+      </el-table-column>
+      <el-table-column label="问题" min-width="220">
+        <template #default="scope">
+          <div class="stacked-cell">
+            <span class="issue-number">问题 #{{ scope.row.issueId }}</span>
+            <span class="primary-text ellipsis-text" :title="scope.row.title || ''">{{ emptyDash(scope.row.title) }}</span>
+          </div>
+        </template>
+      </el-table-column>
       <el-table-column label="严重度" width="90">
         <template #default="scope">
           <el-tag v-if="scope.row.severity" :type="severityTagType(scope.row.severity)" size="small">
@@ -138,7 +221,7 @@
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="轮次轨迹" min-width="160">
+      <el-table-column label="审查轨迹" min-width="210">
         <template #default="scope">
           <span v-if="!hasRoundTrail(scope.row)" class="empty-tip">—</span>
           <span v-else class="round-trail">
@@ -148,19 +231,19 @@
                 link
                 type="primary"
                 @click="goRecord(scope.row.firstTaskId)"
-              >#{{ scope.row.firstTaskId }}</el-button>
+              >首次 #{{ scope.row.firstTaskId }}</el-button>
               <template v-if="showRoundArrow(scope.row)">
                 <span class="round-arrow">→</span>
                 <el-button link type="primary" @click="goRecord(scope.row.lastTaskId)">
-                  #{{ scope.row.lastTaskId }}
+                  最近 #{{ scope.row.lastTaskId }}
                 </el-button>
               </template>
             </template>
             <template v-else>
-              <span v-if="scope.row.firstTaskId">#{{ scope.row.firstTaskId }}</span>
+              <span v-if="scope.row.firstTaskId">首次 #{{ scope.row.firstTaskId }}</span>
               <template v-if="showRoundArrow(scope.row)">
                 <span class="round-arrow">→</span>
-                <span>#{{ scope.row.lastTaskId }}</span>
+                <span>最近 #{{ scope.row.lastTaskId }}</span>
               </template>
             </template>
             <span v-if="scope.row.missedStreak > 0" class="round-miss">
@@ -174,8 +257,13 @@
           <dict-tag :options="review_issue_origin" :value="scope.row.origin" />
         </template>
       </el-table-column>
-      <el-table-column label="更新时间" width="170">
-        <template #default="scope">{{ formatDateTime(scope.row.updateTime) }}</template>
+      <el-table-column label="时间" width="185">
+        <template #default="scope">
+          <div class="stacked-cell time-cell">
+            <span>发现：{{ formatDateTime(scope.row.createTime) }}</span>
+            <span>变更：{{ formatDateTime(scope.row.updateTime) }}</span>
+          </div>
+        </template>
       </el-table-column>
       <el-table-column label="操作" width="140" fixed="right" class-name="small-padding fixed-width">
         <template #default="scope">
@@ -192,7 +280,7 @@
     </el-table>
 
     <pagination
-      v-show="total > 0"
+      v-show="total > 0 && !recordModeRequested"
       :total="total"
       v-model:page="queryParams.pageNum"
       v-model:limit="queryParams.pageSize"
@@ -209,11 +297,13 @@
 
 <script setup name="ReviewIssue">
 import { useRoute, useRouter } from 'vue-router'
-import { listIssue, getIssueStats } from '@/api/review/issue'
+import { listIssue, getIssueStats, getIssueRecordContext } from '@/api/review/issue'
 import { listReviewProject } from '@/api/review/project'
 import auth from '@/plugins/auth'
 import {
-  emptyDash, formatDateTime, formatStageDuration, severityLabel, severityTagType, isPushTask
+  emptyDash, formatDateTime, formatStageDuration, severityLabel, severityTagType, isPushTask,
+  shortSha, formatPushRefDisplay, buildMergeRequestUrl, mergeRequestLabel,
+  recordConclusionLabel, recordConclusionTagType
 } from '@/utils/reviewDisplay'
 import IssueDetailDrawer from './IssueDetailDrawer.vue'
 import IssueBatchBar from './IssueBatchBar.vue'
@@ -243,6 +333,8 @@ const total = ref(0)
 const viewMode = ref('active')
 const tableRef = ref(null)
 const selectedRows = ref([])
+const dateRange = ref([])
+const recordContext = ref(null)
 
 const drawerVisible = ref(false)
 const activeIssueId = ref(null)
@@ -259,7 +351,10 @@ const queryParams = ref({
   pageNum: 1,
   pageSize: 10,
   projectId: undefined,
+  reviewTaskId: undefined,
   prNumber: undefined,
+  prAuthor: undefined,
+  branchKeyword: undefined,
   status: undefined,
   pendingOnly: undefined,
   closedFlag: undefined,
@@ -272,9 +367,29 @@ const canBatch = computed(() =>
   auth.hasPermiOr(['review:issue:confirm', 'review:issue:close'])
 )
 const canOpenRecord = computed(() => auth.hasPermi('review:record:query'))
+const recordModeRequested = computed(() => !!queryParams.value.reviewTaskId)
+const inRecordContext = computed(() => !!recordContext.value?.record)
+const recordMergeRequestUrl = computed(() => buildMergeRequestUrl(recordContext.value?.record || {}))
+const recordChangeLabel = computed(() => {
+  const record = recordContext.value?.record
+  if (!record) return '—'
+  if (isPushTask(record)) return `Push ${formatPushRefDisplay(record)}`
+  return `${mergeRequestLabel(record.provider)} #${record.prNumber} · ${emptyDash(record.prTitle)}`
+})
+const recordBranchLabel = computed(() => branchLabel(recordContext.value?.record))
 
 function isPushIssue(row) {
   return Number(row?.prNumber) === 0 || isPushTask(row)
+}
+
+function branchLabel(row) {
+  if (!row) return '—'
+  if (isPushIssue(row)) return row.targetBranch || row.refBranch || row.sourceBranch || '—'
+  return `${emptyDash(row.sourceBranch)} → ${emptyDash(row.targetBranch)}`
+}
+
+function mergeRequestUrl(row) {
+  return buildMergeRequestUrl(row)
 }
 
 const closedFilterActive = computed(() => queryParams.value.closedFlag === 'Y')
@@ -315,7 +430,7 @@ function goRecord(taskId) {
 }
 
 function buildListQuery() {
-  const q = { ...queryParams.value }
+  const q = proxy.addDateRange({ ...queryParams.value }, dateRange.value)
   if (q.prNumber !== undefined && q.prNumber !== null && q.prNumber !== '') {
     const n = Number(q.prNumber)
     q.prNumber = Number.isFinite(n) ? n : q.prNumber
@@ -332,7 +447,7 @@ function buildListQuery() {
   } else if (q.pendingOnly === 'Y') {
     delete q.activeFlag
     delete q.closedFlag
-  } else if (viewMode.value === 'active') {
+  } else if (viewMode.value === 'active' && !recordModeRequested.value) {
     q.activeFlag = 'Y'
     delete q.pendingOnly
     delete q.closedFlag
@@ -349,7 +464,26 @@ function buildListQuery() {
 function getList() {
   loading.value = true
   clearSelection()
-  const listReq = listIssue(buildListQuery()).then(response => {
+  const query = buildListQuery()
+  const taskId = Number(queryParams.value.reviewTaskId)
+  if (recordModeRequested.value && (!Number.isFinite(taskId) || taskId <= 0)) {
+    recordContext.value = null
+    issueList.value = []
+    total.value = 0
+    loading.value = false
+    proxy.$modal.msgWarning('审查记录编号应为正整数')
+    return
+  }
+  if (recordModeRequested.value && Number.isFinite(taskId) && taskId > 0) {
+    getIssueRecordContext(taskId, query).then(response => {
+      recordContext.value = response.data || null
+      issueList.value = recordContext.value?.issues || []
+      total.value = issueList.value.length
+    }).finally(() => { loading.value = false })
+    return
+  }
+  recordContext.value = null
+  const listReq = listIssue(query).then(response => {
     issueList.value = response.rows || []
     total.value = response.total || 0
   })
@@ -374,6 +508,19 @@ function loadProjects() {
 
 function syncFilterQuery() {
   const next = { ...route.query }
+  const directFields = ['reviewTaskId', 'projectId', 'prNumber', 'prAuthor', 'branchKeyword', 'severity', 'origin', 'keyword']
+  directFields.forEach(field => {
+    const value = queryParams.value[field]
+    if (value !== undefined && value !== null && value !== '') next[field] = String(value)
+    else delete next[field]
+  })
+  if (dateRange.value?.length === 2) {
+    next.beginTime = dateRange.value[0]
+    next.endTime = dateRange.value[1]
+  } else {
+    delete next.beginTime
+    delete next.endTime
+  }
   if (queryParams.value.status) {
     next.status = String(queryParams.value.status)
   } else {
@@ -437,10 +584,24 @@ function toggleStatsFilter(kind, value) {
 
 function resetQuery() {
   proxy.resetForm('queryRef')
+  dateRange.value = []
+  recordContext.value = null
   queryParams.value.pendingOnly = undefined
   queryParams.value.closedFlag = undefined
   viewMode.value = 'active'
   handleQuery()
+}
+
+function exitRecordContext() {
+  queryParams.value.reviewTaskId = undefined
+  recordContext.value = null
+  handleQuery()
+}
+
+function openRecordMergeRequest() {
+  if (recordMergeRequestUrl.value) {
+    window.open(recordMergeRequestUrl.value, '_blank', 'noopener,noreferrer')
+  }
 }
 
 function onSelectionChange(rows) {
@@ -500,6 +661,19 @@ function openFromRoute() {
 
 function applyRouteQuery() {
   const q = route.query || {}
+  queryParams.value.projectId = undefined
+  queryParams.value.reviewTaskId = undefined
+  queryParams.value.prNumber = undefined
+  queryParams.value.prAuthor = undefined
+  queryParams.value.branchKeyword = undefined
+  queryParams.value.status = undefined
+  queryParams.value.pendingOnly = undefined
+  queryParams.value.closedFlag = undefined
+  queryParams.value.severity = undefined
+  queryParams.value.origin = undefined
+  queryParams.value.keyword = undefined
+  dateRange.value = []
+  recordContext.value = null
   if (q.status) {
     queryParams.value.status = String(q.status)
     queryParams.value.pendingOnly = undefined
@@ -516,10 +690,16 @@ function applyRouteQuery() {
   if (q.origin) queryParams.value.origin = String(q.origin)
   if (q.severity) queryParams.value.severity = String(q.severity)
   if (q.projectId) queryParams.value.projectId = Number(q.projectId) || q.projectId
+  if (q.reviewTaskId) queryParams.value.reviewTaskId = Number(q.reviewTaskId) || q.reviewTaskId
+  if (q.prAuthor) queryParams.value.prAuthor = String(q.prAuthor)
+  if (q.branchKeyword) queryParams.value.branchKeyword = String(q.branchKeyword)
   if (q.keyword) queryParams.value.keyword = String(q.keyword)
   if (q.prNumber != null && q.prNumber !== '') {
     const n = Number(q.prNumber)
     queryParams.value.prNumber = Number.isFinite(n) ? n : String(q.prNumber)
+  }
+  if (q.beginTime || q.endTime) {
+    dateRange.value = [q.beginTime ? String(q.beginTime) : '', q.endTime ? String(q.endTime) : '']
   }
 }
 
@@ -546,7 +726,38 @@ onActivated(() => {
 
 <style scoped>
 .mb8 { margin-bottom: 8px; }
+.mb12 { margin-bottom: 12px; }
 .empty-tip { color: var(--el-text-color-placeholder); }
+
+.record-context-card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--el-color-primary-light-7);
+  border-left: 4px solid var(--el-color-primary);
+  border-radius: 8px;
+  background: var(--el-color-primary-light-9);
+}
+.record-context-main { min-width: 0; }
+.record-context-title,
+.record-context-meta,
+.record-context-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+}
+.record-context-meta {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--el-text-color-regular);
+}
+.record-context-meta code { font-size: 12px; }
+.record-context-actions { flex-shrink: 0; }
+.context-muted { color: var(--el-text-color-secondary); font-size: 13px; }
 
 .issue-toolbar-row {
   display: flex;
@@ -638,5 +849,23 @@ onActivated(() => {
 .round-miss {
   margin-left: 2px;
   color: var(--el-text-color-secondary);
+}
+.stacked-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  line-height: 1.4;
+}
+.primary-text { color: var(--el-text-color-primary); }
+.secondary-text,
+.time-cell { font-size: 12px; color: var(--el-text-color-secondary); }
+.issue-number { font-size: 12px; font-weight: 600; color: var(--el-color-primary); }
+.ellipsis-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.source-link { color: var(--el-color-primary); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.source-link:hover { text-decoration: underline; }
+@media (max-width: 900px) {
+  .record-context-card { flex-direction: column; }
+  .record-context-actions { align-self: flex-start; }
 }
 </style>

@@ -50,7 +50,18 @@
 /* 固定列表头同步 */
 #app .main-container .app-main .el-table__fixed-header-wrapper thead th.el-table__cell,
 #app .main-container .app-main .el-table__fixed-right-patch {
-  background: var(--content-table-header-bg) !important;
+  background-color: var(--el-bg-color-overlay) !important;
+}
+
+/* 固定列使用不透明底色，避免暗色主题下横向内容透出 */
+#app .main-container .app-main .el-table .el-table__header-wrapper th.el-table-fixed-column--left,
+#app .main-container .app-main .el-table .el-table__header-wrapper th.el-table-fixed-column--right {
+  background-color: var(--el-bg-color-overlay) !important;
+}
+
+#app .main-container .app-main .el-table .el-table__body-wrapper td.el-table-fixed-column--left,
+#app .main-container .app-main .el-table .el-table__body-wrapper td.el-table-fixed-column--right {
+  background-color: var(--el-bg-color) !important;
 }
 
 /* ========== 表体 ========== */
@@ -92,6 +103,13 @@
 #app .main-container .app-main .el-table .current-row > td.el-table__cell,
 #app .main-container .app-main .el-table .el-table__body tr.current-row:hover > td.el-table__cell {
   background: var(--brand-bg-selected) !important;
+}
+
+/* 悬浮态固定列保持不透明，避免下层普通列文字透出 */
+#app .main-container .app-main .el-table .el-table__body tr:hover > td.el-table-fixed-column--left,
+#app .main-container .app-main .el-table .el-table__body tr:hover > td.el-table-fixed-column--right {
+  background-color: var(--el-bg-color) !important;
+  background-image: linear-gradient(var(--content-table-row-hover), var(--content-table-row-hover)) !important;
 }
 
 #app .main-container .app-main .el-table__fixed,
