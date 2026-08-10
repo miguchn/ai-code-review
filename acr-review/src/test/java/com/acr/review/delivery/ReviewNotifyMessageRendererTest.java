@@ -136,6 +136,7 @@ class ReviewNotifyMessageRendererTest
             .reviewTime(new Date(1754361000000L))
             .summaryText("推送审查小结")
             .detailUrl("https://acr.example.com/review/record-detail/index/99")
+            .eventSource(ReviewPipelineConstants.EVENT_SOURCE_PUSH)
             .build();
 
         String body = ReviewNotifyMessageRenderer.renderSuccess(content);
@@ -147,6 +148,23 @@ class ReviewNotifyMessageRendererTest
         assertFalse(body.contains("PR #0"));
         assertFalse(body.contains("查看合并请求"));
         assertTrue(body.contains("[查看审查详情](https://acr.example.com/review/record-detail/index/99)"));
+        assertTrue(body.contains(ReviewDeliveryConstants.PUSH_SCOPE_NOTE));
+    }
+
+    @Test
+    void prSuccessSummaryOmitsPushScopeNote()
+    {
+        ReviewSummaryContent content = ReviewSummaryContent.builder()
+            .conclusionLabel("通过")
+            .totalScore(90)
+            .prNumber(5)
+            .eventSource(ReviewPipelineConstants.EVENT_SOURCE_PR)
+            .summaryText("PR 审查小结")
+            .build();
+
+        String body = ReviewNotifyMessageRenderer.renderSuccess(content);
+        assertFalse(body.contains(ReviewDeliveryConstants.PUSH_SCOPE_NOTE));
+        assertFalse(body.contains("本结论仅覆盖本次推送的变更"));
     }
 
     @Test

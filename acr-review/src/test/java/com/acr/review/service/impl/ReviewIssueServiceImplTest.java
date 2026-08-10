@@ -18,6 +18,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.LongStream;
 import org.junit.jupiter.api.BeforeEach;
@@ -944,6 +945,71 @@ class ReviewIssueServiceImplTest
         assertEquals("main", captor.getValue().getRefBranch());
         assertEquals(0, captor.getValue().getPrNumber());
         assertEquals(1, result.getNewlyMaterialized().size());
+    }
+
+    @Test
+    void reconcilePushSkipsMissWhenFileNotInCoveredDiff()
+    {
+        ReviewTask task = successLlmTask(81L, 10L, 0, "pushsha2");
+        task.setEventSource(ReviewPipelineConstants.EVENT_SOURCE_PUSH);
+        task.setTargetBranch("main");
+        ReviewTaskRun run = runWithIssues(181L); // 空清单：本轮未命中
+        run.setCoveredFiles(Set.of("touched.java"));
+        ReviewIssue uncovered = openIssue(901L, "SEC", "PaymentGateway.java", "sql-injection");
+        uncovered.setPrNumber(0);
+        uncovered.setRefBranch("main");
+        uncovered.setStatus(ReviewIssueConstants.STATUS_AWAITING_FIX);
+        uncovered.setLastSeenHeadSha("oldsha");
+        uncovered.setMissedStreak(0);
+        when(issueMapper.selectByProjectAndPr(10L, 0, "main")).thenReturn(new ArrayList<>(List.of(uncovered)));
+
+        ReviewRoundReconcileResult result = service.reconcileAfterSuccess(task, run);
+
+        assertTrue(result.getMovedToRechecking().isEmpty());
+        assertEquals(ReviewIssueConstants.STATUS_AWAITING_FIX, uncovered.getStatus());
+        assertEquals(0, uncovered.getMissedStreak());
+        verify(issueMapper, never()).updateIssueSnapshot(any());
+        verify(actionMapper, never()).insertAction(any());
+    }
+
+    @Test
+    void reconcilePushCountsMissWhenFileCoveredButNotHit()
+    {
+        ReviewTask task = successLlmTask(82L, 10L, 0, "pushsha3");
+        task.setEventSource(ReviewPipelineConstants.EVENT_SOURCE_PUSH);
+        task.setTargetBranch("main");
+        ReviewTaskRun run = runWithIssues(182L);
+        run.setCoveredFiles(Set.of("PaymentGateway.java"));
+        ReviewIssue covered = openIssue(902L, "SEC", "PaymentGateway.java", "sql-injection");
+        covered.setPrNumber(0);
+        covered.setRefBranch("main");
+        covered.setStatus(ReviewIssueConstants.STATUS_AWAITING_FIX);
+        covered.setLastSeenHeadSha("oldsha");
+        when(issueMapper.selectByProjectAndPr(10L, 0, "main")).thenReturn(new ArrayList<>(List.of(covered)));
+
+        ReviewRoundReconcileResult result = service.reconcileAfterSuccess(task, run);
+
+        assertEquals(1, result.getMovedToRechecking().size());
+        assertEquals(ReviewIssueConstants.STATUS_RECHECKING, covered.getStatus());
+        assertEquals(1, covered.getMissedStreak());
+    }
+
+    @Test
+    void reconcilePrIgnoresCoveredFilesAndStillCountsMiss()
+    {
+        // PR 线零回归：即使误传 coveredFiles，也不走覆盖过滤
+        ReviewTask task = successLlmTask(83L, 10L, 8, "prsha1");
+        ReviewTaskRun run = runWithIssues(183L);
+        run.setCoveredFiles(Set.of("other.java")); // 不含 a.java
+        ReviewIssue existing = openIssue(903L, "SEC", "a.java", "leak");
+        existing.setStatus(ReviewIssueConstants.STATUS_AWAITING_FIX);
+        existing.setLastSeenHeadSha("oldsha");
+        when(issueMapper.selectByProjectAndPr(10L, 8, "")).thenReturn(new ArrayList<>(List.of(existing)));
+
+        ReviewRoundReconcileResult result = service.reconcileAfterSuccess(task, run);
+
+        assertEquals(1, result.getMovedToRechecking().size());
+        assertEquals(ReviewIssueConstants.STATUS_RECHECKING, existing.getStatus());
     }
 
     @Test

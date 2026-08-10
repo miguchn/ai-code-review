@@ -132,6 +132,38 @@ class OpenCodeReviewCliAdapterTest
     }
 
     @Test
+    void appendsBackgroundLanguageInstructionForReview()
+    {
+        Path workspace = createWorkspace();
+        ReviewEngineRequest request = new ReviewEngineRequest();
+        request.setWorkingDirectory(workspace.toString());
+        request.setInvocationType(ReviewEngineInvocationType.REVIEW);
+        request.setBaseSha("abc1234");
+        request.setHeadSha("def5678");
+
+        List<String> command = adapter.buildCommand(request, workspace);
+        int bgIndex = command.indexOf("--background");
+        assertTrue(bgIndex > 0, "应包含 --background: " + command);
+        assertEquals(OpenCodeReviewCliAdapter.BACKGROUND_LANGUAGE_INSTRUCTION, command.get(bgIndex + 1));
+        assertTrue(command.get(bgIndex + 1).contains("简体中文"));
+        assertTrue(command.get(bgIndex + 1).contains("severity"));
+    }
+
+    @Test
+    void appendsBackgroundLanguageInstructionForPreview()
+    {
+        Path workspace = createWorkspace();
+        ReviewEngineRequest request = new ReviewEngineRequest();
+        request.setWorkingDirectory(workspace.toString());
+        request.setInvocationType(ReviewEngineInvocationType.REVIEW_PREVIEW);
+
+        List<String> command = adapter.buildCommand(request, workspace);
+        assertTrue(command.contains("--background"));
+        assertEquals(OpenCodeReviewCliAdapter.BACKGROUND_LANGUAGE_INSTRUCTION,
+            command.get(command.indexOf("--background") + 1));
+    }
+
+    @Test
     void omitsExcludeFlagWhenPatternsEmpty()
     {
         Path workspace = createWorkspace();

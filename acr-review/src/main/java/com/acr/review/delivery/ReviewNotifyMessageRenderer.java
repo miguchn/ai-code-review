@@ -53,6 +53,10 @@ public final class ReviewNotifyMessageRenderer
         String summary = truncateFlat(content.getSummaryText(), ReviewDeliveryConstants.IM_MAX_SUMMARY_CHARS);
         // 总结正文：1 个全角空格（U+3000）缩进，层次化于段标题下
         sb.append('\u3000').append(displayOrEmpty(summary)).append('\n');
+        if (content.isPushReview())
+        {
+            sb.append('\u3000').append(ReviewDeliveryConstants.PUSH_SCOPE_NOTE).append('\n');
+        }
 
         appendActionLinks(sb, content, true);
         return sb.toString().trim();

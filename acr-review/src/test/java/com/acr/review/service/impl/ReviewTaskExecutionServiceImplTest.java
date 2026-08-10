@@ -1,5 +1,7 @@
 package com.acr.review.service.impl;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -42,6 +44,7 @@ import com.acr.review.service.IReviewTemplateService;
 import com.acr.review.service.ReviewConclusionResolver;
 import com.acr.review.service.ReviewPromptComposer;
 import com.acr.review.service.ReviewPromptRenderer;
+import com.acr.review.scope.UnifiedDiffParser;
 import com.acr.review.service.ReviewScoreResultParser;
 import com.acr.system.domain.SysAiModelConfig;
 import com.acr.system.service.ISysAiModelConfigService;
@@ -910,5 +913,87 @@ class ReviewTaskExecutionServiceImplTest
     {
         service.scheduleExecution(8L);
         verify(eventPublisher).publishEvent(any());
+    }
+
+    @Test
+    void statsFromDiffCountsFilesAndLineChanges()
+    {
+        String diff = ""
+            + "diff --git a/a.java b/a.java\n"
+            + "--- a/a.java\n"
+            + "+++ b/a.java\n"
+            + "@@ -1,2 +1,3 @@\n"
+            + " keep\n"
+            + "-old\n"
+            + "+new1\n"
+            + "+new2\n"
+            + "diff --git a/b.java b/b.java\n"
+            + "--- a/b.java\n"
+            + "+++ b/b.java\n"
+            + "@@ -1 +1 @@\n"
+            + "-x\n"
+            + "+y\n";
+        var parsed = new UnifiedDiffParser().parse(diff);
+        var stats = ReviewTaskExecutionServiceImpl.statsFromDiff(parsed);
+        assertEquals(2, stats.changedFiles());
+        assertEquals(3, stats.additions());
+        assertEquals(2, stats.deletions());
+
+        var covered = ReviewTaskExecutionServiceImpl.coveredFilesFromDiff(parsed);
+        assertEquals(java.util.Set.of("a.java", "b.java"), covered);
+    }
+
+    @Test
+    void coveredFilesFromDiffUsesNewPathForRename()
+    {
+        String diff = ""
+            + "diff --git a/src/OldName.java b/src/NewName.java\n"
+            + "similarity index 90%\n"
+            + "rename from src/OldName.java\n"
+            + "rename to src/NewName.java\n"
+            + "--- a/src/OldName.java\n"
+            + "+++ b/src/NewName.java\n"
+            + "@@ -1 +1 @@\n"
+            + "-old\n"
+            + "+new\n";
+        var covered = ReviewTaskExecutionServiceImpl.coveredFilesFromDiff(new UnifiedDiffParser().parse(diff));
+        assertTrue(covered.contains("src/NewName.java"));
+        assertFalse(covered.contains("src/OldName.java"));
+    }
+
+    @Test
+    void parseShortstatOutputSupportsVariants()
+    {
+        var full = ReviewTaskExecutionServiceImpl.parseShortstatOutput(
+            " 1 file changed, 25 insertions(+), 3 deletions(-)\n");
+        assertEquals(1, full.changedFiles());
+        assertEquals(25, full.additions());
+        assertEquals(3, full.deletions());
+
+        var plural = ReviewTaskExecutionServiceImpl.parseShortstatOutput(
+            "2 files changed, 1 insertion(+), 1 deletion(-)");
+        assertEquals(2, plural.changedFiles());
+        assertEquals(1, plural.additions());
+        assertEquals(1, plural.deletions());
+
+        var addOnly = ReviewTaskExecutionServiceImpl.parseShortstatOutput(
+            "1 file changed, 10 insertions(+)");
+        assertEquals(1, addOnly.changedFiles());
+        assertEquals(10, addOnly.additions());
+        assertEquals(0, addOnly.deletions());
+    }
+
+    @Test
+    void applyDiffStatsIfAbsentDoesNotOverwriteExisting()
+    {
+        ReviewTask task = new ReviewTask();
+        task.setChangedFiles(9);
+        task.setAdditions(100);
+        // deletions 留空，允许回填
+        ReviewTaskExecutionServiceImpl.applyDiffStatsIfAbsent(task,
+            new ReviewTaskExecutionServiceImpl.DiffChangeStats(2, 5, 3));
+        assertEquals(9, task.getChangedFiles());
+        assertEquals(100, task.getAdditions());
+        assertEquals(3, task.getDeletions());
     }
 }

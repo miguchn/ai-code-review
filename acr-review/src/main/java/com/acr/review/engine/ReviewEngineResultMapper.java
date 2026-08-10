@@ -25,6 +25,10 @@ public class ReviewEngineResultMapper
         "^\\*\\*(.+?)\\*\\*\\s*:?\\s*(.*)$", Pattern.DOTALL);
     private static final Pattern SUGGESTION_CLAUSE = Pattern.compile(
         "建议[:：]?\\s*.+");
+    /** 剥离 OCR 标题行首 severity 前缀，保证跨轮指纹稳定。 */
+    private static final Pattern SEVERITY_TITLE_PREFIX = Pattern.compile(
+        "^\\s*(critical|high|medium|low|info|严重|高危|中危|低危)\\s*[:：]\\s*",
+        Pattern.CASE_INSENSITIVE);
 
     public List<ReviewTopIssue> mapTopIssues(Map<String, Object> structured)
     {
@@ -104,15 +108,26 @@ public class ReviewEngineResultMapper
         Matcher matcher = BOLD_TITLE.matcher(content);
         if (matcher.matches())
         {
-            String title = truncate(matcher.group(1).trim(), MAX_TITLE_CHARS);
+            String title = stripSeverityPrefix(matcher.group(1).trim());
+            title = truncate(title, MAX_TITLE_CHARS);
             String description = matcher.group(2) == null ? "" : matcher.group(2).trim();
             if (StringUtils.isEmpty(title))
             {
-                title = truncate(content, MAX_TITLE_CHARS);
+                title = truncate(stripSeverityPrefix(content), MAX_TITLE_CHARS);
             }
             return new ParsedContent(title, description);
         }
-        return new ParsedContent(truncate(content, MAX_TITLE_CHARS), content);
+        return new ParsedContent(truncate(stripSeverityPrefix(content), MAX_TITLE_CHARS), content);
+    }
+
+    /** 剥离行首英文/中文 severity 前缀（如 {@code Critical:}、{@code 严重：}）。 */
+    static String stripSeverityPrefix(String title)
+    {
+        if (StringUtils.isEmpty(title))
+        {
+            return title == null ? "" : title;
+        }
+        return SEVERITY_TITLE_PREFIX.matcher(title).replaceFirst("");
     }
 
     private String buildSuggestion(String description, String content, String suggestionCode)

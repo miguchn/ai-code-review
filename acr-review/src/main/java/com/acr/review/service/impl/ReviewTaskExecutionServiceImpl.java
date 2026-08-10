@@ -1,11 +1,17 @@
 package com.acr.review.service.impl;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -46,6 +52,8 @@ import com.acr.review.mapper.GitCredentialMapper;
 import com.acr.review.mapper.ReviewProjectMapper;
 import com.acr.review.mapper.ReviewTaskMapper;
 import com.acr.review.mapper.ReviewTaskRunMapper;
+import com.acr.review.scope.DiffFileChange;
+import com.acr.review.scope.DiffHunk;
 import com.acr.review.scope.DiffParseResult;
 import com.acr.review.scope.IssueOriginClassifier;
 import com.acr.review.scope.ReviewScopeConfig;
@@ -78,6 +86,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionService
 {
     private static final Logger log = LoggerFactory.getLogger(ReviewTaskExecutionServiceImpl.class);
+
+    private static final Pattern SHORTSTAT_FILES = Pattern.compile("(\\d+)\\s+files?\\s+changed");
+    private static final Pattern SHORTSTAT_INSERTIONS = Pattern.compile("(\\d+)\\s+insertions?\\(\\+\\)");
+    private static final Pattern SHORTSTAT_DELETIONS = Pattern.compile("(\\d+)\\s+deletions?\\(-\\)");
 
     private final ReviewTaskMapper taskMapper;
     private final ReviewTaskRunMapper runMapper;
@@ -346,6 +358,12 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
                 return;
             }
 
+            // 工作区存活期采集覆盖文件集与 shortstat（reconcile / 落库前；清理后不可再访问工作区）
+            run.setCoveredFiles(listDiffCoveredFiles(
+                workspaceResult.workingDirectory(), task.getBaseSha(), task.getHeadSha()));
+            applyDiffStatsIfAbsent(task, parseGitDiffShortstat(
+                workspaceResult.workingDirectory(), task.getBaseSha(), task.getHeadSha()));
+
             acquired = concurrencyLimiter.tryAcquire();
             if (!acquired)
             {
@@ -409,6 +427,10 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
                 ReviewPipelineConstants.STEP_PREPARE_WORKSPACE, "PR Diff 为空，没有可审查的变更");
             return;
         }
+
+        DiffParseResult rawDiffParsed = diffParser.parse(diffResult.diffContent());
+        run.setCoveredFiles(coveredFilesFromDiff(rawDiffParsed));
+        applyDiffStatsIfAbsent(task, statsFromDiff(rawDiffParsed));
 
         // M3.2 范围决策：解析 → 排除/扩展 → 扩展全文竞争剩余预算 → 决策快照落库。
         // 决策异常一律降级为全量 Diff，不阻断审查。
@@ -699,7 +721,7 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
             builder.redirectErrorStream(true);
             builder.environment().put("GIT_TERMINAL_PROMPT", "0");
             Process process = builder.start();
-            boolean finished = process.waitFor(30, java.util.concurrent.TimeUnit.SECONDS);
+            boolean finished = process.waitFor(30, TimeUnit.SECONDS);
             if (!finished)
             {
                 process.destroyForcibly();
@@ -711,6 +733,197 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         catch (Exception ex)
         {
             return false;
+        }
+    }
+
+    /** 从 DiffParseResult 提取变更后路径（重命名计新路径；删除无新路径则不计）。 */
+    static Set<String> coveredFilesFromDiff(DiffParseResult parsed)
+    {
+        Set<String> covered = new LinkedHashSet<>();
+        if (parsed == null || parsed.isEmpty())
+        {
+            return covered;
+        }
+        for (DiffFileChange file : parsed.files())
+        {
+            if (file != null && StringUtils.isNotEmpty(file.newPath()))
+            {
+                covered.add(file.newPath());
+            }
+        }
+        return covered;
+    }
+
+    /** 从 DiffParseResult 统计文件数 / 增行 / 删行。 */
+    static DiffChangeStats statsFromDiff(DiffParseResult parsed)
+    {
+        if (parsed == null || parsed.isEmpty())
+        {
+            return DiffChangeStats.empty();
+        }
+        int files = 0;
+        int additions = 0;
+        int deletions = 0;
+        for (DiffFileChange file : parsed.files())
+        {
+            if (file == null)
+            {
+                continue;
+            }
+            files++;
+            if (file.hunks() == null)
+            {
+                continue;
+            }
+            for (DiffHunk hunk : file.hunks())
+            {
+                if (hunk == null)
+                {
+                    continue;
+                }
+                if (hunk.addedLines() != null)
+                {
+                    additions += hunk.addedLines().size();
+                }
+                if (hunk.deletedLines() != null)
+                {
+                    deletions += hunk.deletedLines().size();
+                }
+            }
+        }
+        return new DiffChangeStats(files, additions, deletions);
+    }
+
+    /** 工作区 {@code git diff --name-only base head}；失败返回空集。 */
+    static Set<String> listDiffCoveredFiles(String workingDirectory, String baseSha, String headSha)
+    {
+        Set<String> covered = new LinkedHashSet<>();
+        String output = runGitDiff(workingDirectory, baseSha, headSha, "--name-only");
+        if (output == null || output.isBlank())
+        {
+            return covered;
+        }
+        for (String line : output.split("\\R"))
+        {
+            String path = line == null ? "" : line.trim();
+            if (!path.isEmpty())
+            {
+                covered.add(path);
+            }
+        }
+        return covered;
+    }
+
+    /** 工作区 {@code git diff --shortstat base head} 解析。 */
+    static DiffChangeStats parseGitDiffShortstat(String workingDirectory, String baseSha, String headSha)
+    {
+        return parseShortstatOutput(runGitDiff(workingDirectory, baseSha, headSha, "--shortstat"));
+    }
+
+    /** 解析 {@code N file(s) changed, X insertion(s)(+), Y deletion(s)(-)}。 */
+    static DiffChangeStats parseShortstatOutput(String shortstat)
+    {
+        if (shortstat == null || shortstat.isBlank())
+        {
+            return DiffChangeStats.empty();
+        }
+        Integer files = matchFirstInt(SHORTSTAT_FILES, shortstat);
+        Integer additions = matchFirstInt(SHORTSTAT_INSERTIONS, shortstat);
+        Integer deletions = matchFirstInt(SHORTSTAT_DELETIONS, shortstat);
+        if (files == null && additions == null && deletions == null)
+        {
+            return DiffChangeStats.empty();
+        }
+        return new DiffChangeStats(
+            files == null ? 0 : files,
+            additions == null ? 0 : additions,
+            deletions == null ? 0 : deletions);
+    }
+
+    private static Integer matchFirstInt(Pattern pattern, String text)
+    {
+        Matcher matcher = pattern.matcher(text);
+        if (!matcher.find())
+        {
+            return null;
+        }
+        try
+        {
+            return Integer.parseInt(matcher.group(1));
+        }
+        catch (NumberFormatException ex)
+        {
+            return null;
+        }
+    }
+
+    private static String runGitDiff(String workingDirectory, String baseSha, String headSha, String modeFlag)
+    {
+        if (workingDirectory == null || workingDirectory.isBlank()
+            || baseSha == null || baseSha.isBlank()
+            || headSha == null || headSha.isBlank())
+        {
+            return null;
+        }
+        try
+        {
+            ProcessBuilder builder = new ProcessBuilder(
+                "git", "-C", workingDirectory, "diff", modeFlag, baseSha, headSha);
+            builder.redirectErrorStream(true);
+            builder.environment().put("GIT_TERMINAL_PROMPT", "0");
+            Process process = builder.start();
+            String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            boolean finished = process.waitFor(30, TimeUnit.SECONDS);
+            if (!finished)
+            {
+                process.destroyForcibly();
+                return null;
+            }
+            if (process.exitValue() != 0)
+            {
+                return null;
+            }
+            return output;
+        }
+        catch (Exception ex)
+        {
+            return null;
+        }
+    }
+
+    /**
+     * 回填 task 变更统计；已有非 null 值不覆盖（PR 元数据优先）。
+     */
+    static void applyDiffStatsIfAbsent(ReviewTask task, DiffChangeStats stats)
+    {
+        if (task == null || stats == null || !stats.hasData())
+        {
+            return;
+        }
+        if (task.getChangedFiles() == null)
+        {
+            task.setChangedFiles(stats.changedFiles());
+        }
+        if (task.getAdditions() == null)
+        {
+            task.setAdditions(stats.additions());
+        }
+        if (task.getDeletions() == null)
+        {
+            task.setDeletions(stats.deletions());
+        }
+    }
+
+    record DiffChangeStats(int changedFiles, int additions, int deletions)
+    {
+        static DiffChangeStats empty()
+        {
+            return new DiffChangeStats(0, 0, 0);
+        }
+
+        boolean hasData()
+        {
+            return changedFiles > 0 || additions > 0 || deletions > 0;
         }
     }
 

@@ -20,33 +20,54 @@
         <section class="detail-section">
           <el-descriptions :column="2" border>
             <el-descriptions-item label="项目">
-              {{ emptyDash(detailTask.projectName) }}
+              {{ recordDisplayValue(detailTask.projectName) }}
               <span v-if="detailTask.businessSystemName" class="system-inline">（{{ detailTask.businessSystemName }}）</span>
             </el-descriptions-item>
-            <el-descriptions-item label="事件来源">
-              <dict-tag :options="review_event_source" :value="detailTask.eventSource || 'PR'" />
+            <el-descriptions-item label="变更来源">
+              <el-tag :type="isPushTask(detailTask) ? 'success' : 'info'" size="small">{{ changeSourceLabel(detailTask) }}</el-tag>
             </el-descriptions-item>
-            <el-descriptions-item label="发起人">{{ emptyDash(detailTask.prAuthor) }}</el-descriptions-item>
-            <el-descriptions-item v-if="!isPushTask(detailTask)" label="合并请求">
+            <el-descriptions-item label="发起人">{{ recordDisplayValue(detailTask.prAuthor) }}</el-descriptions-item>
+            <el-descriptions-item v-if="!isPushTask(detailTask)" label="来源详情">
               <a v-if="mergeRequestLink" :href="mergeRequestLink" target="_blank" rel="noopener noreferrer" class="pr-link">
                 <el-tag size="small" type="info" class="mr-tag">{{ mergeRequestLinkLabel }}</el-tag>
-                #{{ detailTask.prNumber }} {{ emptyDash(detailTask.prTitle) }}
+                #{{ detailTask.prNumber }} {{ recordDisplayValue(detailTask.prTitle) }}
               </a>
               <span v-else>
                 <el-tag size="small" type="info" class="mr-tag">{{ mergeRequestLinkLabel }}</el-tag>
-                #{{ detailTask.prNumber }} {{ emptyDash(detailTask.prTitle) }}
+                #{{ detailTask.prNumber }} {{ recordDisplayValue(detailTask.prTitle) }}
               </span>
             </el-descriptions-item>
-            <el-descriptions-item v-else label="推送引用">
-              {{ formatPushRefDisplay(detailTask) }}
+            <el-descriptions-item v-else label="来源详情">
+              {{ pushRefDisplay(detailTask) }}
               <span v-if="detailTask.prTitle" class="push-title"> · {{ detailTask.prTitle }}</span>
             </el-descriptions-item>
-            <el-descriptions-item label="分支">{{ emptyDash(detailTask.sourceBranch) }} → {{ emptyDash(detailTask.targetBranch) }}</el-descriptions-item>
-            <el-descriptions-item label="代码变更">{{ formatCodeChange(detailTask.changedFiles, detailTask.additions, detailTask.deletions) }}</el-descriptions-item>
-            <el-descriptions-item label="审查结论">
-              <el-tag :type="recordConclusionTagType(detailTask)" size="small">{{ recordConclusionLabel(detailTask) }}</el-tag>
+            <el-descriptions-item label="分支">{{ recordDisplayValue(detailTask.sourceBranch) }} → {{ recordDisplayValue(detailTask.targetBranch) }}</el-descriptions-item>
+            <el-descriptions-item label="代码变更">
+              <div v-if="hasChangeMetrics(detailTask)" class="change-summary" :aria-label="changeSummaryLabel(detailTask)">
+                <span class="change-metric change-metric-files">
+                  <span class="change-label">文件</span>
+                  <strong class="change-value">{{ changeMetricValue(detailTask.changedFiles, '', detailTask) }}</strong>
+                </span>
+                <span class="change-separator">·</span>
+                <span class="change-metric change-metric-additions">
+                  <span class="change-label">新增</span>
+                  <strong class="change-value">{{ changeMetricValue(detailTask.additions, '+', detailTask) }}</strong>
+                </span>
+                <span class="change-separator">·</span>
+                <span class="change-metric change-metric-deletions">
+                  <span class="change-label">删除</span>
+                  <strong class="change-value">{{ changeMetricValue(detailTask.deletions, '-', detailTask) }}</strong>
+                </span>
+              </div>
+              <span v-else :class="['metric-state', metricStateClass(detailTask)]">{{ metricUnavailableLabel(detailTask) }}</span>
             </el-descriptions-item>
-            <el-descriptions-item label="完成时间">{{ formatDateTime(detailTask.finishedTime) }}</el-descriptions-item>
+            <el-descriptions-item label="审查结论">
+              <div class="conclusion-cell">
+                <el-tag :type="recordConclusionTagType(detailTask)" size="small">{{ recordConclusionDisplay(detailTask) }}</el-tag>
+                <span v-if="isPushTask(detailTask)" class="push-scope-note">{{ PUSH_SCOPE_NOTE }}</span>
+              </div>
+            </el-descriptions-item>
+            <el-descriptions-item label="完成时间">{{ recordDateTime(detailTask.finishedTime) }}</el-descriptions-item>
           </el-descriptions>
         </section>
 
@@ -68,10 +89,10 @@
               <div class="score-panel">
                 <div class="score-total">
                   <span class="score-total-label">总分</span>
-                  <span class="score-total-value">{{ formatScore(resultRun.totalScore ?? detailTask.totalScore) }}</span>
+                  <span class="score-total-value">{{ scoreDisplay(detailTask, resultRun) }}</span>
                   <span class="score-total-unit">/ 100</span>
                   <el-tag :type="recordConclusionTagType(detailTask)" size="small" class="conclusion-tag">
-                    {{ recordConclusionLabel(detailTask) }}
+                    {{ recordConclusionDisplay(detailTask) }}
                   </el-tag>
                 </div>
 
@@ -87,7 +108,7 @@
 
                 <div class="result-block">
                   <div class="result-block-title">审查摘要</div>
-                  <p class="result-summary">{{ getReviewSummary(resultRun) || '--' }}</p>
+                  <p class="result-summary">{{ getReviewSummary(resultRun) || '暂无审查摘要' }}</p>
                 </div>
 
                 <div id="focus-issues" class="result-block">
@@ -96,7 +117,7 @@
                   <div v-else class="issue-list">
                     <div v-for="issue in displayedNewIssues" :key="issue.rank || issue.title" class="issue-card">
                       <div class="issue-head">
-                        <span class="issue-rank">#{{ issue.rank || '--' }}</span>
+                        <span class="issue-rank">#{{ issue.rank || '未编号' }}</span>
                         <el-tag v-if="issue.severity" :type="severityTagType(issue.severity)" size="small">
                           {{ severityLabel(issue.severity) }}
                         </el-tag>
@@ -105,7 +126,7 @@
                         </el-tag>
                         <dict-tag v-if="issue.dispositionStatus" :options="review_issue_status" :value="issue.dispositionStatus" />
                         <span v-if="issue.category" class="issue-category">{{ issue.category }}</span>
-                        <strong class="issue-title">{{ emptyDash(issue.title) }}</strong>
+                        <strong class="issue-title">{{ recordDisplayValue(issue.title) }}</strong>
                         <el-button v-if="issue.issueId" link type="primary" size="small" class="issue-ledger-link"
                           @click="goIssueLedger(issue.issueId)">台账</el-button>
                       </div>
@@ -142,7 +163,7 @@
                         <el-tag type="info" size="small" effect="plain">存量</el-tag>
                         <dict-tag v-if="issue.dispositionStatus" :options="review_issue_status" :value="issue.dispositionStatus" />
                         <span v-if="issue.category" class="issue-category">{{ issue.category }}</span>
-                        <strong class="issue-title">{{ emptyDash(issue.title) }}</strong>
+                        <strong class="issue-title">{{ recordDisplayValue(issue.title) }}</strong>
                         <el-button v-if="issue.issueId" link type="primary" size="small" class="issue-ledger-link"
                           @click="goIssueLedger(issue.issueId)">台账</el-button>
                       </div>
@@ -161,14 +182,14 @@
 
                 <div class="result-block">
                   <div class="result-block-title">提交说明</div>
-                  <pre class="commit-pre">{{ emptyDash(resultRun.commitMessages) }}</pre>
+                  <pre class="commit-pre">{{ resultRun.commitMessages || '暂无提交说明' }}</pre>
                 </div>
               </div>
             </div>
             <el-empty v-else-if="detailTask.taskStatus !== 'FAILED'" description="暂无可用的审查结果" :image-size="64" />
             <div v-else id="focus-issues" class="result-block">
               <div class="result-block-title">重点问题</div>
-              <p class="result-summary">执行失败，评分与重点问题为 --</p>
+              <p class="result-summary">执行失败，评分与重点问题未生成。</p>
             </div>
           </el-tab-pane>
 
@@ -191,23 +212,23 @@
                 </template>
               </el-table-column>
               <el-table-column label="模型 / 引擎" min-width="160">
-                <template #default="scope">{{ engineOrModelLabel(scope.row) }}</template>
+                <template #default="scope">{{ readableValue(engineOrModelLabel(scope.row)) }}</template>
               </el-table-column>
               <el-table-column label="模板" min-width="140">
-                <template #default="scope">{{ templateLabel(scope.row) }}</template>
+                <template #default="scope">{{ readableValue(templateLabel(scope.row)) }}</template>
               </el-table-column>
               <el-table-column label="SHA" min-width="150">
-                <template #default="scope">{{ shortSha(scope.row.snapshotBaseSha) }} → {{ shortSha(scope.row.snapshotHeadSha) }}</template>
+                <template #default="scope">{{ readableValue(shortSha(scope.row.snapshotBaseSha)) }} → {{ readableValue(shortSha(scope.row.snapshotHeadSha)) }}</template>
               </el-table-column>
               <el-table-column label="耗时" width="100">
-                <template #default="scope">{{ formatDuration(scope.row.durationMs) }}</template>
+                <template #default="scope">{{ readableValue(formatDuration(scope.row.durationMs)) }}</template>
               </el-table-column>
               <el-table-column label="失败原因" min-width="180">
                 <template #default="scope">
                   <span v-if="scope.row.runStatus === 'FAILED'" class="failure-message">
                     {{ readableFailureMessage(scope.row.failureMessage) }}
                   </span>
-                  <span v-else class="empty-tip">—</span>
+                  <span v-else class="empty-tip">无</span>
                 </template>
               </el-table-column>
             </el-table>
@@ -225,20 +246,18 @@ import DeliveryStatusView from '@/views/review/components/DeliveryStatusView.vue
 import ImDeliveryStatusView from '@/views/review/components/ImDeliveryStatusView.vue'
 import ScopeDecisionView from '@/views/review/components/ScopeDecisionView.vue'
 import {
-  emptyDash, formatCodeChange, formatScore, formatDuration, shortSha,
+  formatScore, formatDuration, shortSha,
   showStructuredResult, getScoreDimensions, getReviewSummary, getTopIssues,
   severityLabel, severityTagType, formatIssueLines, pickLatestSuccessRun,
-  engineOrModelLabel, templateLabel, buildMergeRequestUrl, mergeRequestLabel,
+  engineOrModelLabel, templateLabel, buildMergeRequestUrl, mergeRequestLabel, changeSourceLabel,
   recordConclusionLabel, recordConclusionTagType,
   issueOriginLabel, issueOriginTagType, formatDateTime,
-  isPushTask, formatPushRefDisplay, readableFailureMessage
+  isPushTask, formatPushRefDisplay, readableFailureMessage, PUSH_SCOPE_NOTE
 } from '@/utils/reviewDisplay'
 
 const { proxy } = getCurrentInstance()
 const route = useRoute()
-const { review_task_status, review_issue_status, review_event_source } = proxy.useDict(
-  'review_task_status', 'review_issue_status', 'review_event_source'
-)
+const { review_task_status, review_issue_status } = proxy.useDict('review_task_status', 'review_issue_status')
 
 const detailLoading = ref(false)
 const detailTask = ref(null)
@@ -255,6 +274,53 @@ const displayedNewIssues = computed(() => newIssues.value.slice(0, 3))
 const existingIssues = computed(() => topIssues.value.filter(issue => (issue?.origin || '').toUpperCase() === 'EXISTING'))
 const mergeRequestLink = computed(() => buildMergeRequestUrl(detailTask.value || {}))
 const mergeRequestLinkLabel = computed(() => mergeRequestLabel(detailTask.value?.provider))
+
+function metricUnavailableLabel(row) {
+  return row?.taskStatus === 'FAILED' ? '未生成' : '暂无数据'
+}
+
+function metricStateClass(row) {
+  return row?.taskStatus === 'FAILED' ? 'metric-state-failed' : 'metric-state-empty'
+}
+
+function recordConclusionDisplay(row) {
+  const label = recordConclusionLabel(row)
+  return label === '--' ? metricUnavailableLabel(row) : label
+}
+
+function scoreDisplay(row, run) {
+  if (row?.taskStatus === 'FAILED') return '未生成'
+  const value = run?.totalScore ?? row?.totalScore
+  return value == null ? '暂无数据' : formatScore(value)
+}
+
+function changeMetricValue(value, prefix = '', row) {
+  return value == null ? metricUnavailableLabel(row) : `${prefix}${value}`
+}
+
+function hasChangeMetrics(row) {
+  return row?.changedFiles != null || row?.additions != null || row?.deletions != null
+}
+
+function changeSummaryLabel(row) {
+  return `文件数 ${changeMetricValue(row?.changedFiles, '', row)}，新增行 ${changeMetricValue(row?.additions, '+', row)}，删除行 ${changeMetricValue(row?.deletions, '-', row)}`
+}
+
+function readableValue(value) {
+  return value == null || value === '' || value === '—' ? '暂无数据' : value
+}
+
+function recordDisplayValue(value) {
+  return value == null || value === '' || value === '—' || value === '--' ? '暂无数据' : value
+}
+
+function recordDateTime(value) {
+  return recordDisplayValue(formatDateTime(value))
+}
+
+function pushRefDisplay(row) {
+  return recordDisplayValue(formatPushRefDisplay(row)).replaceAll('—', '暂无数据')
+}
 
 function loadDetail() {
   if (!taskId.value) {
@@ -334,6 +400,22 @@ watch(() => route.query.focus, () => focusIssuesIfNeeded())
 .pr-link:hover { text-decoration: underline; }
 .mr-tag { margin-right: 6px; vertical-align: middle; }
 .push-title { color: var(--el-text-color-secondary); font-size: 13px; }
+.change-summary {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+.change-metric { display: inline-flex; align-items: baseline; gap: 3px; }
+.change-value { font-size: 13px; font-weight: 600; }
+.change-label,
+.change-separator { font-family: var(--el-font-family); font-size: 11px; color: var(--el-text-color-secondary); }
+.change-separator { color: var(--el-border-color); }
+.change-metric-files .change-value { color: var(--el-text-color-regular); }
+.change-metric-additions .change-value { color: var(--el-color-success); }
+.change-metric-deletions .change-value { color: var(--el-color-danger); }
 .mb12 { margin-bottom: 12px; }
 .detail-section { margin-bottom: 20px; }
 .section-hint { margin: 0 0 12px; font-size: 13px; color: var(--el-text-color-secondary); }
@@ -359,6 +441,17 @@ watch(() => route.query.focus, () => focusIssuesIfNeeded())
 }
 .score-total-unit { font-size: 13px; color: var(--el-text-color-secondary); }
 .conclusion-tag { margin-left: 8px; }
+.conclusion-cell {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.push-scope-note {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  line-height: 1.5;
+}
 .score-dimensions { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
 .score-dim-row {
   padding: 10px 12px;
@@ -411,4 +504,7 @@ watch(() => route.query.focus, () => focusIssuesIfNeeded())
 }
 .failure-message { color: var(--el-color-danger); }
 .empty-tip { color: var(--el-text-color-placeholder); }
+.metric-state { font-size: 13px; white-space: nowrap; }
+.metric-state-empty { color: var(--el-text-color-placeholder); }
+.metric-state-failed { color: var(--el-color-danger); }
 </style>

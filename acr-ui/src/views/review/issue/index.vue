@@ -26,7 +26,7 @@
           style="width: 140px"
           @change="onStatusChange"
         >
-          <el-option v-for="dict in review_issue_status" :key="dict.value" :label="dict.label" :value="dict.value" />
+          <el-option v-for="dict in issueStatusOptions" :key="dict.value" :label="dict.label" :value="dict.value" />
         </el-select>
       </el-form-item>
       <el-form-item label="严重度" prop="severity">
@@ -127,7 +127,7 @@
           :class="{ 'is-active': isStatsActive('status', 'RECHECKING') }"
           @click="toggleStatsFilter('status', 'RECHECKING')"
         >
-          <span class="stats-label">待复核</span>
+          <span class="stats-label">疑似修复</span>
           <span class="stats-value">{{ stats.rechecking }}</span>
         </button>
         <span class="stats-divider stats-divider-strong">║</span>
@@ -137,7 +137,7 @@
           :class="{ 'is-active': isStatsActive('pendingOnly', 'Y') }"
           @click="toggleStatsFilter('pendingOnly', 'Y')"
         >
-          <el-tooltip content="待确认 + 待复核，需要人工判断或处置" placement="top">
+          <el-tooltip content="待确认 + 疑似修复，需要人工判断或处置" placement="top">
             <span class="stats-label">待人工处置</span>
           </el-tooltip>
           <span class="stats-value">{{ stats.pending }}</span>
@@ -211,54 +211,57 @@
           <span v-else class="empty-tip">—</span>
         </template>
       </el-table-column>
-      <el-table-column label="阶段" min-width="150">
+      <el-table-column label="阶段" min-width="170">
         <template #default="scope">
           <div class="stage-cell">
-            <dict-tag :options="review_issue_status" :value="scope.row.status" />
+            <dict-tag :options="issueStatusOptions" :value="scope.row.status" />
+            <span v-if="scope.row.status === 'RECHECKING'" class="stage-hint">待人工确认</span>
             <span v-if="stageDurationText(scope.row)" class="stage-duration">
               · {{ stageDurationText(scope.row) }}
             </span>
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="审查轨迹" min-width="210">
+      <el-table-column label="审查轨迹" min-width="260">
         <template #default="scope">
           <span v-if="!hasRoundTrail(scope.row)" class="empty-tip">—</span>
           <span v-else class="round-trail">
-            <template v-if="canOpenRecord">
+            <template v-if="trailDetectedText(scope.row)">
               <el-button
-                v-if="scope.row.firstTaskId"
+                v-if="canOpenRecord && scope.row.firstTaskId"
                 link
                 type="primary"
                 @click="goRecord(scope.row.firstTaskId)"
-              >首次 #{{ scope.row.firstTaskId }}</el-button>
-              <template v-if="showLastMatchedTask(scope.row)">
-                <span class="round-arrow">→</span>
-                <el-button link type="primary" @click="goRecord(scope.row.lastTaskId)">
-                  最近命中 #{{ scope.row.lastTaskId }}
-                </el-button>
-              </template>
-              <template v-if="showRecheckTask(scope.row)">
-                <span v-if="scope.row.firstTaskId || scope.row.lastTaskId" class="round-arrow">→</span>
-                <el-button link type="primary" @click="goRecord(scope.row.recheckTaskId)">
-                  复核依据 #{{ scope.row.recheckTaskId }}
-                </el-button>
-              </template>
+              >{{ trailDetectedText(scope.row) }}</el-button>
+              <span v-else>{{ trailDetectedText(scope.row) }}</span>
             </template>
-            <template v-else>
-              <span v-if="scope.row.firstTaskId">首次 #{{ scope.row.firstTaskId }}</span>
-              <template v-if="showLastMatchedTask(scope.row)">
-                <span class="round-arrow">→</span>
-                <span>最近命中 #{{ scope.row.lastTaskId }}</span>
-              </template>
-              <template v-if="showRecheckTask(scope.row)">
-                <span v-if="scope.row.firstTaskId || scope.row.lastTaskId" class="round-arrow">→</span>
-                <span>复核依据 #{{ scope.row.recheckTaskId }}</span>
-              </template>
+            <template v-if="trailRecheckText(scope.row)">
+              <span class="round-arrow">→</span>
+              <el-button
+                v-if="canOpenRecord && scope.row.recheckTaskId"
+                link
+                type="primary"
+                @click="goRecord(scope.row.recheckTaskId)"
+              >{{ trailRecheckText(scope.row) }}</el-button>
+              <span v-else>{{ trailRecheckText(scope.row) }}</span>
             </template>
-            <span v-if="scope.row.missedStreak > 0" class="round-miss">
-              · 未命中{{ scope.row.missedStreak }}
-            </span>
+            <template v-else-if="trailLastHitText(scope.row)">
+              <span class="round-arrow">→</span>
+              <el-button
+                v-if="canOpenRecord && scope.row.lastTaskId"
+                link
+                type="primary"
+                @click="goRecord(scope.row.lastTaskId)"
+              >{{ trailLastHitText(scope.row) }}</el-button>
+              <span v-else>{{ trailLastHitText(scope.row) }}</span>
+            </template>
+            <el-tooltip
+              v-if="scope.row.missedStreak > 0"
+              :content="'最近 ' + scope.row.missedStreak + ' 次审查的变更范围内未再发现该问题'"
+              placement="top"
+            >
+              <span class="round-miss">· 连续 {{ scope.row.missedStreak }} 轮未命中</span>
+            </el-tooltip>
           </span>
         </template>
       </el-table-column>
@@ -311,7 +314,8 @@ import { listIssue, getIssueStats, getIssueRecordContext } from '@/api/review/is
 import { listReviewProject } from '@/api/review/project'
 import auth from '@/plugins/auth'
 import {
-  emptyDash, formatDateTime, formatStageDuration, severityLabel, severityTagType, isPushTask,
+  emptyDash, formatDateTime, formatStageDurationLabel, formatTrailDateTime,
+  severityLabel, severityTagType, isPushTask,
   shortSha, formatPushRefDisplay, buildMergeRequestUrl, mergeRequestLabel,
   recordConclusionLabel, recordConclusionTagType
 } from '@/utils/reviewDisplay'
@@ -324,6 +328,12 @@ const { proxy } = getCurrentInstance()
 const { review_issue_status, review_issue_origin } = proxy.useDict(
   'review_issue_status',
   'review_issue_origin'
+)
+/** 字典 RECHECKING 展示为「疑似修复」（本切片不改 SQL，前端消费侧对齐）。 */
+const issueStatusOptions = computed(() =>
+  (review_issue_status.value || []).map(item =>
+    item.value === 'RECHECKING' ? { ...item, label: '疑似修复' } : item
+  )
 )
 
 const TERMINAL_STATUSES = ['CLOSED', 'IGNORED', 'FALSE_POSITIVE']
@@ -423,21 +433,34 @@ function isStatsActive(kind, value) {
 
 function stageDurationText(row) {
   if (!row || TERMINAL_STATUSES.includes(row.status)) return ''
-  return formatStageDuration(row.stageEnteredTime)
+  return formatStageDurationLabel(row.stageEnteredTime)
 }
 
 function hasRoundTrail(row) {
-  return !!(row?.firstTaskId || row?.lastTaskId || row?.recheckTaskId || (row?.missedStreak > 0))
+  return !!(row?.firstTaskId || row?.lastTaskId || row?.recheckTaskId
+    || row?.createTime || (row?.missedStreak > 0))
 }
 
-function showLastMatchedTask(row) {
-  return row?.firstTaskId && row?.lastTaskId && row.firstTaskId !== row.lastTaskId
+function trailSegmentText(timeValue, verb, taskId) {
+  const time = formatTrailDateTime(timeValue)
+  if (!time && !taskId) return ''
+  const head = time ? `${time} ${verb}` : verb
+  return taskId ? `${head} #${taskId}` : head
 }
 
-function showRecheckTask(row) {
-  return row?.recheckTaskId
-    && row.recheckTaskId !== row.firstTaskId
-    && row.recheckTaskId !== row.lastTaskId
+function trailDetectedText(row) {
+  return trailSegmentText(row?.createTime, '发现', row?.firstTaskId)
+}
+
+function trailRecheckText(row) {
+  if (!row?.recheckTaskId) return ''
+  return trailSegmentText(row.stageEnteredTime || row.updateTime, '疑似修复', row.recheckTaskId)
+}
+
+function trailLastHitText(row) {
+  if (!row?.firstTaskId || !row?.lastTaskId || row.firstTaskId === row.lastTaskId) return ''
+  if (row.recheckTaskId) return ''
+  return trailSegmentText(row.updateTime, '最近命中', row.lastTaskId)
 }
 
 function goRecord(taskId) {
@@ -845,6 +868,10 @@ onActivated(() => {
   flex-wrap: wrap;
   align-items: center;
   gap: 4px;
+}
+.stage-hint {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
 }
 .stage-duration {
   font-size: 12px;

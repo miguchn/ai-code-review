@@ -19,6 +19,14 @@ public class OpenCodeReviewCliAdapter implements ReviewEngine
 {
     private static final Pattern VERSION_PATTERN = Pattern.compile("open-code-review v([\\d.]+)");
 
+    /**
+     * OCR --background 语言指令（平台行为，硬编码常量）。
+     * CLI 无独立 language 参数时以此注入输出语言约束。
+     */
+    static final String BACKGROUND_LANGUAGE_INSTRUCTION =
+        "输出语言要求：所有审查发现必须使用简体中文，包括问题标题、问题描述、修复建议；"
+            + "severity 与 category 字段保持英文枚举值不变。";
+
     private final ReviewEngineProperties properties;
     private final ReviewEngineProcessRunner processRunner;
     private final ReviewEngineWorkspaceManager workspaceManager;
@@ -160,6 +168,8 @@ public class OpenCodeReviewCliAdapter implements ReviewEngine
         {
             writeDiffPatch(workingDirectory, request.getDiffContent());
         }
+        args.add("--background");
+        args.add(BACKGROUND_LANGUAGE_INSTRUCTION);
         return args;
     }
 

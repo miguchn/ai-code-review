@@ -39,6 +39,9 @@ public final class ReviewDeliveryConstants
     /** IM 总结文本最大字符数（压平换行后截断）。 */
     public static final int IM_MAX_SUMMARY_CHARS = 200;
 
+    /** Push 审查结论范围标注（记录详情 / IM 总结段）。 */
+    public static final String PUSH_SCOPE_NOTE = "本结论仅覆盖本次推送的变更（base..head 增量）";
+
     /** 企微 markdown 正文最大字节数。 */
     public static final int WECOM_MAX_MARKDOWN_BYTES = 4096;
 

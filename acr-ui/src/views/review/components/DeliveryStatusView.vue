@@ -13,9 +13,9 @@
       >{{ retryLabel }}</el-button>
     </div>
     <p v-if="isPush" class="section-hint">
-      推送审查没有可挂载的合并请求评论；审查结果通过通知和问题台账交付。
+      Push 审查没有可挂载的代码平台评论；审查结果通过通知和问题台账交付。
     </p>
-    <p v-else class="section-hint">与审查结论独立：投递失败不影响任务成功状态。同一合并请求仅维护一条 ACR 总结评论。</p>
+    <p v-else class="section-hint">与审查结论独立：投递失败不影响任务成功状态。同一变更来源仅维护一条 ACR 总结评论。</p>
     <p v-if="isPush" class="section-hint">本任务无需投递代码平台评论。</p>
     <p v-else-if="!delivery" class="section-hint">
       {{ isMissingOnSuccess ? '尚未投递总结评论，可点击右上角「补投递」。' : '本任务未投递总结评论。' }}
@@ -24,19 +24,19 @@
       <el-descriptions-item label="投递状态">
         <el-tag v-if="delivery.deliveryStatus === 'SUCCESS'" type="success" size="small">已投递</el-tag>
         <el-tag v-else-if="delivery.deliveryStatus === 'FAILED'" type="danger" size="small">投递失败</el-tag>
-        <span v-else class="empty-tip">—</span>
+        <span v-else class="empty-tip">暂无数据</span>
       </el-descriptions-item>
       <el-descriptions-item label="最后尝试时间">
-        {{ formatDateTime(delivery.lastAttemptTime) }}
+        {{ delivery.lastAttemptTime ? formatDateTime(delivery.lastAttemptTime) : '暂无数据' }}
       </el-descriptions-item>
       <el-descriptions-item label="尝试次数">
-        {{ delivery.attemptCount == null ? '—' : delivery.attemptCount }}
+        {{ delivery.attemptCount == null ? '暂无数据' : delivery.attemptCount }}
       </el-descriptions-item>
       <el-descriptions-item label="外部评论 ID">
-        {{ delivery.externalId || '—' }}
+        {{ delivery.externalId || '暂无数据' }}
       </el-descriptions-item>
       <el-descriptions-item v-if="delivery.deliveryStatus === 'FAILED'" label="失败原因" :span="2">
-        <span class="failure-message">{{ delivery.failureMessage || '—' }}</span>
+        <span class="failure-message">{{ delivery.failureMessage || '未返回可读失败原因' }}</span>
       </el-descriptions-item>
     </el-descriptions>
   </section>
@@ -75,8 +75,8 @@ const retryLabel = computed(() => (isMissingOnSuccess.value ? '补投递' : '重
 function onRetry() {
   if (!canRetry.value) return
   const tip = isMissingOnSuccess.value
-    ? '确认补投递总结评论？将按该合并请求最近一次成功审查结论创建或更新评论。'
-    : '确认重试投递总结评论？将按该合并请求最近一次成功审查结论更新评论。'
+    ? '确认补投递总结评论？将按该变更来源最近一次成功审查结论创建或更新评论。'
+    : '确认重试投递总结评论？将按该变更来源最近一次成功审查结论更新评论。'
   proxy.$modal.confirm(tip)
     .then(() => {
       retrying.value = true

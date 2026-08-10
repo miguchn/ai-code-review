@@ -91,7 +91,7 @@ public final class ReviewIssueConstants
             case STATUS_CLOSED -> "已关闭";
             case STATUS_IGNORED -> "已忽略";
             case STATUS_FALSE_POSITIVE -> "误报";
-            case STATUS_RECHECKING -> "待复核";
+            case STATUS_RECHECKING -> "疑似修复";
             default -> status;
         };
     }

@@ -86,7 +86,7 @@ export function buildLifecycleNodes(issue, actions, formatDateTime) {
     },
     {
       key: 'rechecking',
-      label: '待复核',
+      label: '疑似修复',
       reached: !!recheck,
       current: currentKey === 'rechecking',
       timeText: formatLifecycleTime(recheck?.createTime, formatDateTime),

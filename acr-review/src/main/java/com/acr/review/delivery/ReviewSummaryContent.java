@@ -2,6 +2,7 @@ package com.acr.review.delivery;
 
 import java.util.Date;
 import java.util.List;
+import com.acr.review.domain.ReviewPipelineConstants;
 import com.acr.review.domain.result.ReviewScopeStats;
 import com.acr.review.domain.result.ReviewTopIssue;
 import com.acr.review.service.ReviewScoringConstants;
@@ -43,6 +44,8 @@ public final class ReviewSummaryContent
     private final String summaryText;
     /** 审查完成时间（由 run.finishedTime 装配）。 */
     private final Date reviewTime;
+    /** 事件来源：PR / PUSH。 */
+    private final String eventSource;
 
     private ReviewSummaryContent(Builder builder)
     {
@@ -74,6 +77,7 @@ public final class ReviewSummaryContent
         this.commitMessage = builder.commitMessage;
         this.summaryText = builder.summaryText;
         this.reviewTime = builder.reviewTime;
+        this.eventSource = builder.eventSource;
     }
 
     public static Builder builder()
@@ -121,6 +125,12 @@ public final class ReviewSummaryContent
     public String getCommitMessage() { return commitMessage; }
     public String getSummaryText() { return summaryText; }
     public Date getReviewTime() { return reviewTime; }
+    public String getEventSource() { return eventSource; }
+
+    public boolean isPushReview()
+    {
+        return ReviewPipelineConstants.EVENT_SOURCE_PUSH.equals(eventSource);
+    }
 
     public String repositoryFullName()
     {
@@ -161,6 +171,7 @@ public final class ReviewSummaryContent
         private String commitMessage;
         private String summaryText;
         private Date reviewTime;
+        private String eventSource;
 
         public Builder taskStatus(String taskStatus) { this.taskStatus = taskStatus; return this; }
         public Builder taskId(Long taskId) { this.taskId = taskId; return this; }
@@ -190,6 +201,7 @@ public final class ReviewSummaryContent
         public Builder commitMessage(String commitMessage) { this.commitMessage = commitMessage; return this; }
         public Builder summaryText(String summaryText) { this.summaryText = summaryText; return this; }
         public Builder reviewTime(Date reviewTime) { this.reviewTime = reviewTime; return this; }
+        public Builder eventSource(String eventSource) { this.eventSource = eventSource; return this; }
 
         public ReviewSummaryContent build()
         {

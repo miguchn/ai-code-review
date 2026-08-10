@@ -252,7 +252,9 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
             hitIssueIds.add(created.getIssueId());
         }
 
-        // Pass 4 未命中判定
+        // Pass 4 未命中判定（PUSH 线：仅对本轮 diff 覆盖文件计 missed）
+        boolean pushCoverageAware = ReviewPipelineConstants.EVENT_SOURCE_PUSH.equals(task.getEventSource());
+        Set<String> coveredFiles = run == null ? null : run.getCoveredFiles();
         for (ReviewIssue issue : allIssues)
         {
             if (!ReviewIssueConstants.isActive(issue.getStatus()))
@@ -268,6 +270,11 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
                 continue;
             }
             if (runId != null && runId.equals(issue.getLastMissedRunId()))
+            {
+                continue;
+            }
+            // PUSH：文件不在本轮 diff 覆盖集 → 跳过 missed，保持原状态（PR 线不进入此分支）
+            if (pushCoverageAware && !isFileCoveredByDiff(issue.getFilePath(), coveredFiles))
             {
                 continue;
             }
@@ -318,6 +325,19 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
         }
         return ReviewPipelineConstants.isLlmDirectMode(task.getSnapshotReviewMode())
             || ReviewPipelineConstants.isOcrEngineMode(task.getSnapshotReviewMode());
+    }
+
+    /**
+     * PUSH 线 missed 覆盖判定：coveredFiles 为 null/空，或 filePath 为空/不在集合内 → 未覆盖。
+     * 重命名按新路径计覆盖；旧路径视为未覆盖。
+     */
+    static boolean isFileCoveredByDiff(String filePath, Set<String> coveredFiles)
+    {
+        if (coveredFiles == null || coveredFiles.isEmpty() || StringUtils.isEmpty(filePath))
+        {
+            return false;
+        }
+        return coveredFiles.contains(filePath.trim());
     }
 
     @Override

@@ -73,7 +73,8 @@ public class ReviewSummaryContentFactory
             .failureTypeLabel(failureTypeLabel(task == null ? null : task.getFailureType()))
             .commitMessage(resolveCommitMessage(run))
             .summaryText(run == null ? null : run.getResultSummary())
-            .reviewTime(run == null ? null : run.getFinishedTime());
+            .reviewTime(run == null ? null : run.getFinishedTime())
+            .eventSource(task == null ? null : task.getEventSource());
 
         if (project != null)
         {

@@ -171,7 +171,7 @@ class ReviewCommentBodyRendererTest
             .build();
 
         String body = ReviewCommentBodyRenderer.render(content);
-        assertTrue(body.contains("处置：待复核"));
+        assertTrue(body.contains("处置：疑似修复"));
         assertTrue(body.contains("疑似已修复（4）：sql-injection / cmd-injection / hardcoded-password…"));
         assertTrue(body.contains("请前往问题台账复核"));
         assertTrue(body.contains(ReviewDeliveryConstants.COMMENT_MARKER));

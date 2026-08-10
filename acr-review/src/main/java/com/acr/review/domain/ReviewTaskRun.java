@@ -1,8 +1,10 @@
 package com.acr.review.domain;
 
 import java.util.Date;
+import java.util.Set;
 import com.acr.common.core.domain.BaseEntity;
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 /** 审查任务执行记录 review_task_run。 */
 public class ReviewTaskRun extends BaseEntity
@@ -63,6 +65,13 @@ public class ReviewTaskRun extends BaseEntity
 
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private Date finishedTime;
+
+    /**
+     * 本轮 diff 覆盖文件集（变更后路径）；仅内存传递，不落库。
+     * PUSH 对账在 PERSIST_RESULT 前写入，reconcile 时读取（工作区可能已清理）。
+     */
+    @JsonIgnore
+    private transient Set<String> coveredFiles;
 
     public Long getRunId()
     {
@@ -552,5 +561,15 @@ public class ReviewTaskRun extends BaseEntity
     public void setFinishedTime(Date finishedTime)
     {
         this.finishedTime = finishedTime;
+    }
+
+    public Set<String> getCoveredFiles()
+    {
+        return coveredFiles;
+    }
+
+    public void setCoveredFiles(Set<String> coveredFiles)
+    {
+        this.coveredFiles = coveredFiles;
     }
 }

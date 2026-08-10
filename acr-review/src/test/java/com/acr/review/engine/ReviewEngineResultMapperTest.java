@@ -148,6 +148,52 @@ class ReviewEngineResultMapperTest
     }
 
     @Test
+    void stripsEnglishSeverityPrefixFromBoldTitle()
+    {
+        ReviewTopIssue issue = mapper.mapTopIssues(Map.of("comments", List.of(
+            comment("a.java", "**Critical: SQL Injection Vulnerability**: 描述", null, null, 1, 1, "security", "critical")
+        ))).get(0);
+
+        assertEquals("SQL Injection Vulnerability", issue.getTitle());
+    }
+
+    @Test
+    void stripsChineseSeverityPrefixFromBoldTitle()
+    {
+        ReviewTopIssue issue = mapper.mapTopIssues(Map.of("comments", List.of(
+            comment("a.java", "**高危：硬编码凭据**: 描述", null, null, 1, 1, "security", "high")
+        ))).get(0);
+
+        assertEquals("硬编码凭据", issue.getTitle());
+    }
+
+    @Test
+    void keepsTitleWithoutSeverityPrefix()
+    {
+        ReviewTopIssue issue = mapper.mapTopIssues(Map.of("comments", List.of(
+            comment("a.java", "**SQL Injection vulnerability**: 描述", null, null, 1, 1, "security", "critical")
+        ))).get(0);
+
+        assertEquals("SQL Injection vulnerability", issue.getTitle());
+    }
+
+    @Test
+    void doesNotStripSeverityWordWithoutColon()
+    {
+        assertEquals("Critical SQL issue", ReviewEngineResultMapper.stripSeverityPrefix("Critical SQL issue"));
+        assertEquals("严重问题说明", ReviewEngineResultMapper.stripSeverityPrefix("严重问题说明"));
+        assertEquals("Medium risk in auth", ReviewEngineResultMapper.stripSeverityPrefix("Medium risk in auth"));
+    }
+
+    @Test
+    void stripsSeverityPrefixCaseInsensitiveWithWhitespace()
+    {
+        assertEquals("SQL Injection", ReviewEngineResultMapper.stripSeverityPrefix("  HIGH : SQL Injection"));
+        assertEquals("SQL注入", ReviewEngineResultMapper.stripSeverityPrefix("严重：SQL注入"));
+        assertEquals("info note", ReviewEngineResultMapper.stripSeverityPrefix("Info: info note"));
+    }
+
+    @Test
     void returnsEmptyWhenNoComments()
     {
         assertTrue(mapper.mapTopIssues(null).isEmpty());

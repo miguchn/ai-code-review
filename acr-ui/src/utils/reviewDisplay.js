@@ -77,7 +77,7 @@ export function formatDateTime(value) {
 }
 
 /**
- * 阶段滞留时长：当前时间 − stageEnteredTime。
+ * 阶段停留时长：当前时间 − stageEnteredTime。
  * <24h 显示「n小时」，≥24h 显示「n天」；无效时间返回空串。
  */
 export function formatStageDuration(stageEnteredTime) {
@@ -99,6 +99,25 @@ export function formatStageDuration(stageEnteredTime) {
   if (hours < 24) return hours + '小时'
   return Math.floor(hours / 24) + '天'
 }
+
+/** 阶段列时长文案：前缀「已」（中性，替代「滞留」）。 */
+export function formatStageDurationLabel(stageEnteredTime) {
+  const duration = formatStageDuration(stageEnteredTime)
+  return duration ? `已${duration}` : ''
+}
+
+/**
+ * 审查轨迹时间短格式：MM-DD HH:mm。
+ * 无效时间返回空串。
+ */
+export function formatTrailDateTime(value) {
+  if (value == null || value === '') return ''
+  const text = parseTime(value, '{m}-{d} {h}:{i}')
+  return text || ''
+}
+
+/** Push 审查结论范围标注（与后端 ReviewDeliveryConstants.PUSH_SCOPE_NOTE 对齐）。 */
+export const PUSH_SCOPE_NOTE = '本结论仅覆盖本次推送的变更（base..head 增量）'
 
 export function formatDuration(ms) {
   if (ms == null) return '—'
@@ -210,6 +229,14 @@ function resolveRepositoryBase(task) {
 /** 合并请求外链标签：GitLab 为 MR，其余为 PR。 */
 export function mergeRequestLabel(provider) {
   return (provider || '').toUpperCase() === 'GITLAB' ? 'MR' : 'PR'
+}
+
+/** 变更来源展示：平台与触发方式合并为一个明确值。 */
+export function changeSourceLabel(task) {
+  if (isPushTask(task)) return 'Push'
+  const providerLabels = { GITHUB: 'GitHub', GITLAB: 'GitLab', GITEE: 'Gitee', GITEA: 'Gitea' }
+  const provider = String(task?.provider || 'GITHUB').toUpperCase()
+  return `${providerLabels[provider] || '代码平台'} ${mergeRequestLabel(task?.provider)}`
 }
 
 /** 由平台、仓库坐标与合并请求编号生成 Web 链接。 */
