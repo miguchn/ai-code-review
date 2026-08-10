@@ -12,6 +12,8 @@ public final class ReviewSummaryContent
 {
     private final String taskStatus;
     private final Long taskId;
+    /** 执行代次，嵌入总结评论 marker 供外部回溯。 */
+    private final Long runId;
     private final String conclusion;
     private final String conclusionLabel;
     private final Integer totalScore;
@@ -46,11 +48,16 @@ public final class ReviewSummaryContent
     private final Date reviewTime;
     /** 事件来源：PR / PUSH。 */
     private final String eventSource;
+    /** 行内评论预告：门槛过滤后的总条数（总结评论范围段用）。 */
+    private final Integer inlineCommentCount;
+    private final Integer inlineCriticalCount;
+    private final Integer inlineHighCount;
 
     private ReviewSummaryContent(Builder builder)
     {
         this.taskStatus = builder.taskStatus;
         this.taskId = builder.taskId;
+        this.runId = builder.runId;
         this.conclusion = builder.conclusion;
         this.conclusionLabel = builder.conclusionLabel;
         this.totalScore = builder.totalScore;
@@ -78,6 +85,9 @@ public final class ReviewSummaryContent
         this.summaryText = builder.summaryText;
         this.reviewTime = builder.reviewTime;
         this.eventSource = builder.eventSource;
+        this.inlineCommentCount = builder.inlineCommentCount;
+        this.inlineCriticalCount = builder.inlineCriticalCount;
+        this.inlineHighCount = builder.inlineHighCount;
     }
 
     public static Builder builder()
@@ -87,6 +97,7 @@ public final class ReviewSummaryContent
 
     public String getTaskStatus() { return taskStatus; }
     public Long getTaskId() { return taskId; }
+    public Long getRunId() { return runId; }
     public String getConclusion() { return conclusion; }
     public String getConclusionLabel() { return conclusionLabel; }
     public Integer getTotalScore() { return totalScore; }
@@ -126,6 +137,9 @@ public final class ReviewSummaryContent
     public String getSummaryText() { return summaryText; }
     public Date getReviewTime() { return reviewTime; }
     public String getEventSource() { return eventSource; }
+    public Integer getInlineCommentCount() { return inlineCommentCount; }
+    public Integer getInlineCriticalCount() { return inlineCriticalCount; }
+    public Integer getInlineHighCount() { return inlineHighCount; }
 
     public boolean isPushReview()
     {
@@ -145,6 +159,7 @@ public final class ReviewSummaryContent
     {
         private String taskStatus;
         private Long taskId;
+        private Long runId;
         private String conclusion;
         private String conclusionLabel;
         private Integer totalScore;
@@ -172,9 +187,13 @@ public final class ReviewSummaryContent
         private String summaryText;
         private Date reviewTime;
         private String eventSource;
+        private Integer inlineCommentCount;
+        private Integer inlineCriticalCount;
+        private Integer inlineHighCount;
 
         public Builder taskStatus(String taskStatus) { this.taskStatus = taskStatus; return this; }
         public Builder taskId(Long taskId) { this.taskId = taskId; return this; }
+        public Builder runId(Long runId) { this.runId = runId; return this; }
         public Builder conclusion(String conclusion) { this.conclusion = conclusion; return this; }
         public Builder conclusionLabel(String conclusionLabel) { this.conclusionLabel = conclusionLabel; return this; }
         public Builder totalScore(Integer totalScore) { this.totalScore = totalScore; return this; }
@@ -202,6 +221,9 @@ public final class ReviewSummaryContent
         public Builder summaryText(String summaryText) { this.summaryText = summaryText; return this; }
         public Builder reviewTime(Date reviewTime) { this.reviewTime = reviewTime; return this; }
         public Builder eventSource(String eventSource) { this.eventSource = eventSource; return this; }
+        public Builder inlineCommentCount(Integer inlineCommentCount) { this.inlineCommentCount = inlineCommentCount; return this; }
+        public Builder inlineCriticalCount(Integer inlineCriticalCount) { this.inlineCriticalCount = inlineCriticalCount; return this; }
+        public Builder inlineHighCount(Integer inlineHighCount) { this.inlineHighCount = inlineHighCount; return this; }
 
         public ReviewSummaryContent build()
         {

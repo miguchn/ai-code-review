@@ -1,6 +1,6 @@
 package com.acr.review.service.impl;
 
-import java.nio.charset.StandardCharsets;
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Date;
 import java.util.HashMap;
@@ -8,8 +8,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.Semaphore;
-import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
@@ -19,12 +17,12 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import com.acr.common.ai.LlmCallResult;
 import com.acr.common.ai.LlmCallService;
+import com.acr.common.enums.LlmCallErrorType;
 import com.acr.common.exception.ServiceException;
 import com.acr.common.utils.StringUtils;
 import com.acr.review.domain.GitCredential;
 import com.acr.review.domain.ReviewPipelineConstants;
 import com.acr.review.domain.ReviewProject;
-import com.acr.review.domain.ReviewRoundReconcileResult;
 import com.acr.review.domain.ReviewTask;
 import com.acr.review.domain.ReviewTaskRun;
 import com.acr.review.domain.result.ReviewScoreDimension;
@@ -42,6 +40,7 @@ import com.acr.review.engine.ReviewEngineWorkspaceManager;
 import com.acr.review.engine.config.ReviewEngineProperties;
 import com.acr.review.git.GitAccessContext;
 import com.acr.review.git.GitAdapterRegistry;
+import com.acr.review.git.GitCommandRunner;
 import com.acr.review.git.GitFileContentResult;
 import com.acr.review.git.GitPullRequestDiffResult;
 import com.acr.review.git.GitPullRequestMetadata;
@@ -62,9 +61,13 @@ import com.acr.review.scope.ReviewScopeDecisionService;
 import com.acr.review.scope.ReviewScopePromptAssembler;
 import com.acr.review.scope.ReviewScopeRules;
 import com.acr.review.scope.UnifiedDiffParser;
+import com.acr.review.scheduling.ReviewBudgetLease;
+import com.acr.review.scheduling.ReviewResourceBudgetService;
+import com.acr.review.scheduling.ReviewTaskLeaseManager;
+import com.acr.review.scheduling.ReviewTaskRetryPolicy;
+import com.acr.review.scheduling.ReviewTaskRuntimeSettings;
+import com.acr.review.scheduling.ReviewTaskWorkerIdentity;
 import com.acr.review.service.IGitCredentialService;
-import com.acr.review.service.IReviewDeliveryService;
-import com.acr.review.service.IReviewIssueService;
 import com.acr.review.service.IReviewTaskExecutionService;
 import com.acr.review.service.IReviewTaskSnapshotService;
 import com.acr.review.service.ReviewConclusionResolver;
@@ -113,9 +116,13 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
     private final LlmCallService llmCallService;
     private final ApplicationEventPublisher eventPublisher;
     private final IReviewTaskSnapshotService snapshotService;
-    private final IReviewDeliveryService deliveryService;
-    private final IReviewIssueService issueService;
-    private final Semaphore concurrencyLimiter;
+    private final ReviewTaskCompletionService completionService;
+    private final GitCommandRunner gitCommandRunner;
+    private final ReviewTaskRuntimeSettings runtimeSettings;
+    private final ReviewTaskRetryPolicy retryPolicy;
+    private final ReviewTaskWorkerIdentity workerIdentity;
+    private final ReviewTaskLeaseManager leaseManager;
+    private final ReviewResourceBudgetService budgetService;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final int llmTimeoutSeconds;
 
@@ -141,8 +148,13 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
                                           LlmCallService llmCallService,
                                           ApplicationEventPublisher eventPublisher,
                                           IReviewTaskSnapshotService snapshotService,
-                                          IReviewDeliveryService deliveryService,
-                                          IReviewIssueService issueService,
+                                          ReviewTaskCompletionService completionService,
+                                          GitCommandRunner gitCommandRunner,
+                                          ReviewTaskRuntimeSettings runtimeSettings,
+                                          ReviewTaskRetryPolicy retryPolicy,
+                                          ReviewTaskWorkerIdentity workerIdentity,
+                                          ReviewTaskLeaseManager leaseManager,
+                                          ReviewResourceBudgetService budgetService,
                                           @Value("${review.task.llm-timeout-seconds:120}") int llmTimeoutSeconds)
     {
         this.taskMapper = taskMapper;
@@ -167,10 +179,14 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         this.llmCallService = llmCallService;
         this.eventPublisher = eventPublisher;
         this.snapshotService = snapshotService;
-        this.deliveryService = deliveryService;
-        this.issueService = issueService;
+        this.completionService = completionService;
+        this.gitCommandRunner = gitCommandRunner;
+        this.runtimeSettings = runtimeSettings;
+        this.retryPolicy = retryPolicy;
+        this.workerIdentity = workerIdentity;
+        this.leaseManager = leaseManager;
+        this.budgetService = budgetService;
         this.llmTimeoutSeconds = llmTimeoutSeconds;
-        this.concurrencyLimiter = new Semaphore(Math.max(1, engineProperties.getMaxConcurrency()), true);
     }
 
     @Override
@@ -192,36 +208,34 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
             throw new ServiceException("审查任务不存在");
         }
         String status = task.getTaskStatus();
-        // PENDING：建单后通常自动执行；若异步调度丢失或进程重启，允许手动触发。
-        // FAILED：失败后人工重试，历史 run 保留。
-        // RUNNING 超过回收阈值：上次执行已随进程中断，允许人工回收后重试。
-        boolean staleRunning = ReviewPipelineConstants.TASK_RUNNING.equals(status) && isStaleRunning(task);
-        if (!ReviewPipelineConstants.TASK_PENDING.equals(status)
-            && !ReviewPipelineConstants.TASK_FAILED.equals(status)
-            && !staleRunning)
+        if (ReviewPipelineConstants.TASK_FAILED.equals(status))
+        {
+            if (taskMapper.requeueFailedTask(taskId) != 1)
+            {
+                throw new ServiceException("任务状态已变化，请刷新后重试");
+            }
+        }
+        else if (ReviewPipelineConstants.TASK_RUNNING.equals(status))
+        {
+            if (taskMapper.requeueExpiredTask(taskId) != 1)
+            {
+                throw new ServiceException(retryBlockedMessage(status));
+            }
+        }
+        else if (!ReviewPipelineConstants.TASK_PENDING.equals(status)
+            && !ReviewPipelineConstants.TASK_RETRYING.equals(status))
         {
             throw new ServiceException(retryBlockedMessage(status));
         }
         scheduleExecution(taskId);
     }
 
-    private boolean isStaleRunning(ReviewTask task)
-    {
-        Date startedTime = task.getStartedTime();
-        if (startedTime == null)
-        {
-            return true;
-        }
-        long staleMillis = ReviewPipelineConstants.STALE_RUNNING_TIMEOUT_MINUTES * 60_000L;
-        return System.currentTimeMillis() - startedTime.getTime() > staleMillis;
-    }
-
     @Override
     public void executeTask(Long taskId)
     {
-        Date started = new Date();
-        int claimed = taskMapper.claimTask(taskId, ReviewPipelineConstants.STEP_RESOLVE_CONFIG, started,
-            ReviewPipelineConstants.STALE_RUNNING_TIMEOUT_MINUTES);
+        int leaseSeconds = runtimeSettings.leaseSeconds();
+        int claimed = taskMapper.claimTask(taskId, ReviewPipelineConstants.STEP_RESOLVE_CONFIG,
+            workerIdentity.owner(), leaseSeconds);
         if (claimed != 1)
         {
             log.info("审查任务未被领取（可能已在执行或状态不符）, taskId={}", taskId);
@@ -231,6 +245,7 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         long beginMs = System.currentTimeMillis();
         ReviewTask task = null;
         ReviewTaskRun run = null;
+        ReviewTaskLeaseManager.LeaseHandle leaseHandle = null;
         try
         {
             task = taskMapper.selectReviewTaskById(taskId);
@@ -240,12 +255,17 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
                 return;
             }
 
+            task.setLeaseDurationSeconds(leaseSeconds);
+            runMapper.failInterruptedRuns(taskId, ReviewPipelineConstants.FAILURE_LEASE_EXPIRED,
+                "上次执行租约已过期，已由新的 execution epoch 接管");
+            leaseHandle = leaseManager.start(task);
+            Date started = task.getStartedTime() == null ? new Date() : task.getStartedTime();
             run = insertRun(task, started);
             task.setAttemptCount(run.getAttemptNo());
             task.setLatestRunId(run.getRunId());
             task.setStartedTime(started);
             task.setCurrentStep(ReviewPipelineConstants.STEP_RESOLVE_CONFIG);
-            taskMapper.updateTaskExecution(task);
+            persistOwnedTask(task);
 
             materializeSnapshotIfMissing(task);
             ExecutionPlan plan = resolveConfig(task, run);
@@ -258,11 +278,22 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
                 executeLlmPath(task, run, plan, beginMs);
             }
         }
+        catch (ReviewTaskLeaseLostException ex)
+        {
+            log.warn("旧审查执行已被 fencing，停止后续写入与投递, taskId={}", taskId);
+        }
         catch (ReviewExecutionException ex)
         {
             fail(task, run, beginMs, ex.failureType(),
                 currentStepOf(run),
                 ex.getMessage());
+        }
+        catch (ReviewTaskCompletionException ex)
+        {
+            log.error("审查终态事务提交失败，将进入可恢复重试, taskId={}", taskId, ex);
+            fail(task, run, beginMs, ReviewPipelineConstants.FAILURE_DEPENDENCY_UNAVAILABLE,
+                ReviewPipelineConstants.STEP_PERSIST_RESULT,
+                "审查结果落库或问题对账暂时不可用，请稍后重试");
         }
         catch (ServiceException ex)
         {
@@ -276,6 +307,13 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
             fail(task, run, beginMs, ReviewPipelineConstants.FAILURE_UNKNOWN,
                 currentStepOf(run),
                 "审查执行内部异常：" + StringUtils.defaultIfEmpty(ex.getMessage(), ex.getClass().getSimpleName()));
+        }
+        finally
+        {
+            if (leaseHandle != null)
+            {
+                leaseHandle.close();
+            }
         }
     }
 
@@ -313,7 +351,10 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
                 "项目不存在或已停用，无法执行审查");
         }
         snapshotService.freezeExecutionSnapshot(project, task);
-        taskMapper.updateTaskSnapshot(task);
+        if (taskMapper.updateTaskSnapshot(task) != 1)
+        {
+            throw new ReviewTaskLeaseLostException(task.getTaskId(), task.getExecutionEpoch());
+        }
         log.info("历史任务缺少执行快照，已按项目当前配置补冻结, taskId={}, reviewMode={}",
             task.getTaskId(), task.getSnapshotReviewMode());
     }
@@ -329,15 +370,23 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         throws java.io.IOException
     {
         updateStep(task, run, ReviewPipelineConstants.STEP_PREPARE_WORKSPACE);
-        // 与大模型路径共用同一 PR 详情请求结果：补充提交者/增删行/Commit Message，不额外扩请求。
-        applyPrMetadata(task, run, plan);
-        // M3.2 步 6：平台范围决策 → --exclude 规则 + 决策快照落库。
-        // 决策依赖 Compare API 的 Diff，仅用于分类；失败时不加排除规则（保持引擎全量审查），不阻断。
-        List<String> ocrExcludePatterns = resolveOcrScope(task, run, plan);
-        Path workspace = workspaceManager.createIsolatedWorkspace();
-        boolean acquired = false;
+        // C8：工作区与 OCR 预算必须在准备工作区/外部调用之前获取；抢不到一律 RETRYING，不置 FAILED。
+        ReviewBudgetLease budgetLease = budgetService.tryAcquireOcrExecution();
+        if (budgetLease == null)
+        {
+            deferForBudget(task, run, beginMs, ReviewPipelineConstants.STEP_PREPARE_WORKSPACE,
+                "审查工作区或引擎并发预算不足，已延后重试");
+            return;
+        }
+        Path workspace = null;
         try
         {
+            // 与大模型路径共用同一 PR 详情请求结果：补充提交者/增删行/Commit Message，不额外扩请求。
+            applyPrMetadata(task, run, plan);
+            // M3.2 步 6：平台范围决策 → --exclude 规则 + 决策快照落库。
+            // 决策依赖 Compare API 的 Diff，仅用于分类；失败时不加排除规则（保持引擎全量审查），不阻断。
+            List<String> ocrExcludePatterns = resolveOcrScope(task, run, plan);
+            workspace = workspaceManager.createIsolatedWorkspace();
             GitPullRequestWorkspaceResult workspaceResult = adapterRegistry.requireWorkspacePreparer(plan.provider()).prepare(
                 new GitPullRequestWorkspaceRequest(
                     plan.repository(), plan.access(), task.getBaseSha(), task.getHeadSha(), workspace.toString()));
@@ -363,14 +412,6 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
                 workspaceResult.workingDirectory(), task.getBaseSha(), task.getHeadSha()));
             applyDiffStatsIfAbsent(task, parseGitDiffShortstat(
                 workspaceResult.workingDirectory(), task.getBaseSha(), task.getHeadSha()));
-
-            acquired = concurrencyLimiter.tryAcquire();
-            if (!acquired)
-            {
-                fail(task, run, beginMs, ReviewPipelineConstants.FAILURE_CONCURRENCY,
-                    ReviewPipelineConstants.STEP_INVOKE_ENGINE, "审查引擎并发已达上限，请稍后重试");
-                return;
-            }
 
             updateStep(task, run, ReviewPipelineConstants.STEP_INVOKE_ENGINE);
             ReviewEngineRequest request = new ReviewEngineRequest();
@@ -402,11 +443,8 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         }
         finally
         {
-            if (acquired)
-            {
-                concurrencyLimiter.release();
-            }
             workspaceManager.cleanup(workspace);
+            budgetLease.close();
         }
     }
 
@@ -463,25 +501,40 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         runMapper.updateReviewTaskRun(run);
 
         updateStep(task, run, ReviewPipelineConstants.STEP_INVOKE_MODEL);
-        LlmCallResult llmResult = llmCallService.chat(plan.modelId(), finalPrompt);
-        if (!llmResult.isSuccess())
+        // C8：LLM 路径新增全局并发预算；抢不到一律 RETRYING，不置 FAILED。
+        ReviewBudgetLease budgetLease = budgetService.tryAcquireLlmCall();
+        if (budgetLease == null)
         {
-            fail(task, run, beginMs, ReviewPipelineConstants.FAILURE_MODEL,
-                ReviewPipelineConstants.STEP_INVOKE_MODEL,
-                StringUtils.defaultIfEmpty(llmResult.getErrorMessage(), "大模型审查调用失败"));
+            deferForBudget(task, run, beginMs, ReviewPipelineConstants.STEP_INVOKE_MODEL,
+                "大模型并发预算不足，已延后重试");
             return;
         }
+        try
+        {
+            LlmCallResult llmResult = llmCallService.chat(plan.modelId(), finalPrompt, llmTimeoutMillis());
+            if (!llmResult.isSuccess())
+            {
+                fail(task, run, beginMs, mapLlmFailure(llmResult.getErrorType()),
+                    ReviewPipelineConstants.STEP_INVOKE_MODEL,
+                    StringUtils.defaultIfEmpty(llmResult.getErrorMessage(), "大模型审查调用失败"));
+                return;
+            }
 
-        ReviewScoreParseResult parseResult = scoreResultParser.parse(llmResult.getContent(),
-            scope.originClassifier(), scope.reportExisting());
-        if (!parseResult.isSuccess())
-        {
-            persistLlmFormatFailure(task, run, beginMs, parseResult,
+            ReviewScoreParseResult parseResult = scoreResultParser.parse(llmResult.getContent(),
+                scope.originClassifier(), scope.reportExisting());
+            if (!parseResult.isSuccess())
+            {
+                persistLlmFormatFailure(task, run, beginMs, parseResult,
+                    Math.max(llmResult.getLatencyMs(), System.currentTimeMillis() - beginMs));
+                return;
+            }
+            persistLlmSuccess(task, run, beginMs, parseResult, scope,
                 Math.max(llmResult.getLatencyMs(), System.currentTimeMillis() - beginMs));
-            return;
         }
-        persistLlmSuccess(task, run, beginMs, parseResult, scope,
-            Math.max(llmResult.getLatencyMs(), System.currentTimeMillis() - beginMs));
+        finally
+        {
+            budgetLease.close();
+        }
     }
 
     /**
@@ -684,7 +737,6 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         run.setFailureStep(null);
         run.setFailureType(null);
         run.setFailureMessage(null);
-        runMapper.updateReviewTaskRun(run);
 
         task.setTaskStatus(ReviewPipelineConstants.TASK_SUCCESS);
         task.setReviewConclusion(ReviewPipelineConstants.CONCLUSION_PASS);
@@ -694,15 +746,14 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         task.setFailureMessage(null);
         task.setFinishedTime(finished);
         task.setDurationMs(duration);
-        taskMapper.updateTaskExecution(task);
-        deliverQuietly(task, run);
+        completionService.completeSuccess(task, run);
     }
 
     /**
      * 工作区 base..head 是否无树变更（{@code git diff --quiet}）。
      * 检测失败时返回 false，继续走引擎，避免误短路。
      */
-    static boolean hasNoCommitDiff(String workingDirectory, String baseSha, String headSha)
+    boolean hasNoCommitDiff(String workingDirectory, String baseSha, String headSha)
     {
         if (workingDirectory == null || workingDirectory.isBlank()
             || baseSha == null || baseSha.isBlank()
@@ -716,21 +767,21 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         }
         try
         {
-            ProcessBuilder builder = new ProcessBuilder(
-                "git", "-C", workingDirectory, "diff", "--quiet", baseSha, headSha);
-            builder.redirectErrorStream(true);
-            builder.environment().put("GIT_TERMINAL_PROMPT", "0");
-            Process process = builder.start();
-            boolean finished = process.waitFor(30, TimeUnit.SECONDS);
-            if (!finished)
+            GitCommandRunner.GitCommandResult result = gitCommandRunner.execute(
+                Path.of(workingDirectory), null, 30, "diff", "--quiet", baseSha, headSha);
+            if (result.timedOut())
             {
-                process.destroyForcibly();
                 return false;
             }
             // 0=无差异，1=有差异，其它=异常
-            return process.exitValue() == 0;
+            return result.exitCode() == 0;
         }
-        catch (Exception ex)
+        catch (InterruptedException ex)
+        {
+            Thread.currentThread().interrupt();
+            return false;
+        }
+        catch (IOException | RuntimeException ex)
         {
             return false;
         }
@@ -795,7 +846,7 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
     }
 
     /** 工作区 {@code git diff --name-only base head}；失败返回空集。 */
-    static Set<String> listDiffCoveredFiles(String workingDirectory, String baseSha, String headSha)
+    Set<String> listDiffCoveredFiles(String workingDirectory, String baseSha, String headSha)
     {
         Set<String> covered = new LinkedHashSet<>();
         String output = runGitDiff(workingDirectory, baseSha, headSha, "--name-only");
@@ -815,7 +866,7 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
     }
 
     /** 工作区 {@code git diff --shortstat base head} 解析。 */
-    static DiffChangeStats parseGitDiffShortstat(String workingDirectory, String baseSha, String headSha)
+    DiffChangeStats parseGitDiffShortstat(String workingDirectory, String baseSha, String headSha)
     {
         return parseShortstatOutput(runGitDiff(workingDirectory, baseSha, headSha, "--shortstat"));
     }
@@ -857,7 +908,7 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         }
     }
 
-    private static String runGitDiff(String workingDirectory, String baseSha, String headSha, String modeFlag)
+    private String runGitDiff(String workingDirectory, String baseSha, String headSha, String modeFlag)
     {
         if (workingDirectory == null || workingDirectory.isBlank()
             || baseSha == null || baseSha.isBlank()
@@ -867,25 +918,20 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         }
         try
         {
-            ProcessBuilder builder = new ProcessBuilder(
-                "git", "-C", workingDirectory, "diff", modeFlag, baseSha, headSha);
-            builder.redirectErrorStream(true);
-            builder.environment().put("GIT_TERMINAL_PROMPT", "0");
-            Process process = builder.start();
-            String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-            boolean finished = process.waitFor(30, TimeUnit.SECONDS);
-            if (!finished)
-            {
-                process.destroyForcibly();
-                return null;
-            }
-            if (process.exitValue() != 0)
+            GitCommandRunner.GitCommandResult result = gitCommandRunner.execute(
+                Path.of(workingDirectory), null, 30, "diff", modeFlag, baseSha, headSha);
+            if (result.timedOut() || result.exitCode() != 0)
             {
                 return null;
             }
-            return output;
+            return result.output();
         }
-        catch (Exception ex)
+        catch (InterruptedException ex)
+        {
+            Thread.currentThread().interrupt();
+            return null;
+        }
+        catch (IOException | RuntimeException ex)
         {
             return null;
         }
@@ -1070,7 +1116,6 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         run.setFailureStep(null);
         run.setFailureType(null);
         run.setFailureMessage(null);
-        runMapper.updateReviewTaskRun(run);
 
         task.setTaskStatus(ReviewPipelineConstants.TASK_SUCCESS);
         task.setReviewConclusion(conclusion);
@@ -1083,8 +1128,7 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         task.setFocusIssueCount(focusIssueCount);
         task.setHasCriticalSecurity(hasCriticalSecurity);
         task.setParseStatus(ReviewScoringConstants.PARSE_SUCCESS);
-        taskMapper.updateTaskExecution(task);
-        deliverQuietly(task, run);
+        completionService.completeSuccess(task, run);
     }
 
     private static boolean hasCriticalSecurityIssue(List<ReviewTopIssue> issues)
@@ -1149,7 +1193,6 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         run.setFailureStep(null);
         run.setFailureType(null);
         run.setFailureMessage(null);
-        runMapper.updateReviewTaskRun(run);
 
         task.setTaskStatus(ReviewPipelineConstants.TASK_SUCCESS);
         task.setReviewConclusion(conclusion);
@@ -1169,53 +1212,7 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         task.setFocusIssueCount(result.getFocusIssueCount());
         task.setHasCriticalSecurity(run.getHasCriticalSecurity());
         task.setParseStatus(ReviewScoringConstants.PARSE_SUCCESS);
-        taskMapper.updateTaskExecution(task);
-        deliverQuietly(task, run);
-    }
-
-    /** 对账 → 评论 → IM；任一步失败不影响审查结论。 */
-    private void deliverQuietly(ReviewTask task, ReviewTaskRun run)
-    {
-        ReviewRoundReconcileResult reconcile = reconcileIssuesQuietly(task, run);
-        try
-        {
-            deliveryService.deliverAfterSuccess(task, run, reconcile);
-        }
-        catch (Exception ex)
-        {
-            log.warn("审查结果投递调用异常（不影响任务状态）, taskId={}", task.getTaskId(), ex);
-        }
-        notifyQuietly(task, run, reconcile);
-    }
-
-    /** 问题对账失败不影响任务状态；失败时评论/通知退化为不含复核段。 */
-    private ReviewRoundReconcileResult reconcileIssuesQuietly(ReviewTask task, ReviewTaskRun run)
-    {
-        try
-        {
-            ReviewRoundReconcileResult result = issueService.reconcileAfterSuccess(task, run);
-            return result == null ? ReviewRoundReconcileResult.empty() : result;
-        }
-        catch (Exception ex)
-        {
-            log.warn("问题台账对账调用异常（不影响任务状态）, taskId={}",
-                task == null ? null : task.getTaskId(), ex);
-            return ReviewRoundReconcileResult.empty();
-        }
-    }
-
-    /** IM 通知失败不影响任务状态。 */
-    private void notifyQuietly(ReviewTask task, ReviewTaskRun run, ReviewRoundReconcileResult reconcile)
-    {
-        try
-        {
-            deliveryService.deliverNotifyAfterTerminal(task, run, reconcile);
-        }
-        catch (Exception ex)
-        {
-            log.warn("IM 通知投递调用异常（不影响任务状态）, taskId={}",
-                task == null ? null : task.getTaskId(), ex);
-        }
+        completionService.completeSuccess(task, run);
     }
 
     private void persistLlmFormatFailure(ReviewTask task, ReviewTaskRun run, long beginMs,
@@ -1241,19 +1238,18 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         run.setResultSummary("结果格式异常，未生成可统计的标准化审查结果");
         run.setDurationMs(duration);
         run.setFinishedTime(finished);
-        runMapper.updateReviewTaskRun(run);
 
         task.setTaskStatus(ReviewPipelineConstants.TASK_FAILED);
         task.setCurrentStep(ReviewPipelineConstants.STEP_PERSIST_RESULT);
         task.setFailureStep(ReviewPipelineConstants.STEP_PERSIST_RESULT);
         task.setFailureType(ReviewPipelineConstants.FAILURE_RESULT_FORMAT);
         task.setFailureMessage(message);
+        task.setLastErrorCode(ReviewPipelineConstants.FAILURE_RESULT_FORMAT);
         task.setParseStatus(ReviewScoringConstants.PARSE_FAILED);
         task.setProtocolVersion(ReviewScoringConstants.PROTOCOL_VERSION);
         task.setFinishedTime(finished);
         task.setDurationMs(duration);
-        taskMapper.updateTaskExecution(task);
-        notifyQuietly(task, run, ReviewRoundReconcileResult.empty());
+        completionService.persistFailure(task, run, true);
     }
 
     private Map<String, Integer> dimensionScoreMap(ReviewScoreResult result)
@@ -1290,7 +1286,7 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         run.setCurrentStep(step);
         runMapper.updateReviewTaskRun(run);
         task.setCurrentStep(step);
-        taskMapper.updateTaskExecution(task);
+        persistOwnedTask(task);
     }
 
     /**
@@ -1333,7 +1329,47 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
             task.setChangedFiles(metadata.changedFiles());
         }
         runMapper.updateReviewTaskRun(run);
-        taskMapper.updateTaskExecution(task);
+        persistOwnedTask(task);
+    }
+
+    /**
+     * 资源预算耗尽：始终回到 RETRYING 并退避，不消耗自动重试上限，绝不置 FAILED。
+     */
+    private void deferForBudget(ReviewTask task, ReviewTaskRun run, long beginMs, String failureStep, String message)
+    {
+        Date finished = new Date();
+        long duration = System.currentTimeMillis() - beginMs;
+        String safeMessage = truncate(message, 480);
+        String failureType = ReviewPipelineConstants.FAILURE_CONCURRENCY;
+
+        if (run != null && run.getRunId() != null)
+        {
+            run.setRunStatus(ReviewPipelineConstants.RUN_FAILED);
+            run.setCurrentStep(failureStep);
+            run.setFailureStep(failureStep);
+            run.setFailureType(failureType);
+            run.setFailureMessage(safeMessage);
+            run.setDurationMs(duration);
+            run.setFinishedTime(finished);
+        }
+
+        if (task != null)
+        {
+            int retries = task.getRetryCount() == null ? 0 : task.getRetryCount();
+            task.setTaskStatus(ReviewPipelineConstants.TASK_RETRYING);
+            task.setCurrentStep(failureStep);
+            task.setFailureStep(failureStep);
+            task.setFailureType(failureType);
+            task.setFailureMessage(safeMessage);
+            task.setLastErrorCode(failureType);
+            task.setRetryCount(retries);
+            task.setRetryDelaySeconds(runtimeSettings.budgetBackoffSeconds());
+            task.setFinishedTime(null);
+            task.setDurationMs(duration);
+            log.info("资源预算不足，任务回队待重试, taskId={}, step={}, delaySeconds={}",
+                task.getTaskId(), failureStep, runtimeSettings.budgetBackoffSeconds());
+            completionService.persistFailure(task, run, false);
+        }
     }
 
     private void fail(ReviewTask task, ReviewTaskRun run, long beginMs, String failureType, String failureStep, String message)
@@ -1351,20 +1387,39 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
             run.setFailureMessage(safeMessage);
             run.setDurationMs(duration);
             run.setFinishedTime(finished);
-            runMapper.updateReviewTaskRun(run);
         }
 
         if (task != null)
         {
-            task.setTaskStatus(ReviewPipelineConstants.TASK_FAILED);
+            ReviewTaskRetryPolicy.RetryDecision decision = retryPolicy.decide(failureType, task.getRetryCount());
+            task.setTaskStatus(decision.retry()
+                ? ReviewPipelineConstants.TASK_RETRYING : ReviewPipelineConstants.TASK_FAILED);
             task.setCurrentStep(failureStep);
             task.setFailureStep(failureStep);
             task.setFailureType(failureType);
             task.setFailureMessage(safeMessage);
-            task.setFinishedTime(finished);
+            task.setLastErrorCode(failureType);
+            task.setRetryCount(decision.retryCount());
+            task.setRetryDelaySeconds(decision.delaySeconds());
+            task.setFinishedTime(decision.retry() ? null : finished);
             task.setDurationMs(duration);
-            taskMapper.updateTaskExecution(task);
-            notifyQuietly(task, run, ReviewRoundReconcileResult.empty());
+            completionService.persistFailure(task, run, !decision.retry());
+        }
+    }
+
+    private void persistOwnedTask(ReviewTask task)
+    {
+        if (task.getRetryCount() == null)
+        {
+            task.setRetryCount(0);
+        }
+        if (task.getLeaseDurationSeconds() == null)
+        {
+            task.setLeaseDurationSeconds(runtimeSettings.leaseSeconds());
+        }
+        if (taskMapper.updateTaskExecution(task) != 1)
+        {
+            throw new ReviewTaskLeaseLostException(task.getTaskId(), task.getExecutionEpoch());
         }
     }
 
@@ -1387,6 +1442,23 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
             case CONCURRENCY_LIMIT -> ReviewPipelineConstants.FAILURE_CONCURRENCY;
             case WORKSPACE_ERROR -> ReviewPipelineConstants.FAILURE_WORKSPACE_PREPARE;
             default -> ReviewPipelineConstants.FAILURE_ENGINE;
+        };
+    }
+
+    private String mapLlmFailure(LlmCallErrorType errorType)
+    {
+        if (errorType == null)
+        {
+            return ReviewPipelineConstants.FAILURE_MODEL;
+        }
+        return switch (errorType)
+        {
+            case TIMEOUT -> ReviewPipelineConstants.FAILURE_TIMEOUT;
+            case RATE_LIMIT -> ReviewPipelineConstants.FAILURE_RATE_LIMIT;
+            case NETWORK_ERROR -> ReviewPipelineConstants.FAILURE_DEPENDENCY_UNAVAILABLE;
+            case AUTH -> ReviewPipelineConstants.FAILURE_CREDENTIAL_ERROR;
+            case ADDRESS_ERROR, MODEL_NOT_FOUND -> ReviewPipelineConstants.FAILURE_CONFIG_MISSING;
+            case UNKNOWN -> ReviewPipelineConstants.FAILURE_MODEL;
         };
     }
 
@@ -1416,19 +1488,24 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         return value.length() <= max ? value : value.substring(0, max);
     }
 
+    private int llmTimeoutMillis()
+    {
+        long timeoutMillis = Math.max(1L, llmTimeoutSeconds) * 1_000L;
+        return (int) Math.min(Integer.MAX_VALUE, timeoutMillis);
+    }
+
     static String retryBlockedMessage(String taskStatus)
     {
         return switch (StringUtils.defaultString(taskStatus))
         {
             case ReviewPipelineConstants.TASK_RUNNING ->
-                "当前任务状态为「执行中」，请等待本次执行结束后再操作。若执行已中断超过 "
-                    + ReviewPipelineConstants.STALE_RUNNING_TIMEOUT_MINUTES + " 分钟，可再次点击重试回收。";
+                "当前任务状态为「执行中」且数据库租约尚未到期，请等待本次执行结束后再操作。";
             case ReviewPipelineConstants.TASK_SUCCESS ->
                 "当前任务状态为「已完成」，不允许再次执行以免覆盖有效结论。如需重新审查，请等待新的 PR 事件生成新任务。";
             case "CANCELLED" ->
                 "当前任务状态为「已取消」，不能执行。请关注后续 PR 事件或联系管理员。";
             default ->
-                "仅「待执行」或「已失败」任务可手动触发执行。当前状态：" + taskStatus + "。请先在任务详情确认状态后再操作。";
+                "仅「待执行」「待重试」或「已失败」任务可手动触发执行。当前状态：" + taskStatus + "。请先在任务详情确认状态后再操作。";
         };
     }
 

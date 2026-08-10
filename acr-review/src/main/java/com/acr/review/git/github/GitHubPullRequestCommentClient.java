@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import com.acr.review.delivery.ReviewDeliveryConstants;
 import com.acr.review.git.GitAccessContext;
+import com.acr.review.git.GitInlineCommentRequest;
 import com.acr.review.git.GitPullRequestComment;
 import com.acr.review.git.GitPullRequestCommentClient;
 import com.acr.review.git.GitPullRequestCommentException;
@@ -121,6 +122,87 @@ public class GitHubPullRequestCommentClient implements GitPullRequestCommentClie
     }
 
     @Override
+    public boolean supportsInlineComments()
+    {
+        return true;
+    }
+
+    @Override
+    public GitPullRequestComment createInlineComment(GitRepositoryCoordinates repository,
+                                                     GitAccessContext access,
+                                                     int prNumber,
+                                                     GitInlineCommentRequest request)
+    {
+        String token = access.requireToken();
+        validate(repository, token, prNumber);
+        validateInlineRequest(request);
+        int line = resolveLine(request);
+        JSONObject payload = new JSONObject();
+        payload.put("body", request.body() == null ? "" : request.body());
+        payload.put("commit_id", request.headSha());
+        payload.put("path", request.path());
+        payload.put("line", line);
+        payload.put("side", "RIGHT");
+        if (request.startLine() != null && !request.startLine().equals(line))
+        {
+            payload.put("start_line", request.startLine());
+            payload.put("start_side", "RIGHT");
+        }
+        HttpUrl url = pullCommentsUrl(repository, prNumber);
+        Request httpRequest = requestBuilder(token, url)
+            .post(RequestBody.create(payload.toJSONString(), JSON_MEDIA))
+            .build();
+        String responseBody = execute(token, httpRequest, "创建 PR 行内评论");
+        return parseComment(responseBody, token);
+    }
+
+    @Override
+    public Optional<GitPullRequestComment> findInlineCommentWithMarker(GitRepositoryCoordinates repository,
+                                                                       GitAccessContext access,
+                                                                       int prNumber,
+                                                                       String marker)
+    {
+        String token = access.requireToken();
+        validate(repository, token, prNumber);
+        if (marker == null || marker.isBlank())
+        {
+            return Optional.empty();
+        }
+        for (int page = 1; page <= ReviewDeliveryConstants.COMMENT_MAX_PAGES; page++)
+        {
+            HttpUrl url = pullCommentsUrl(repository, prNumber)
+                .newBuilder()
+                .addQueryParameter("per_page", String.valueOf(ReviewDeliveryConstants.COMMENT_PAGE_SIZE))
+                .addQueryParameter("page", String.valueOf(page))
+                .build();
+            String body = execute(token, requestBuilder(token, url).get().build(), "列出 PR 行内评论");
+            JSONArray array = parseArray(body, token);
+            if (array.isEmpty())
+            {
+                return Optional.empty();
+            }
+            for (int i = 0; i < array.size(); i++)
+            {
+                JSONObject item = array.getJSONObject(i);
+                if (item == null)
+                {
+                    continue;
+                }
+                String commentBody = item.getString("body");
+                if (commentBody != null && commentBody.contains(marker))
+                {
+                    return Optional.of(new GitPullRequestComment(String.valueOf(item.get("id")), commentBody));
+                }
+            }
+            if (array.size() < ReviewDeliveryConstants.COMMENT_PAGE_SIZE)
+            {
+                return Optional.empty();
+            }
+        }
+        return Optional.empty();
+    }
+
+    @Override
     public GitPullRequestComment updateIssueComment(GitRepositoryCoordinates repository,
                                                     GitAccessContext access,
                                                     String commentId,
@@ -154,6 +236,18 @@ public class GitHubPullRequestCommentClient implements GitPullRequestCommentClie
             .addPathSegment(repository.owner())
             .addPathSegment(repository.repository())
             .addPathSegment("issues")
+            .addPathSegment(String.valueOf(prNumber))
+            .addPathSegment("comments")
+            .build();
+    }
+
+    private HttpUrl pullCommentsUrl(GitRepositoryCoordinates repository, int prNumber)
+    {
+        return apiBaseUrl.newBuilder()
+            .addPathSegment("repos")
+            .addPathSegment(repository.owner())
+            .addPathSegment(repository.repository())
+            .addPathSegment("pulls")
             .addPathSegment(String.valueOf(prNumber))
             .addPathSegment("comments")
             .build();
@@ -239,6 +333,31 @@ public class GitHubPullRequestCommentClient implements GitPullRequestCommentClie
         {
             throw new GitPullRequestCommentException("PR 编号无效，无法投递评论");
         }
+    }
+
+    private static void validateInlineRequest(GitInlineCommentRequest request)
+    {
+        if (request == null || request.path() == null || request.path().isBlank())
+        {
+            throw new GitPullRequestCommentException("行内评论缺少文件路径");
+        }
+        if (request.headSha() == null || request.headSha().isBlank())
+        {
+            throw new GitPullRequestCommentException("行内评论缺少 commit SHA");
+        }
+        if (request.endLine() == null && request.startLine() == null)
+        {
+            throw new GitPullRequestCommentException("行内评论缺少行号");
+        }
+    }
+
+    private static int resolveLine(GitInlineCommentRequest request)
+    {
+        if (request.endLine() != null)
+        {
+            return request.endLine();
+        }
+        return request.startLine();
     }
 
     private static JSONArray parseArray(String body, String token)

@@ -54,8 +54,18 @@ class GitLabWebhookAdapterTest
           "user_username": "alice",
           "total_commits_count": 2,
           "commits": [
-            { "id": "aaaabbbbccccddddeeeeffff0000111122223333", "message": "first" },
-            { "id": "ffffeeeeddddccccbbbbaaaa3333222211110000", "message": "second fix" }
+            {
+              "id": "aaaabbbbccccddddeeeeffff0000111122223333",
+              "message": "first\n\nbody",
+              "timestamp": "2026-08-01T10:00:00+08:00",
+              "author": { "name": "Alice", "email": "alice@example.com" }
+            },
+            {
+              "id": "ffffeeeeddddccccbbbbaaaa3333222211110000",
+              "message": "second fix",
+              "timestamp": "2026-08-01T11:00:00+08:00",
+              "author": { "name": "Bob", "email": "bob@example.com" }
+            }
           ],
           "project": {
             "path_with_namespace": "miguchn/demo-repo",
@@ -234,6 +244,64 @@ class GitLabWebhookAdapterTest
         assertEquals("second fix", event.headCommitMessage());
         assertFalse(event.created());
         assertFalse(event.deleted());
+        assertEquals(2, event.commits().size());
+        assertEquals("Alice", event.commits().get(0).authorName());
+        assertEquals("alice@example.com", event.commits().get(0).authorEmail());
+        assertEquals("first", event.commits().get(0).messageFirstLine());
+        assertNotNull(event.commits().get(0).timestamp());
+    }
+
+    @Test
+    void parsesPushCommitsEmptyArrayAsEmptyList()
+    {
+        String payload = PUSH_PAYLOAD.replaceAll(
+            "\"commits\": \\[[\\s\\S]*?\\]", "\"commits\": []");
+        GitPushEvent event = adapter.parsePushEvent(
+            "Push Hook", "delivery-empty-commits", payload.getBytes(StandardCharsets.UTF_8));
+
+        assertNotNull(event);
+        assertNotNull(event.commits());
+        assertTrue(event.commits().isEmpty());
+    }
+
+    @Test
+    void skipsPushCommitsMissingShaWithoutAborting()
+    {
+        String payload = """
+            {
+              "object_kind": "push",
+              "event_name": "push",
+              "before": "aaaabbbbccccddddeeeeffff0000111122223333",
+              "after": "ffffeeeeddddccccbbbbaaaa3333222211110000",
+              "ref": "refs/heads/main",
+              "user_name": "Alice",
+              "user_username": "alice",
+              "total_commits_count": 1,
+              "commits": [
+                { "message": "no sha", "author": { "name": "Alice", "email": "a@x.com" } },
+                {
+                  "id": "ffffeeeeddddccccbbbbaaaa3333222211110000",
+                  "message": "ok",
+                  "timestamp": "2026-08-01T12:00:00Z",
+                  "author": { "name": "Bob" }
+                }
+              ],
+              "project": {
+                "path_with_namespace": "miguchn/demo-repo",
+                "namespace": "miguchn",
+                "name": "demo-repo"
+              },
+              "repository": { "name": "demo-repo" }
+            }
+            """;
+        GitPushEvent event = adapter.parsePushEvent(
+            "Push Hook", "delivery-skip-sha", payload.getBytes(StandardCharsets.UTF_8));
+
+        assertNotNull(event);
+        assertEquals(1, event.commits().size());
+        assertEquals("ffffeeeeddddccccbbbbaaaa3333222211110000", event.commits().get(0).sha());
+        assertEquals("Bob", event.commits().get(0).authorName());
+        assertNull(event.commits().get(0).authorEmail());
     }
 
     @Test

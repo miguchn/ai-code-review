@@ -266,11 +266,11 @@ class WorkbenchServiceImplTest
 
             ArgumentCaptor<ReviewDeliveryRecord> deliveryCaptor = ArgumentCaptor.forClass(ReviewDeliveryRecord.class);
             verify(deliveryService).countDeliveryList(deliveryCaptor.capture());
-            assertEquals(ReviewDeliveryConstants.STATUS_FAILED, deliveryCaptor.getValue().getDeliveryStatus());
+            assertEquals(ReviewDeliveryConstants.STATUS_MANUAL, deliveryCaptor.getValue().getDeliveryStatus());
 
             assertEquals(2, summary.getCards().size());
             assertEquals("FAILED", summary.getCards().get(0).getQuery().get("taskStatus"));
-            assertEquals("FAILED", summary.getCards().get(1).getQuery().get("deliveryStatus"));
+            assertEquals("MANUAL", summary.getCards().get(1).getQuery().get("deliveryStatus"));
         }
     }
 

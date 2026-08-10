@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.acr.review.mapper.ReviewRuntimeStatsMapper">
+
+    <select id="countTasksByStatus" resultType="java.util.HashMap">
+        select task_status as status, count(*) as cnt
+        from review_task
+        where task_status in
+        <foreach collection="statuses" item="status" open="(" separator="," close=")">
+            #{status}
+        </foreach>
+        group by task_status
+    </select>
+
+    <select id="selectOldestPendingTask" resultType="java.util.HashMap">
+        select task_id as taskId,
+               timestampdiff(second, create_time, sysdate()) as ageSeconds
+        from review_task
+        where task_status = 'PENDING'
+        order by create_time asc, task_id asc
+        limit 1
+    </select>
+
+    <select id="countTerminalTasksSinceHours" resultType="java.util.HashMap">
+        select task_status as status, count(*) as cnt
+        from review_task
+        where task_status in ('SUCCESS', 'FAILED', 'CANCELLED', 'SUPERSEDED')
+          and ifnull(finished_time, update_time) &gt;= date_sub(sysdate(), interval #{hours} hour)
+        group by task_status
+    </select>
+
+    <select id="countRetryEventsSinceHours" resultType="long">
+        select count(*)
+        from review_task
+        where (task_status = 'RETRYING'
+               or last_error_code in ('LEASE_EXPIRED', 'WORKER_SHUTDOWN', 'CONCURRENCY_LIMIT')
+               or failure_type in ('LEASE_EXPIRED', 'WORKER_SHUTDOWN', 'CONCURRENCY_LIMIT'))
+          and update_time &gt;= date_sub(sysdate(), interval #{hours} hour)
+    </select>
+
+    <select id="countTimeoutEventsSinceHours" resultType="long">
+        select count(*)
+        from review_task
+        where (last_error_code = 'TIMEOUT' or failure_type = 'TIMEOUT')
+          and update_time &gt;= date_sub(sysdate(), interval #{hours} hour)
+    </select>
+
+    <select id="countTerminalOutcomesSinceMinutes" resultType="java.util.HashMap">
+        select
+            sum(case when task_status = 'SUCCESS' then 1 else 0 end) as successCount,
+            sum(case when task_status = 'FAILED' then 1 else 0 end) as failedCount,
+            sum(case when task_status = 'CANCELLED' then 1 else 0 end) as cancelledCount
+        from review_task
+        where task_status in ('SUCCESS', 'FAILED', 'CANCELLED')
+          and ifnull(finished_time, update_time) &gt;= date_sub(sysdate(), interval #{minutes} minute)
+    </select>
+
+    <select id="countDeliveriesByStatus" resultType="long">
+        select count(*)
+        from review_delivery_record
+        where delivery_status = #{status}
+    </select>
+
+    <select id="selectOldestPendingDelivery" resultType="java.util.HashMap">
+        select delivery_id as deliveryId,
+               task_id as taskId,
+               timestampdiff(second, create_time, sysdate()) as ageSeconds
+        from review_delivery_record
+        where delivery_status = 'PENDING'
+        order by create_time asc, delivery_id asc
+        limit 1
+    </select>
+
+    <select id="selectOverduePendingTasks" resultType="com.acr.review.runtime.ReviewRuntimeBacklogItem">
+        select 'OVERDUE_PENDING' as kind,
+               t.task_id as taskId,
+               t.latest_run_id as runId,
+               p.project_name as projectName,
+               '待执行' as statusLabel,
+               concat('任务已等待 ', timestampdiff(minute, t.create_time, sysdate()), ' 分钟') as summary,
+               timestampdiff(second, t.create_time, sysdate()) as ageSeconds,
+               t.create_time as createTime,
+               t.next_run_at as nextRunAt
+        from review_task t
+        left join review_project p on p.project_id = t.project_id
+        where t.task_status = 'PENDING'
+          and t.create_time &lt;= date_sub(sysdate(), interval #{ageMinutes} minute)
+        order by t.create_time asc, t.task_id asc
+        limit #{limit}
+    </select>
+
+    <select id="selectLeaseExpiredTasks" resultType="com.acr.review.runtime.ReviewRuntimeBacklogItem">
+        select 'LEASE_EXPIRED' as kind,
+               t.task_id as taskId,
+               t.latest_run_id as runId,
+               p.project_name as projectName,
+               '租约过期' as statusLabel,
+               concat('执行中租约已过期，等待恢复扫描接管') as summary,
+               timestampdiff(second, t.lease_until, sysdate()) as ageSeconds,
+               t.create_time as createTime,
+               t.lease_until as leaseUntil
+        from review_task t
+        left join review_project p on p.project_id = t.project_id
+        where t.task_status = 'RUNNING'
+          and t.lease_until is not null
+          and t.lease_until &lt; sysdate()
+        order by t.lease_until asc, t.task_id asc
+        limit #{limit}
+    </select>
+
+    <select id="selectStuckDeliveries" resultType="com.acr.review.runtime.ReviewRuntimeBacklogItem">
+        select case when d.delivery_status = 'MANUAL' then 'DELIVERY_MANUAL' else 'DELIVERY_OVERDUE' end as kind,
+               d.task_id as taskId,
+               d.delivery_id as deliveryId,
+               p.project_name as projectName,
+               case when d.delivery_status = 'MANUAL' then '待人工处置' else '待投递超龄' end as statusLabel,
+               ifnull(d.failure_message, concat('投递状态 ', d.delivery_status)) as summary,
+               timestampdiff(second, d.create_time, sysdate()) as ageSeconds,
+               d.create_time as createTime
+        from review_delivery_record d
+        left join review_project p on p.project_id = d.project_id
+        where d.delivery_status = 'MANUAL'
+           or (d.delivery_status = 'PENDING'
+               and d.create_time &lt;= date_sub(sysdate(), interval #{ageMinutes} minute))
+        order by case when d.delivery_status = 'MANUAL' then 0 else 1 end,
+                 d.create_time asc,
+                 d.delivery_id asc
+        limit #{limit}
+    </select>
+
+</mapper>

@@ -3,9 +3,14 @@ package com.acr.review.service.impl;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
+import static org.mockito.Mockito.inOrder;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DuplicateKeyException;
 import com.acr.common.exception.ServiceException;
@@ -65,6 +70,7 @@ class ReviewTaskCreateServiceImplTest
             task.getProjectId().equals(1L) && task.getEventId().equals(10L)
                 && "PENDING".equals(task.getTaskStatus()) && "WEBHOOK".equals(task.getTriggerType())
                 && ReviewPipelineConstants.EVENT_SOURCE_PR.equals(task.getEventSource())
+                && "PR#12".equals(task.getChangeKey())
                 && Integer.valueOf(12).equals(task.getPrNumber())
                 && "alice".equals(task.getPrAuthor())
                 && Integer.valueOf(15).equals(task.getAdditions())
@@ -77,9 +83,83 @@ class ReviewTaskCreateServiceImplTest
                 && "builtin_java".equals(task.getSnapshotTemplateCode())
                 && Integer.valueOf(2).equals(task.getSnapshotTemplateVersion())
                 && "模板正文".equals(task.getSnapshotPromptContent())));
+        verify(taskMapper).supersedePendingByChangeKey(1L, "PR#12", 100L);
         verify(eventMapper).updateProcessResult(org.mockito.ArgumentMatchers.argThat(e ->
             "ACCEPTED".equals(e.getProcessStatus()) && Long.valueOf(100L).equals(e.getTaskId())));
         verify(executionService).scheduleExecution(100L);
+    }
+
+    @Test
+    void consecutivePrHeadsSupersedePriorPendingTowardLatestTask()
+    {
+        ReviewProject project = new ReviewProject();
+        project.setProjectId(9L);
+        project.setReviewMode("LLM_DIRECT");
+        project.setModelId(3L);
+        project.setTemplateId(4L);
+        when(modelConfigService.selectRuntimeConfigById(3L)).thenReturn(enabledModel());
+        when(templateService.selectEnabledTemplateById(4L)).thenReturn(enabledTemplate());
+        when(taskMapper.supersedePendingByChangeKey(eq(9L), eq("PR#12"), org.mockito.ArgumentMatchers.anyLong()))
+            .thenReturn(1);
+        when(taskMapper.insertReviewTask(any())).thenAnswer(invocation -> {
+            ReviewTask task = invocation.getArgument(0);
+            task.setTaskId(1000L + task.getEventId() - 100L);
+            return 1;
+        });
+
+        for (int i = 0; i < 10; i++)
+        {
+            ReviewWebhookEvent event = new ReviewWebhookEvent();
+            event.setEventId(100L + i);
+            event.setProvider("GITHUB");
+            GitPullRequestEvent prEvent = new GitPullRequestEvent(
+                "d-" + i, "synchronize", "miguchn", "demo", 12, "feat: login",
+                "feature/login", "dev", "base" + i, "head" + i, "alice", 1, 1);
+            assertEquals(1000L + i, service.createTaskFromEvent(project, event, prEvent));
+        }
+
+        ArgumentCaptor<Long> supersededBy = ArgumentCaptor.forClass(Long.class);
+        verify(taskMapper, times(10)).supersedePendingByChangeKey(eq(9L), eq("PR#12"), supersededBy.capture());
+        assertEquals(java.util.List.of(1000L, 1001L, 1002L, 1003L, 1004L, 1005L, 1006L, 1007L, 1008L, 1009L),
+            supersededBy.getAllValues());
+        InOrder order = inOrder(taskMapper);
+        for (long taskId = 1000L; taskId <= 1009L; taskId++)
+        {
+            order.verify(taskMapper).supersedePendingByChangeKey(9L, "PR#12", taskId);
+        }
+    }
+
+    @Test
+    void consecutivePushHeadsSupersedePriorPendingTowardLatestTask()
+    {
+        ReviewProject project = new ReviewProject();
+        project.setProjectId(9L);
+        project.setReviewMode("LLM_DIRECT");
+        project.setModelId(3L);
+        project.setTemplateId(4L);
+        when(modelConfigService.selectRuntimeConfigById(3L)).thenReturn(enabledModel());
+        when(templateService.selectEnabledTemplateById(4L)).thenReturn(enabledTemplate());
+        when(taskMapper.insertReviewTask(any())).thenAnswer(invocation -> {
+            ReviewTask task = invocation.getArgument(0);
+            task.setTaskId(2000L + task.getEventId() - 200L);
+            return 1;
+        });
+
+        for (int i = 0; i < 10; i++)
+        {
+            ReviewWebhookEvent event = new ReviewWebhookEvent();
+            event.setEventId(200L + i);
+            event.setProvider("GITHUB");
+            GitPushEvent pushEvent = new GitPushEvent(
+                "p-" + i, "miguchn", "demo", "miguchn/demo", "main",
+                "before" + i, "after" + i, "bob", 1, "msg", false, false, java.util.List.of());
+            assertEquals(2000L + i, service.createTaskFromPushEvent(project, event, pushEvent));
+        }
+
+        ArgumentCaptor<Long> supersededBy = ArgumentCaptor.forClass(Long.class);
+        verify(taskMapper, times(10)).supersedePendingByChangeKey(eq(9L), eq("PUSH#main"), supersededBy.capture());
+        assertEquals(java.util.List.of(2000L, 2001L, 2002L, 2003L, 2004L, 2005L, 2006L, 2007L, 2008L, 2009L),
+            supersededBy.getAllValues());
     }
 
     @Test
@@ -96,7 +176,7 @@ class ReviewTaskCreateServiceImplTest
         GitPushEvent pushEvent = new GitPushEvent(
             "d-push", "miguchn", "demo", "miguchn/demo", "main",
             "aaaabbbbccccddddeeeeffff0000111122223333", "ffffeeeeddddccccbbbbaaaa3333222211110000",
-            "bob", 3, "fix: cache\n\ndetails", false, false);
+            "bob", 3, "fix: cache\n\ndetails", false, false, java.util.List.of());
         when(taskMapper.insertReviewTask(any())).thenAnswer(invocation -> {
             ReviewTask task = invocation.getArgument(0);
             task.setTaskId(200L);
@@ -110,6 +190,7 @@ class ReviewTaskCreateServiceImplTest
         assertEquals(200L, taskId);
         verify(taskMapper).insertReviewTask(org.mockito.ArgumentMatchers.argThat(task ->
             ReviewPipelineConstants.EVENT_SOURCE_PUSH.equals(task.getEventSource())
+                && "PUSH#main".equals(task.getChangeKey())
                 && Integer.valueOf(0).equals(task.getPrNumber())
                 && "fix: cache".equals(task.getPrTitle())
                 && "bob".equals(task.getPrAuthor())
@@ -117,6 +198,7 @@ class ReviewTaskCreateServiceImplTest
                 && task.getAdditions() == null && task.getDeletions() == null && task.getChangedFiles() == null
                 && "WEBHOOK".equals(task.getTriggerType())
                 && "PENDING".equals(task.getTaskStatus())));
+        verify(taskMapper).supersedePendingByChangeKey(1L, "PUSH#main", 200L);
         verify(executionService).scheduleExecution(200L);
     }
 

@@ -35,7 +35,9 @@
 
     <el-table v-loading="loading" :data="deliveryList" empty-text="暂无投递记录">
       <el-table-column label="最后尝试时间" width="170">
-        <template #default="scope">{{ formatDateTime(scope.row.lastAttemptTime) }}</template>
+        <template #default="scope">
+          {{ scope.row.lastAttemptTime ? formatDateTime(scope.row.lastAttemptTime) : '待首次尝试' }}
+        </template>
       </el-table-column>
       <el-table-column label="业务系统" prop="businessSystemName" min-width="130" :show-overflow-tooltip="true"
         class-name="col-business-system" label-class-name="col-business-system">
@@ -67,7 +69,12 @@
       <el-table-column label="任务 ID" prop="taskId" width="100" />
       <el-table-column label="失败原因" prop="failureMessage" min-width="220" :show-overflow-tooltip="true" />
       <el-table-column label="尝试次数" prop="attemptCount" width="90" />
-      <el-table-column label="操作" width="160" fixed="right" class-name="small-padding fixed-width">
+      <el-table-column label="下次处理时间" width="170">
+        <template #default="scope">
+          {{ scope.row.nextAttemptAt ? formatDateTime(scope.row.nextAttemptAt) : '—' }}
+        </template>
+      </el-table-column>
+      <el-table-column label="操作" width="220" fixed="right" class-name="small-padding fixed-width">
         <template #default="scope">
           <el-tooltip
             content="较早投递未保留消息快照"
@@ -83,9 +90,12 @@
               >消息详情</el-button>
             </span>
           </el-tooltip>
-          <el-button v-if="scope.row.deliveryStatus === 'FAILED'" link type="primary"
+          <el-button v-if="['FAILED', 'MANUAL'].includes(scope.row.deliveryStatus)" link type="primary"
             :loading="retryingId === scope.row.deliveryId"
             @click="handleRetry(scope.row)" v-hasPermi="['review:delivery:retry']">补发</el-button>
+          <el-button v-if="scope.row.deliveryStatus === 'MANUAL'" link type="warning"
+            :loading="handlingId === scope.row.deliveryId"
+            @click="handleMarkHandled(scope.row)" v-hasPermi="['review:task:handle']">标记已处理</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -118,7 +128,7 @@
 
 <script setup name="ReviewDeliveryRecord">
 import { useRoute } from 'vue-router'
-import { listDelivery, retryDeliveryById, getDeliveryContent } from '@/api/review/delivery'
+import { listDelivery, retryDeliveryById, getDeliveryContent, markDeliveryHandled } from '@/api/review/delivery'
 import { listReviewProject } from '@/api/review/project'
 import { formatDateTime } from '@/utils/reviewDisplay'
 import MessageContentView from '../components/MessageContentView.vue'
@@ -138,6 +148,7 @@ const showSearch = ref(true)
 const total = ref(0)
 const dateRange = ref([])
 const retryingId = ref()
+const handlingId = ref()
 
 const messageDrawerVisible = ref(false)
 const messageLoading = ref(false)
@@ -186,13 +197,23 @@ function handleQuery() { queryParams.value.pageNum = 1; getList() }
 function resetQuery() { proxy.resetForm('queryRef'); dateRange.value = []; handleQuery() }
 
 function handleRetry(row) {
-  proxy.$modal.confirm('确认向原渠道补发？群内可能出现重复消息').then(() => {
+  proxy.$modal.confirm('确认将该记录加入补发队列？群机器人渠道在极端情况下仍可能出现重复消息').then(() => {
     retryingId.value = row.deliveryId
     return retryDeliveryById(row.deliveryId)
   }).then(() => {
-    proxy.$modal.msgSuccess('补发已完成')
+    proxy.$modal.msgSuccess('已加入补发队列')
     getList()
   }).catch(() => {}).finally(() => { retryingId.value = undefined })
+}
+
+function handleMarkHandled(row) {
+  proxy.$modal.confirm('确认标记该投递为人工已处理？标记后不再自动投递。').then(() => {
+    handlingId.value = row.deliveryId
+    return markDeliveryHandled(row.deliveryId)
+  }).then(() => {
+    proxy.$modal.msgSuccess('已标记人工处理')
+    getList()
+  }).catch(() => {}).finally(() => { handlingId.value = undefined })
 }
 
 function openMessageDetail(row) {

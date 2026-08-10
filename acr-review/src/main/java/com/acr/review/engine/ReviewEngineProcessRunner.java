@@ -1,18 +1,9 @@
 package com.acr.review.engine;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -25,97 +16,21 @@ public class ReviewEngineProcessRunner
     private static final Logger log = LoggerFactory.getLogger(ReviewEngineProcessRunner.class);
 
     private final ReviewEngineProperties properties;
-    private final ExecutorService streamExecutor = Executors.newCachedThreadPool(r -> {
-        Thread thread = new Thread(r, "review-engine-stream");
-        thread.setDaemon(true);
-        return thread;
-    });
+    private final ExternalProcessRunner processRunner;
 
-    public ReviewEngineProcessRunner(ReviewEngineProperties properties)
+    public ReviewEngineProcessRunner(ReviewEngineProperties properties, ExternalProcessRunner processRunner)
     {
         this.properties = properties;
+        this.processRunner = processRunner;
     }
 
     public ProcessExecution execute(List<String> command, Path workingDirectory, Map<String, String> environment,
         int timeoutSeconds) throws IOException, InterruptedException
     {
-        long started = System.currentTimeMillis();
-        ProcessBuilder builder = new ProcessBuilder(command);
-        builder.directory(workingDirectory.toFile());
-        builder.redirectErrorStream(false);
-        if (environment != null)
-        {
-            builder.environment().putAll(environment);
-        }
-
-        Process process = builder.start();
-        Future<StreamCapture> stdoutFuture = streamExecutor.submit(capture(process.getInputStream()));
-        Future<StreamCapture> stderrFuture = streamExecutor.submit(capture(process.getErrorStream()));
-
-        boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
-        StreamCapture stdoutCapture = readCapture(stdoutFuture);
-        StreamCapture stderrCapture = readCapture(stderrFuture);
-        String stdout = stdoutCapture.text();
-        String stderr = stderrCapture.text();
-
-        if (!finished)
-        {
-            destroyProcessTree(process);
-            return ProcessExecution.timedOut(System.currentTimeMillis() - started, stdout, stderr);
-        }
-
-        return new ProcessExecution(process.exitValue(), System.currentTimeMillis() - started, stdout, stderr, false);
-    }
-
-    private StreamCapture readCapture(Future<StreamCapture> future) throws IOException
-    {
-        try
-        {
-            return future.get(5, TimeUnit.SECONDS);
-        }
-        catch (ExecutionException | TimeoutException ex)
-        {
-            throw new IOException("读取 CLI 输出失败", ex);
-        }
-        catch (InterruptedException ex)
-        {
-            Thread.currentThread().interrupt();
-            throw new IOException("读取 CLI 输出被中断", ex);
-        }
-    }
-
-    private Callable<StreamCapture> capture(InputStream inputStream)
-    {
-        return () -> {
-            StringBuilder builder = new StringBuilder();
-            boolean truncated = false;
-            byte[] buffer = new byte[4096];
-            int total = 0;
-            int read;
-            while ((read = inputStream.read(buffer)) >= 0)
-            {
-                if (total >= properties.getMaxOutputBytes())
-                {
-                    truncated = true;
-                    continue;
-                }
-                int allowed = Math.min(read, properties.getMaxOutputBytes() - total);
-                builder.append(new String(buffer, 0, allowed, StandardCharsets.UTF_8));
-                total += allowed;
-                if (read > allowed)
-                {
-                    truncated = true;
-                }
-            }
-            inputStream.close();
-            return new StreamCapture(builder.toString(), truncated);
-        };
-    }
-
-    private void destroyProcessTree(Process process)
-    {
-        process.descendants().forEach(ProcessHandle::destroyForcibly);
-        process.destroyForcibly();
+        ExternalProcessRunner.ProcessExecution execution = processRunner.execute(
+            command, workingDirectory, environment, timeoutSeconds, properties.getMaxOutputBytes());
+        return new ProcessExecution(execution.exitCode(), execution.durationMs(),
+            execution.stdout(), execution.stderr(), execution.timedOut());
     }
 
     public static ReviewEngineFailureType classifyStartupFailure(IOException ex)
@@ -164,14 +79,6 @@ public class ReviewEngineProcessRunner
         public static ProcessExecution timedOut(long durationMs, String stdout, String stderr)
         {
             return new ProcessExecution(-1, durationMs, stdout, stderr, true);
-        }
-    }
-
-    private record StreamCapture(String content, boolean truncated)
-    {
-        String text()
-        {
-            return truncated ? content + "\n...[output truncated]" : content;
         }
     }
 }

@@ -14,11 +14,16 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="provider" column="provider" />
         <result property="channel" column="channel" />
         <result property="prNumber" column="pr_number" />
+        <result property="issueId" column="issue_id" />
         <result property="idempotencyKey" column="idempotency_key" />
         <result property="externalId" column="external_id" />
         <result property="deliveryStatus" column="delivery_status" />
         <result property="failureMessage" column="failure_message" />
         <result property="attemptCount" column="attempt_count" />
+        <result property="nextAttemptAt" column="next_attempt_at" />
+        <result property="lastErrorCode" column="last_error_code" />
+        <result property="leaseOwner" column="lease_owner" />
+        <result property="leaseUntil" column="lease_until" />
         <result property="lastAttemptTime" column="last_attempt_time" />
         <result property="triggerSource" column="trigger_source" />
         <result property="hasContentSnapshot" column="has_content_snapshot" />
@@ -30,9 +35,10 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 
     <sql id="selectColumns">
         select rdr.delivery_id, rdr.task_id, rdr.run_id, rdr.project_id, p.project_name,
-               bs.system_name as business_system_name, rdr.provider, rdr.channel, rdr.pr_number,
+               bs.system_name as business_system_name, rdr.provider, rdr.channel, rdr.pr_number, rdr.issue_id,
                rdr.idempotency_key, rdr.external_id, rdr.delivery_status, rdr.failure_message,
-               rdr.attempt_count, rdr.last_attempt_time, rdr.trigger_source,
+               rdr.attempt_count, rdr.next_attempt_at, rdr.last_error_code, rdr.lease_owner, rdr.lease_until,
+               rdr.last_attempt_time, rdr.trigger_source,
                (case when rdr.content_snapshot is not null then 1 else 0 end) as has_content_snapshot,
                rdr.create_by, rdr.create_time, rdr.update_by, rdr.update_time
         from review_delivery_record rdr
@@ -56,18 +62,20 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     </select>
 
     <select id="selectByIdempotencyKey" resultMap="ReviewDeliveryRecordResult">
-        select delivery_id, task_id, run_id, project_id, provider, channel, pr_number,
+        select delivery_id, task_id, run_id, project_id, provider, channel, pr_number, issue_id,
                idempotency_key, external_id, delivery_status, failure_message,
-               attempt_count, last_attempt_time, trigger_source, create_by, create_time, update_by, update_time
+               attempt_count, next_attempt_at, last_error_code, lease_owner, lease_until,
+               last_attempt_time, trigger_source, create_by, create_time, update_by, update_time
         from review_delivery_record
         where idempotency_key = #{idempotencyKey}
         limit 1
     </select>
 
     <select id="selectByProjectAndPr" resultMap="ReviewDeliveryRecordResult">
-        select delivery_id, task_id, run_id, project_id, provider, channel, pr_number,
+        select delivery_id, task_id, run_id, project_id, provider, channel, pr_number, issue_id,
                idempotency_key, external_id, delivery_status, failure_message,
-               attempt_count, last_attempt_time, trigger_source, create_by, create_time, update_by, update_time
+               attempt_count, next_attempt_at, last_error_code, lease_owner, lease_until,
+               last_attempt_time, trigger_source, create_by, create_time, update_by, update_time
         from review_delivery_record
         where project_id = #{projectId}
           and pr_number = #{prNumber}
@@ -76,14 +84,40 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     </select>
 
     <select id="selectLatestImByTaskId" resultMap="ReviewDeliveryRecordResult">
-        select delivery_id, task_id, run_id, project_id, provider, channel, pr_number,
+        select delivery_id, task_id, run_id, project_id, provider, channel, pr_number, issue_id,
                idempotency_key, external_id, delivery_status, failure_message,
-               attempt_count, last_attempt_time, trigger_source, create_by, create_time, update_by, update_time
+               attempt_count, next_attempt_at, last_error_code, lease_owner, lease_until,
+               last_attempt_time, trigger_source, create_by, create_time, update_by, update_time
         from review_delivery_record
         where task_id = #{taskId}
           and channel in ('DINGTALK_ROBOT', 'WECOM_ROBOT', 'FEISHU_BOT')
-        order by last_attempt_time desc, delivery_id desc
+        order by coalesce(last_attempt_time, create_time) desc, delivery_id desc
         limit 1
+    </select>
+
+    <select id="selectByIssueId" resultMap="ReviewDeliveryRecordResult">
+        select delivery_id, task_id, run_id, project_id, provider, channel, pr_number, issue_id,
+               idempotency_key, external_id, delivery_status, failure_message,
+               attempt_count, next_attempt_at, last_error_code, lease_owner, lease_until,
+               last_attempt_time, trigger_source, create_by, create_time, update_by, update_time
+        from review_delivery_record
+        where issue_id = #{issueId}
+          and channel in ('GITHUB_PR_INLINE_COMMENT', 'GITLAB_MR_INLINE_COMMENT',
+                          'GITEE_PR_INLINE_COMMENT', 'GITEA_PR_INLINE_COMMENT')
+        order by delivery_id desc
+        limit 1
+    </select>
+
+    <select id="selectInlineByTaskId" resultMap="ReviewDeliveryRecordResult">
+        select delivery_id, task_id, run_id, project_id, provider, channel, pr_number, issue_id,
+               idempotency_key, external_id, delivery_status, failure_message,
+               attempt_count, next_attempt_at, last_error_code, lease_owner, lease_until,
+               last_attempt_time, trigger_source, create_by, create_time, update_by, update_time
+        from review_delivery_record
+        where task_id = #{taskId}
+          and channel in ('GITHUB_PR_INLINE_COMMENT', 'GITLAB_MR_INLINE_COMMENT',
+                          'GITEE_PR_INLINE_COMMENT', 'GITEA_PR_INLINE_COMMENT')
+        order by delivery_id
     </select>
 
     <select id="selectDeliveryList" parameterType="com.acr.review.domain.ReviewDeliveryRecord"
@@ -106,13 +140,13 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             and rdr.task_id = #{taskId}
         </if>
         <if test="beginTime != null and beginTime != ''">
-            and rdr.last_attempt_time &gt;= #{beginTime}
+            and coalesce(rdr.last_attempt_time, rdr.create_time) &gt;= #{beginTime}
         </if>
         <if test="endTime != null and endTime != ''">
-            and rdr.last_attempt_time &lt;= #{endTime}
+            and coalesce(rdr.last_attempt_time, rdr.create_time) &lt;= #{endTime}
         </if>
         ${params.dataScope}
-        order by rdr.last_attempt_time desc, rdr.delivery_id desc
+        order by coalesce(rdr.last_attempt_time, rdr.create_time) desc, rdr.delivery_id desc
     </select>
 
     <select id="countDeliveryList" parameterType="com.acr.review.domain.ReviewDeliveryRecord" resultType="int">
@@ -139,10 +173,10 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             and rdr.task_id = #{taskId}
         </if>
         <if test="beginTime != null and beginTime != ''">
-            and rdr.last_attempt_time &gt;= #{beginTime}
+            and coalesce(rdr.last_attempt_time, rdr.create_time) &gt;= #{beginTime}
         </if>
         <if test="endTime != null and endTime != ''">
-            and rdr.last_attempt_time &lt;= #{endTime}
+            and coalesce(rdr.last_attempt_time, rdr.create_time) &lt;= #{endTime}
         </if>
         ${params.dataScope}
     </select>
@@ -175,6 +209,165 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             update_by = #{updateBy},
             update_time = sysdate()
         where idempotency_key = #{idempotencyKey}
+    </update>
+
+    <insert id="upsertDeliveryIntent" parameterType="com.acr.review.domain.ReviewDeliveryRecord"
+            useGeneratedKeys="true" keyProperty="deliveryId">
+        insert into review_delivery_record
+        (task_id, run_id, project_id, provider, channel, pr_number, issue_id, idempotency_key,
+         delivery_status, failure_message, attempt_count, next_attempt_at, last_error_code,
+         trigger_source, create_by, create_time, update_by, update_time)
+        values
+        (#{taskId}, #{runId}, #{projectId}, #{provider}, #{channel}, #{prNumber}, #{issueId}, #{idempotencyKey},
+         #{deliveryStatus}, #{failureMessage}, 0,
+         <choose><when test="deliveryStatus == 'PENDING'">sysdate()</when><otherwise>null</otherwise></choose>,
+         #{lastErrorCode}, #{triggerSource}, #{createBy}, sysdate(), #{updateBy}, sysdate())
+        on duplicate key update
+            delivery_id = last_insert_id(delivery_id),
+            task_id = values(task_id),
+            run_id = values(run_id),
+            project_id = values(project_id),
+            provider = values(provider),
+            channel = values(channel),
+            pr_number = values(pr_number),
+            issue_id = values(issue_id),
+            delivery_status = values(delivery_status),
+            failure_message = values(failure_message),
+            next_attempt_at = values(next_attempt_at),
+            last_error_code = values(last_error_code),
+            lease_owner = null,
+            lease_until = null,
+            trigger_source = values(trigger_source),
+            update_by = values(update_by),
+            update_time = sysdate()
+    </insert>
+
+    <select id="selectDispatchableDeliveryIds" resultType="java.lang.Long">
+        select delivery_id
+        from review_delivery_record
+        where delivery_status in ('PENDING', 'FAILED')
+          and next_attempt_at is not null
+          and next_attempt_at &lt;= sysdate()
+          and (lease_until is null or lease_until &lt; sysdate())
+        order by next_attempt_at, delivery_id
+        limit #{limit}
+    </select>
+
+    <update id="claimDelivery">
+        update review_delivery_record
+        set lease_owner = #{leaseOwner},
+            lease_until = date_add(sysdate(), interval #{leaseSeconds} second),
+            update_by = 'system',
+            update_time = sysdate()
+        where delivery_id = #{deliveryId}
+          and delivery_status in ('PENDING', 'FAILED')
+          and next_attempt_at is not null
+          and next_attempt_at &lt;= sysdate()
+          and (lease_until is null or lease_until &lt; sysdate())
+    </update>
+
+    <update id="completeDelivery">
+        update review_delivery_record
+        set channel = coalesce(#{resolvedChannel}, channel),
+            external_id = coalesce(#{externalId}, external_id),
+            delivery_status = 'SUCCESS',
+            failure_message = null,
+            attempt_count = attempt_count + 1,
+            last_attempt_time = sysdate(),
+            next_attempt_at = null,
+            last_error_code = null,
+            lease_owner = null,
+            lease_until = null,
+            <if test="contentSnapshot != null">
+            content_snapshot = #{contentSnapshot},
+            </if>
+            update_by = 'system',
+            update_time = sysdate()
+        where delivery_id = #{deliveryId}
+          and lease_owner = #{leaseOwner}
+          and lease_until &gt;= sysdate()
+    </update>
+
+    <update id="failDelivery">
+        update review_delivery_record
+        set delivery_status = #{deliveryStatus},
+            failure_message = #{failureMessage},
+            attempt_count = attempt_count + 1,
+            last_attempt_time = sysdate(),
+            next_attempt_at = <choose>
+                <when test="retryDelaySeconds != null">date_add(sysdate(), interval #{retryDelaySeconds} second)</when>
+                <otherwise>null</otherwise>
+            </choose>,
+            last_error_code = #{lastErrorCode},
+            lease_owner = null,
+            lease_until = null,
+            <if test="contentSnapshot != null">
+            content_snapshot = #{contentSnapshot},
+            </if>
+            update_by = 'system',
+            update_time = sysdate()
+        where delivery_id = #{deliveryId}
+          and lease_owner = #{leaseOwner}
+          and lease_until &gt;= sysdate()
+    </update>
+
+    <update id="requeueDelivery">
+        update review_delivery_record
+        set delivery_status = 'PENDING',
+            failure_message = null,
+            next_attempt_at = sysdate(),
+            last_error_code = null,
+            lease_owner = null,
+            lease_until = null,
+            trigger_source = #{triggerSource},
+            update_by = #{operator},
+            update_time = sysdate()
+        where delivery_id = #{deliveryId}
+          and delivery_status in ('FAILED', 'MANUAL')
+          and (lease_until is null or lease_until &lt; sysdate())
+    </update>
+
+    <update id="releaseDeliveryLease">
+        update review_delivery_record
+        set lease_owner = null,
+            lease_until = null,
+            update_time = sysdate()
+        where delivery_id = #{deliveryId}
+          and lease_owner = #{leaseOwner}
+    </update>
+
+    <update id="releaseWorkerLeases">
+        update review_delivery_record
+        set lease_owner = null,
+            lease_until = null,
+            update_time = sysdate()
+        where lease_owner = #{leaseOwner}
+          and delivery_status in ('PENDING', 'FAILED')
+    </update>
+
+    <update id="expireWorkerLeases">
+        update review_delivery_record
+        set lease_until = date_sub(sysdate(), interval 1 second),
+            last_error_code = 'DELIVERY_LEASE_EXPIRED',
+            failure_message = '投递节点优雅停机超时，租约已置过期，等待恢复扫描接管',
+            update_time = sysdate()
+        where lease_owner = #{leaseOwner}
+          and delivery_status = 'PENDING'
+          and (lease_until is null or lease_until &gt;= sysdate())
+    </update>
+
+    <update id="markManualHandled">
+        update review_delivery_record
+        set delivery_status = 'SKIPPED',
+            last_error_code = #{lastErrorCode},
+            failure_message = #{failureMessage},
+            lease_owner = null,
+            lease_until = null,
+            next_attempt_at = null,
+            update_by = #{operator},
+            update_time = sysdate()
+        where delivery_id = #{deliveryId}
+          and delivery_status = 'MANUAL'
     </update>
 
 </mapper>

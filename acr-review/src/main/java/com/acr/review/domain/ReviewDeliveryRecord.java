@@ -16,11 +16,25 @@ public class ReviewDeliveryRecord extends BaseEntity
     private String provider;
     private String channel;
     private Integer prNumber;
+    /** 行内评论关联的问题 ID；总结/IM 为 null。 */
+    private Long issueId;
     private String idempotencyKey;
     private String externalId;
     private String deliveryStatus;
     private String failureMessage;
     private Integer attemptCount;
+
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    private Date nextAttemptAt;
+
+    /** 稳定错误码，供自动重试策略与运维检索使用。 */
+    private String lastErrorCode;
+
+    /** 当前投递执行租约持有者；为空表示未被工作节点领取。 */
+    private String leaseOwner;
+
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    private Date leaseUntil;
 
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private Date lastAttemptTime;
@@ -117,6 +131,16 @@ public class ReviewDeliveryRecord extends BaseEntity
         this.prNumber = prNumber;
     }
 
+    public Long getIssueId()
+    {
+        return issueId;
+    }
+
+    public void setIssueId(Long issueId)
+    {
+        this.issueId = issueId;
+    }
+
     public String getIdempotencyKey()
     {
         return idempotencyKey;
@@ -165,6 +189,46 @@ public class ReviewDeliveryRecord extends BaseEntity
     public void setAttemptCount(Integer attemptCount)
     {
         this.attemptCount = attemptCount;
+    }
+
+    public Date getNextAttemptAt()
+    {
+        return nextAttemptAt;
+    }
+
+    public void setNextAttemptAt(Date nextAttemptAt)
+    {
+        this.nextAttemptAt = nextAttemptAt;
+    }
+
+    public String getLastErrorCode()
+    {
+        return lastErrorCode;
+    }
+
+    public void setLastErrorCode(String lastErrorCode)
+    {
+        this.lastErrorCode = lastErrorCode;
+    }
+
+    public String getLeaseOwner()
+    {
+        return leaseOwner;
+    }
+
+    public void setLeaseOwner(String leaseOwner)
+    {
+        this.leaseOwner = leaseOwner;
+    }
+
+    public Date getLeaseUntil()
+    {
+        return leaseUntil;
+    }
+
+    public void setLeaseUntil(Date leaseUntil)
+    {
+        this.leaseUntil = leaseUntil;
     }
 
     public Date getLastAttemptTime()

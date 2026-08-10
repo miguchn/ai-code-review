@@ -59,6 +59,7 @@ public class ReviewTaskCreateServiceImpl implements IReviewTaskCreateService
         task.setChangedFiles(prEvent.changedFiles());
         task.setTriggerType("WEBHOOK");
         task.setTaskStatus("PENDING");
+        task.setChangeKey("PR#" + prEvent.prNumber());
         task.setAttemptCount(0);
         task.setCreateBy("webhook");
         snapshotService.freezeExecutionSnapshot(project, task);
@@ -86,6 +87,7 @@ public class ReviewTaskCreateServiceImpl implements IReviewTaskCreateService
         task.setChangedFiles(null);
         task.setTriggerType("WEBHOOK");
         task.setTaskStatus("PENDING");
+        task.setChangeKey("PUSH#" + pushEvent.branch());
         task.setAttemptCount(0);
         task.setCreateBy("webhook");
         snapshotService.freezeExecutionSnapshot(project, task);
@@ -103,6 +105,8 @@ public class ReviewTaskCreateServiceImpl implements IReviewTaskCreateService
             throw new ServiceException("事件已生成审查任务，请勿重复建单");
         }
 
+        supersedeOlderPending(task);
+
         event.setTaskId(task.getTaskId());
         event.setProcessStatus("ACCEPTED");
         event.setProcessMessage(acceptedPrefix + task.getTaskId());
@@ -110,6 +114,19 @@ public class ReviewTaskCreateServiceImpl implements IReviewTaskCreateService
         eventMapper.updateProcessResult(event);
         executionService.scheduleExecution(task.getTaskId());
         return task.getTaskId();
+    }
+
+    /**
+     * 同 project_id+change_key 下尚未启动的旧任务条件更新为 SUPERSEDED，并指向本任务。
+     * 以条件更新影响行数判定，不用 SELECT FOR UPDATE。
+     */
+    private void supersedeOlderPending(ReviewTask task)
+    {
+        if (task.getProjectId() == null || StringUtils.isEmpty(task.getChangeKey()) || task.getTaskId() == null)
+        {
+            return;
+        }
+        taskMapper.supersedePendingByChangeKey(task.getProjectId(), task.getChangeKey(), task.getTaskId());
     }
 
     /** 推送任务标题：优先最新提交摘要，否则「N 个提交」。 */

@@ -19,4 +19,9 @@ public interface ReviewTaskRunMapper
     int updateTopIssuesJson(@Param("runId") Long runId, @Param("topIssuesJson") String topIssuesJson);
 
     Integer selectMaxAttemptNo(@Param("taskId") Long taskId);
+
+    /** 新 epoch 开始前，将上次因租约过期遗留的 RUNNING 执行记录闭合。 */
+    int failInterruptedRuns(@Param("taskId") Long taskId,
+                            @Param("failureType") String failureType,
+                            @Param("failureMessage") String failureMessage);
 }

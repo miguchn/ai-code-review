@@ -4,8 +4,8 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.concurrent.TimeUnit;
 import org.springframework.stereotype.Component;
+import com.acr.review.git.GitCommandRunner;
 
 /** 内置测试样例：最小 Git 仓库，供引擎测试调用使用。 */
 @Component
@@ -18,6 +18,13 @@ public class ReviewEngineSampleWorkspace
             }
         }
         """;
+
+    private final GitCommandRunner gitCommandRunner;
+
+    public ReviewEngineSampleWorkspace(GitCommandRunner gitCommandRunner)
+    {
+        this.gitCommandRunner = gitCommandRunner;
+    }
 
     public Path prepare(Path workspace) throws IOException, InterruptedException
     {
@@ -37,22 +44,12 @@ public class ReviewEngineSampleWorkspace
 
     private void runGit(Path workspace, String... args) throws IOException, InterruptedException
     {
-        String[] command = new String[3 + args.length];
-        command[0] = "git";
-        command[1] = "-C";
-        command[2] = workspace.toString();
-        System.arraycopy(args, 0, command, 3, args.length);
-
-        ProcessBuilder builder = new ProcessBuilder(command);
-        builder.redirectErrorStream(true);
-        Process process = builder.start();
-        boolean finished = process.waitFor(30, TimeUnit.SECONDS);
-        if (!finished)
+        GitCommandRunner.GitCommandResult result = gitCommandRunner.execute(workspace, null, 30, args);
+        if (result.timedOut())
         {
-            process.destroyForcibly();
             throw new IOException("git 命令超时: git " + String.join(" ", args));
         }
-        if (process.exitValue() != 0)
+        if (!result.successful())
         {
             throw new IOException("git 命令失败: git " + String.join(" ", args));
         }

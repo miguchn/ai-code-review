@@ -48,6 +48,7 @@ class ReviewCommentBodyRendererTest
         stats.setExistingCount(1);
 
         ReviewTaskRun run = new ReviewTaskRun();
+        run.setRunId(9001L);
         run.setTopIssuesJson(JSON.toJSONString(List.of(issue, existing)));
         run.setResultJson(JSON.toJSONString(java.util.Map.of("scopeStats", stats)));
 
@@ -60,6 +61,20 @@ class ReviewCommentBodyRendererTest
         assertTrue(body.contains("**[中][存量]** 旧风格问题 — `src/B.java` L3"));
         assertTrue(body.contains("本次新增 2 个问题 · 存量 1 个"));
         assertTrue(body.contains("审查文件：纳入 3 个 · 扩展 1 个"));
+        assertTrue(body.contains(ReviewDeliveryConstants.COMMENT_MARKER));
+        assertTrue(body.contains(ReviewDeliveryConstants.commentRunMarker(9001L)));
+        // 检索仍依赖原 marker 常量子串，兼容存量评论
+        assertTrue(body.contains("<!-- acr-review-summary -->"));
+    }
+
+    @Test
+    void legacyMarkerWithoutRunSegmentRemainsSearchableConstant()
+    {
+        ReviewSummaryContent content = ReviewSummaryContent.builder()
+            .taskId(1L)
+            .conclusionLabel("通过")
+            .build();
+        String body = ReviewCommentBodyRenderer.render(content);
         assertTrue(body.contains(ReviewDeliveryConstants.COMMENT_MARKER));
         assertEquals(ReviewDeliveryConstants.COMMENT_MARKER,
             body.substring(body.lastIndexOf("<!--")).trim());

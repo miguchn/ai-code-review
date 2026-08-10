@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import com.acr.review.engine.config.ReviewEngineProperties;
@@ -19,6 +20,7 @@ class OpenCodeReviewCliAdapterTest
 
     private ReviewEngineProperties properties;
     private OpenCodeReviewCliAdapter adapter;
+    private ExternalProcessRunner externalProcessRunner;
 
     @BeforeEach
     void setUp() throws IOException
@@ -53,11 +55,18 @@ class OpenCodeReviewCliAdapterTest
         properties.setDefaultTimeoutSeconds(5);
         properties.setMaxOutputBytes(4096);
 
+        externalProcessRunner = new ExternalProcessRunner();
         adapter = new OpenCodeReviewCliAdapter(
             properties,
-            new ReviewEngineProcessRunner(properties),
+            new ReviewEngineProcessRunner(properties, externalProcessRunner),
             new ReviewEngineWorkspaceManager(properties),
             new ReviewEngineOutputParser());
+    }
+
+    @AfterEach
+    void tearDown()
+    {
+        externalProcessRunner.destroy();
     }
 
     @Test

@@ -76,9 +76,19 @@
           <span class="branch-flow">{{ emptyDash(scope.row.sourceBranch) }} → {{ emptyDash(scope.row.targetBranch) }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="任务状态" width="100">
+      <el-table-column label="任务状态" min-width="180">
         <template #default="scope">
-          <dict-tag :options="review_task_status" :value="scope.row.taskStatus" />
+          <div class="task-status-cell">
+            <dict-tag :options="review_task_status" :value="scope.row.taskStatus" />
+            <span v-if="scope.row.taskStatus === 'RETRYING' && scope.row.nextRunAt" class="next-run">
+              下次重试 {{ formatDateTime(scope.row.nextRunAt) }}
+            </span>
+            <router-link
+              v-if="scope.row.taskStatus === 'SUPERSEDED' && scope.row.supersededBy"
+              :to="'/review/task-detail/index/' + scope.row.supersededBy"
+              class="superseded-link"
+            >替代任务 #{{ scope.row.supersededBy }}</router-link>
+          </div>
         </template>
       </el-table-column>
       <el-table-column label="当前步骤" width="120">
@@ -101,7 +111,7 @@
       <el-table-column label="创建时间" width="170">
         <template #default="scope">{{ formatDateTime(scope.row.createTime) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="160" fixed="right">
+      <el-table-column label="操作" width="220" fixed="right">
         <template #default="scope">
           <el-tooltip :content="detailActionTip()" placement="top" :disabled="canOpenDetail()">
             <span class="action-wrap">
@@ -115,6 +125,11 @@
               </el-button>
             </span>
           </el-tooltip>
+          <el-tooltip :content="cancelActionTip(scope.row)" placement="top" :disabled="canCancel(scope.row)">
+            <span class="action-wrap">
+              <el-button link type="danger" :disabled="!canCancel(scope.row)" @click="handleCancelClick(scope.row)">终止</el-button>
+            </span>
+          </el-tooltip>
         </template>
       </el-table-column>
     </el-table>
@@ -125,7 +140,7 @@
 </template>
 
 <script setup name="ReviewTask">
-import { listReviewTask, retryReviewTask } from '@/api/review/task'
+import { listReviewTask, retryReviewTask, cancelReviewTask } from '@/api/review/task'
 import { listReviewProject } from '@/api/review/project'
 import auth from '@/plugins/auth'
 import { emptyDash, formatDateTime, isPushTask, formatPushRefDisplay, readableFailureMessage } from '@/utils/reviewDisplay'
@@ -193,7 +208,12 @@ function canOpenDetail() {
 
 function canRetry(row) {
   return auth.hasPermi('review:task:retry')
-    && (row?.taskStatus === 'FAILED' || row?.taskStatus === 'PENDING' || row?.taskStatus === 'RUNNING')
+    && (row?.taskStatus === 'FAILED' || row?.taskStatus === 'PENDING' || row?.taskStatus === 'RUNNING' || row?.taskStatus === 'RETRYING')
+}
+
+function canCancel(row) {
+  return auth.hasPermi('review:task:cancel')
+    && (row?.taskStatus === 'PENDING' || row?.taskStatus === 'RETRYING' || row?.taskStatus === 'RUNNING')
 }
 
 function retryActionLabel(row) {
@@ -219,11 +239,34 @@ function retryActionTip(row) {
   const status = row?.taskStatus
   if (status === 'FAILED') return '任务已失败，可重试；历史执行记录会保留。'
   if (status === 'PENDING') return '任务尚未开始。若长时间仍为待执行，可点「执行」手动触发。'
+  if (status === 'RETRYING') {
+    return row?.nextRunAt
+      ? `待重试，下次重试时间 ${formatDateTime(row.nextRunAt)}。可提前手动触发。`
+      : '待重试，可手动触发。'
+  }
   if (status === 'RUNNING') {
     return `当前为「${statusLabel(status)}」。请等待结束；若已中断超过 30 分钟，可点「重试」回收。`
   }
   if (status === 'SUCCESS') return '已完成任务不可再次执行。结果请到「审查记录」查看。'
-  return `仅「待执行」或「已失败」任务可手动触发。当前状态：${statusLabel(status) || '未知'}。`
+  if (status === 'CANCELLED') return '任务已取消，不可再执行。'
+  if (status === 'SUPERSEDED') {
+    const by = row?.supersededBy
+    return by
+      ? `已被更新任务 #${by} 替代，本任务仅保留历史，不可再执行。`
+      : '已被更新任务替代，本任务仅保留历史，不可再执行。'
+  }
+  return `仅「待执行」「待重试」或「已失败」任务可手动触发。当前状态：${statusLabel(status) || '未知'}。`
+}
+
+function cancelActionTip(row) {
+  if (!auth.hasPermi('review:task:cancel')) {
+    return '当前账号没有「任务终止」权限（review:task:cancel）。'
+  }
+  const status = row?.taskStatus
+  if (status === 'PENDING' || status === 'RETRYING' || status === 'RUNNING') {
+    return '终止后状态变为「已取消」，进行中的旧执行写入将被围栏拒绝。'
+  }
+  return `当前状态「${statusLabel(status) || '未知'}」不可终止。`
 }
 
 function handleDetailClick(row) {
@@ -245,12 +288,25 @@ function handleRetryClick(row) {
     ? '确认立即执行该待执行任务？'
     : running
       ? '仅当本次执行已中断（超过 30 分钟）时才可回收重试，确认继续？'
-      : '确认重新执行该失败任务？历史执行记录将保留。'
+      : '确认重新执行该任务？历史执行记录将保留。'
   const successText = pending ? '已提交执行' : '已提交重试'
   proxy.$modal.confirm(confirmText).then(() => retryReviewTask(row.taskId)).then(() => {
     proxy.$modal.msgSuccess(successText)
     getList()
   }).catch(() => {})
+}
+
+function handleCancelClick(row) {
+  if (!canCancel(row)) {
+    proxy.$modal.msgWarning(cancelActionTip(row))
+    return
+  }
+  proxy.$modal.confirm('确认终止该任务？终止后状态变为「已取消」，且不会再被调度领取。')
+    .then(() => cancelReviewTask(row.taskId))
+    .then(() => {
+      proxy.$modal.msgSuccess('已终止')
+      getList()
+    }).catch(() => {})
 }
 
 function onStatusChange(value) {
@@ -301,4 +357,8 @@ function applyRouteQuery() {
 .failure-message { color: var(--el-color-danger); }
 .empty-tip { color: var(--el-text-color-placeholder); }
 .action-wrap { display: inline-block; }
+.task-status-cell { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.superseded-link { color: var(--el-color-primary); font-size: 12px; text-decoration: none; }
+.superseded-link:hover { text-decoration: underline; }
+.next-run { font-size: 12px; color: #64748b; }
 </style>

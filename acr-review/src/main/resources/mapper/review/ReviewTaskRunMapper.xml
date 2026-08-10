@@ -158,4 +158,16 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     <select id="selectMaxAttemptNo" resultType="java.lang.Integer">
         select max(attempt_no) from review_task_run where task_id = #{taskId}
     </select>
+
+    <update id="failInterruptedRuns">
+        update review_task_run
+        set run_status = 'FAILED',
+            failure_type = #{failureType},
+            failure_message = #{failureMessage},
+            finished_time = sysdate(),
+            update_by = 'system',
+            update_time = sysdate()
+        where task_id = #{taskId}
+          and run_status = 'RUNNING'
+    </update>
 </mapper>

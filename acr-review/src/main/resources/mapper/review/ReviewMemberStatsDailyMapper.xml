@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.acr.review.mapper.ReviewMemberStatsDailyMapper">
+
+    <resultMap id="ReviewMemberStatsDailyResult" type="com.acr.review.insight.ReviewMemberStatsDaily">
+        <id property="id" column="id" />
+        <result property="projectId" column="project_id" />
+        <result property="authorKey" column="author_key" />
+        <result property="authorName" column="author_name" />
+        <result property="statDate" column="stat_date" />
+        <result property="commitCount" column="commit_count" />
+        <result property="tasksReviewed" column="tasks_reviewed" />
+        <result property="issuesNew" column="issues_new" />
+        <result property="issuesOpen" column="issues_open" />
+        <result property="createTime" column="create_time" />
+        <result property="updateTime" column="update_time" />
+    </resultMap>
+
+    <insert id="upsert" parameterType="com.acr.review.insight.ReviewMemberStatsDaily">
+        INSERT INTO review_member_stats_daily (
+            project_id, author_key, author_name, stat_date,
+            commit_count, tasks_reviewed, issues_new, issues_open,
+            create_time, update_time
+        ) VALUES (
+            #{projectId}, #{authorKey}, #{authorName}, #{statDate},
+            #{commitCount}, #{tasksReviewed}, #{issuesNew}, #{issuesOpen},
+            SYSDATE(), SYSDATE()
+        )
+        ON DUPLICATE KEY UPDATE
+            author_name = VALUES(author_name),
+            commit_count = VALUES(commit_count),
+            tasks_reviewed = VALUES(tasks_reviewed),
+            issues_new = VALUES(issues_new),
+            issues_open = VALUES(issues_open),
+            update_time = SYSDATE()
+    </insert>
+
+    <select id="selectScopedRange" parameterType="com.acr.review.insight.ReviewMemberStatsDaily"
+            resultMap="ReviewMemberStatsDailyResult">
+        SELECT m.*
+        FROM review_member_stats_daily m
+        INNER JOIN review_project p ON p.project_id = m.project_id
+        INNER JOIN sys_business_system bs ON bs.system_id = p.business_system_id
+        INNER JOIN sys_dept d ON d.dept_id = p.dept_id
+        INNER JOIN sys_user owner ON owner.user_id = p.owner_user_id
+        WHERE m.stat_date &gt;= #{params.beginDate}
+          AND m.stat_date &lt;= #{params.endDate}
+        <if test="params.businessSystemId != null">
+            AND p.business_system_id = #{params.businessSystemId}
+        </if>
+        <if test="params.projectId != null">
+            AND m.project_id = #{params.projectId}
+        </if>
+        <if test="params.authorKeys != null and params.authorKeys.size() &gt; 0">
+            AND m.author_key IN
+            <foreach collection="params.authorKeys" item="k" open="(" separator="," close=")">
+                #{k}
+            </foreach>
+        </if>
+        ${params.dataScope}
+        ORDER BY m.stat_date ASC, m.author_key ASC
+    </select>
+
+    <select id="selectMemberAgg" resultType="map">
+        SELECT m.author_key AS author_key,
+               MAX(m.author_name) AS author_name,
+               SUM(m.commit_count) AS commit_count,
+               SUM(m.tasks_reviewed) AS tasks_reviewed,
+               SUM(m.issues_new) AS issues_new,
+               MAX(m.issues_open) AS issues_open
+        FROM review_member_stats_daily m
+        WHERE m.stat_date &gt;= #{beginDate}
+          AND m.stat_date &lt;= #{endDate}
+        <if test="authorKeys != null and authorKeys.size() &gt; 0">
+            AND m.author_key IN
+            <foreach collection="authorKeys" item="k" open="(" separator="," close=")">
+                #{k}
+            </foreach>
+        </if>
+        <if test="projectIds != null and projectIds.size() &gt; 0">
+            AND m.project_id IN
+            <foreach collection="projectIds" item="pid" open="(" separator="," close=")">
+                #{pid}
+            </foreach>
+        </if>
+        GROUP BY m.author_key
+        ORDER BY commit_count DESC
+    </select>
+
+    <select id="selectEarliestStatDate" resultType="java.util.Date">
+        SELECT MIN(stat_date)
+        FROM review_member_stats_daily
+        <where>
+            <if test="authorKeys != null and authorKeys.size() &gt; 0">
+                author_key IN
+                <foreach collection="authorKeys" item="k" open="(" separator="," close=")">
+                    #{k}
+                </foreach>
+            </if>
+        </where>
+    </select>
+</mapper>

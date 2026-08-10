@@ -7,15 +7,48 @@ public final class ReviewDeliveryConstants
     public static final String CHANNEL_GITLAB_MR_SUMMARY = "GITLAB_MR_SUMMARY_COMMENT";
     public static final String CHANNEL_GITEE_PR_SUMMARY = "GITEE_PR_SUMMARY_COMMENT";
     public static final String CHANNEL_GITEA_PR_SUMMARY = "GITEA_PR_SUMMARY_COMMENT";
+    public static final String CHANNEL_GITHUB_PR_INLINE = "GITHUB_PR_INLINE_COMMENT";
+    public static final String CHANNEL_GITLAB_MR_INLINE = "GITLAB_MR_INLINE_COMMENT";
+    public static final String CHANNEL_GITEE_PR_INLINE = "GITEE_PR_INLINE_COMMENT";
+    public static final String CHANNEL_GITEA_PR_INLINE = "GITEA_PR_INLINE_COMMENT";
     public static final String CHANNEL_DINGTALK_ROBOT = "DINGTALK_ROBOT";
     public static final String CHANNEL_WECOM_ROBOT = "WECOM_ROBOT";
     public static final String CHANNEL_FEISHU_BOT = "FEISHU_BOT";
+    /** 项目启用通知但渠道配置不可解析时的可运维占位渠道。 */
+    public static final String CHANNEL_IM_NOTIFICATION = "IM_NOTIFICATION";
 
     /** 评论正文固定标记：用于查找并更新同一 PR 上的 ACR 总结评论。 */
     public static final String COMMENT_MARKER = "<!-- acr-review-summary -->";
 
+    /** 投递错误码：旧 head 任务被更新结论围栏抑制，不得覆盖当前评论。 */
+    public static final String ERROR_SKIPPED_STALE = "SKIPPED_STALE";
+
+    /** 总结评论中嵌入的 run 代次标记前缀（完整形态见 {@link #commentRunMarker(Long)}）。 */
+    public static final String COMMENT_RUN_MARKER_PREFIX = "<!-- acr-run:";
+
+    /** 构造嵌入 run_id 的隐藏标记；检索仍只用 {@link #COMMENT_MARKER}，保证存量评论可命中。 */
+    public static String commentRunMarker(Long runId)
+    {
+        if (runId == null)
+        {
+            return "";
+        }
+        return COMMENT_RUN_MARKER_PREFIX + runId + " -->";
+    }
+
+    /** 行内评论默认严重度白名单。 */
+    public static final String DEFAULT_INLINE_SEVERITIES = "CRITICAL,HIGH";
+
+    /** 行内评论描述截断上限。 */
+    public static final int INLINE_MAX_DESCRIPTION_CHARS = 200;
+
+    /** 行内评论建议截断上限。 */
+    public static final int INLINE_MAX_SUGGESTION_CHARS = 120;
+
     public static final String STATUS_SUCCESS = "SUCCESS";
     public static final String STATUS_FAILED = "FAILED";
+    public static final String STATUS_PENDING = "PENDING";
+    public static final String STATUS_MANUAL = "MANUAL";
     public static final String STATUS_SKIPPED = "SKIPPED";
 
     /** 任务 SUCCESS/FAILED 后的外部投递（GitHub 总结评论或 IM）。 */
@@ -24,6 +57,12 @@ public final class ReviewDeliveryConstants
     public static final String TRIGGER_ISSUE_DISPOSITION = "ISSUE_DISPOSITION";
     /** 投递记录页或任务详情手动重试/补发。 */
     public static final String TRIGGER_MANUAL_RETRY = "MANUAL_RETRY";
+
+    public static final String ERROR_CONFIGURATION = "DELIVERY_CONFIGURATION";
+    public static final String ERROR_EXTERNAL_CALL = "DELIVERY_EXTERNAL_CALL";
+    public static final String ERROR_LEASE_EXPIRED = "DELIVERY_LEASE_EXPIRED";
+    /** 运营人员标记人工已处理，不再自动投递。 */
+    public static final String ERROR_MANUAL_HANDLED = "MANUAL_HANDLED";
 
     public static final String PROVIDER_GITHUB = "GITHUB";
 
@@ -50,6 +89,12 @@ public final class ReviewDeliveryConstants
 
     /** 投递正文快照 kind：PR/MR 总结评论。 */
     public static final String SNAPSHOT_KIND_SUMMARY_COMMENT = "SUMMARY_COMMENT";
+
+    /** 投递正文快照 kind：PR/MR 行内评论。 */
+    public static final String SNAPSHOT_KIND_INLINE_COMMENT = "INLINE_COMMENT";
+
+    /** 稳定错误码：平台不支持行内评论。 */
+    public static final String ERROR_INLINE_UNSUPPORTED = "DELIVERY_INLINE_UNSUPPORTED";
 
     /** 失败原因落库上限。 */
     public static final int MAX_FAILURE_MESSAGE_CHARS = 500;
@@ -103,6 +148,42 @@ public final class ReviewDeliveryConstants
             || CHANNEL_GITLAB_MR_SUMMARY.equals(channel)
             || CHANNEL_GITEE_PR_SUMMARY.equals(channel)
             || CHANNEL_GITEA_PR_SUMMARY.equals(channel);
+    }
+
+    /** 按平台返回行内评论投递渠道编码。 */
+    public static String inlineChannelForProvider(String provider)
+    {
+        if (provider == null)
+        {
+            return CHANNEL_GITHUB_PR_INLINE;
+        }
+        return switch (normalizeProvider(provider))
+        {
+            case "GITLAB" -> CHANNEL_GITLAB_MR_INLINE;
+            case "GITEE" -> CHANNEL_GITEE_PR_INLINE;
+            case "GITEA" -> CHANNEL_GITEA_PR_INLINE;
+            default -> CHANNEL_GITHUB_PR_INLINE;
+        };
+    }
+
+    public static boolean isInlineCommentChannel(String channel)
+    {
+        return CHANNEL_GITHUB_PR_INLINE.equals(channel)
+            || CHANNEL_GITLAB_MR_INLINE.equals(channel)
+            || CHANNEL_GITEE_PR_INLINE.equals(channel)
+            || CHANNEL_GITEA_PR_INLINE.equals(channel);
+    }
+
+    /** 行内幂等键：{provider}:{projectId}:{issueId}:INLINE_COMMENT */
+    public static String inlineIdempotencyKey(String provider, Long projectId, Long issueId)
+    {
+        return normalizeProvider(provider) + ":" + projectId + ":" + issueId + ":INLINE_COMMENT";
+    }
+
+    /** 行内评论正文隐藏标记。 */
+    public static String inlineCommentMarker(Long issueId)
+    {
+        return "<!-- acr:inline:issue-" + issueId + " -->";
     }
 
     /** IM 幂等键：{channelType}:{taskId}:REVIEW_DONE */

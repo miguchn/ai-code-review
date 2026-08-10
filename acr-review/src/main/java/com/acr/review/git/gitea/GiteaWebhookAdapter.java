@@ -7,6 +7,7 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.springframework.stereotype.Component;
 import com.acr.review.git.GitPullRequestEvent;
+import com.acr.review.git.GitPushCommitParser;
 import com.acr.review.git.GitPushEvent;
 import com.acr.review.git.GitRepositoryCoordinates;
 import com.acr.review.git.GitWebhookAdapter;
@@ -131,7 +132,7 @@ public class GiteaWebhookAdapter implements GitWebhookAdapter
         boolean deleted = Boolean.TRUE.equals(root.getBoolean("deleted")) || isZeroSha(after);
         return new GitPushEvent(deliveryId, ownerLogin, repoName, fullName, branch,
             before, after, resolvePusher(root), resolveCommitCount(root), resolveHeadCommitMessage(root),
-            created, deleted);
+            created, deleted, GitPushCommitParser.parseCommits(root));
     }
 
     @Override

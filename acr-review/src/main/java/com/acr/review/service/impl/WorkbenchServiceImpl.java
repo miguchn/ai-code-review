@@ -264,9 +264,9 @@ public class WorkbenchServiceImpl implements IWorkbenchService
         if (SecurityUtils.hasPermi(WorkbenchConstants.PERM_DELIVERY_LIST))
         {
             ReviewDeliveryRecord query = new ReviewDeliveryRecord();
-            query.setDeliveryStatus(ReviewDeliveryConstants.STATUS_FAILED);
+            query.setDeliveryStatus(ReviewDeliveryConstants.STATUS_MANUAL);
             Map<String, String> q = new LinkedHashMap<>();
-            q.put("deliveryStatus", ReviewDeliveryConstants.STATUS_FAILED);
+            q.put("deliveryStatus", ReviewDeliveryConstants.STATUS_MANUAL);
             cards.add(new WorkbenchCard(
                 WorkbenchConstants.CARD_DELIVERY_FAILED,
                 WorkbenchConstants.TITLE_DELIVERY_FAILED,

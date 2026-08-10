@@ -70,10 +70,36 @@ public final class ReviewCommentBodyRenderer
         appendRecheckingSection(sb, content.getRecheckingTitles());
         sb.append("\n### 范围统计\n\n");
         sb.append(formatScopeStats(scopeStats));
+        appendInlinePreview(sb, content);
         sb.append("\n\n---\n");
         sb.append("*由 AI Code Review 自动生成并更新；请勿手动删除本标记评论。*\n");
-        sb.append(ReviewDeliveryConstants.COMMENT_MARKER).append("\n");
+        sb.append(ReviewDeliveryConstants.COMMENT_MARKER);
+        if (content.getRunId() != null)
+        {
+            sb.append(ReviewDeliveryConstants.commentRunMarker(content.getRunId()));
+        }
+        sb.append("\n");
         return sb.toString();
+    }
+
+    /** 行内评论预告（D5）；N=0 时不追加。 */
+    static void appendInlinePreview(StringBuilder sb, ReviewSummaryContent content)
+    {
+        if (sb == null || content == null)
+        {
+            return;
+        }
+        Integer total = content.getInlineCommentCount();
+        if (total == null || total <= 0)
+        {
+            return;
+        }
+        int critical = content.getInlineCriticalCount() == null ? 0 : content.getInlineCriticalCount();
+        int high = content.getInlineHighCount() == null ? 0 : content.getInlineHighCount();
+        sb.append('\n').append("本次审查生成 ").append(total)
+            .append(" 条行内评论（严重 ").append(critical)
+            .append(" · 高 ").append(high)
+            .append("），单独发布于代码平台");
     }
 
     /** 疑似已修复段；装配异常时静默跳过。 */
@@ -120,6 +146,7 @@ public final class ReviewCommentBodyRenderer
         }
         return ReviewSummaryContent.builder()
             .taskId(task == null ? null : task.getTaskId())
+            .runId(run == null ? null : run.getRunId())
             .conclusion(conclusion)
             .conclusionLabel(conclusionLabel(conclusion))
             .totalScore(firstNonNull(

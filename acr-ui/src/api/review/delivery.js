@@ -23,9 +23,22 @@ export function retryDeliveryById(deliveryId) {
   return request({ url: '/review/delivery/record/' + deliveryId + '/retry', method: 'post' })
 }
 
+/** 标记人工已处理（仅 MANUAL）。 */
+export function markDeliveryHandled(deliveryId) {
+  return request({ url: '/review/delivery/record/' + deliveryId + '/mark-handled', method: 'post' })
+}
+
 /** 查看投递正文快照（kind/channelType/title/body）。 */
 export function getDeliveryContent(deliveryId) {
   return request({ url: '/review/delivery/record/' + deliveryId + '/content', method: 'get' })
+}
+
+export function getInlineDeliveryByIssue(issueId) {
+  return request({ url: '/review/delivery/issue/' + issueId + '/inline', method: 'get' })
+}
+
+export function listInlineDeliveriesByTask(taskId) {
+  return request({ url: '/review/delivery/task/' + taskId + '/inline', method: 'get' })
 }
 
 /** @deprecated 使用 retryDelivery */

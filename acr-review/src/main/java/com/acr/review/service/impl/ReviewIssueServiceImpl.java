@@ -20,6 +20,7 @@ import com.acr.common.utils.SecurityUtils;
 import com.acr.common.utils.StringUtils;
 import com.acr.review.delivery.ReviewDeliveryConstants;
 import com.acr.review.delivery.ReviewSummaryContentFactory;
+import com.acr.review.domain.ReviewChangeKeyGuard;
 import com.acr.review.domain.ReviewCommentSyncResult;
 import com.acr.review.domain.ReviewIssue;
 import com.acr.review.domain.ReviewIssueAction;
@@ -91,6 +92,11 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
     {
         if (task == null || task.getTaskId() == null || task.getProjectId() == null || task.getPrNumber() == null)
         {
+            return ReviewRoundReconcileResult.empty();
+        }
+        if (!ReviewChangeKeyGuard.isLatestForChangeKey(taskMapper, task))
+        {
+            // 旧 head：只保留历史运行结果，不改问题台账
             return ReviewRoundReconcileResult.empty();
         }
         if (!shouldReconcile(task, run))
@@ -913,12 +919,13 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
         {
             return ReviewCommentSyncResult.skipped();
         }
-        // 处置已在本事务写入；评论失败由 delivery 内部落 FAILED 并返回，不回滚处置。
+        // 处置事务只登记投递意图；评论由异步工作节点执行，不把外部调用纳入本事务。
         return deliveryService.rerenderSummaryComment(issue.getProjectId(), issue.getPrNumber());
     }
 
     /**
-     * 按 projectId+prNumber 去重后重渲染；任一 FAILED → FAILED，全部 SKIPPED → SKIPPED，否则 SUCCESS。
+     * 按 projectId+prNumber 去重后登记重渲染；任一 FAILED → FAILED，全部 SKIPPED → SKIPPED，
+     * 存在待投递则返回 PENDING。
      */
     private ReviewCommentSyncResult aggregateCommentRerender(List<ReviewIssue> issues)
     {
@@ -971,7 +978,10 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
         {
             return ReviewCommentSyncResult.skipped();
         }
-        return ReviewCommentSyncResult.of(ReviewDeliveryConstants.STATUS_SUCCESS, null, null);
+        boolean anyPending = results.stream()
+            .anyMatch(sync -> ReviewDeliveryConstants.STATUS_PENDING.equals(sync.getStatus()));
+        return ReviewCommentSyncResult.of(anyPending
+            ? ReviewDeliveryConstants.STATUS_PENDING : ReviewDeliveryConstants.STATUS_SUCCESS, null, null);
     }
 
     private static List<Long> dedupeIssueIds(List<Long> issueIds)

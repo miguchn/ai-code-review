@@ -11,6 +11,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import com.acr.review.delivery.ReviewDeliveryConstants;
 import com.acr.review.git.GitAccessContext;
+import com.acr.review.git.GitInlineCommentRequest;
 import com.acr.review.git.GitPullRequestComment;
 import com.acr.review.git.GitPullRequestCommentException;
 import com.acr.review.git.GitRepositoryCoordinates;
@@ -79,6 +80,50 @@ class GitLabPullRequestCommentClientTest
         RecordedRequest updateReq = server.takeRequest();
         assertEquals("PUT", updateReq.getMethod());
         assertTrue(updateReq.getPath().contains("/merge_requests/3/notes/55"));
+    }
+
+    @Test
+    void createsInlineCommentWithDiffRefsAndPosition() throws InterruptedException
+    {
+        server.enqueue(json(200, "{\"diff_refs\":{\"base_sha\":\"base123\",\"start_sha\":\"start123\","
+            + "\"head_sha\":\"head123\"}}"));
+        server.enqueue(json(201, "{\"id\":\"disc1\",\"notes\":[{\"id\":66,\"body\":\"inline note\"}]}"));
+
+        GitInlineCommentRequest request = new GitInlineCommentRequest(
+            "src/App.java", null, 5, "inline note", "fallbackHead");
+        GitPullRequestComment created = client.createInlineComment(repo, access, 3, request);
+        assertEquals("3:66", created.id());
+
+        RecordedRequest mrRequest = server.takeRequest();
+        assertTrue(mrRequest.getPath().contains("/merge_requests/3"));
+        assertFalse(mrRequest.getPath().contains("/discussions"));
+
+        RecordedRequest createRequest = server.takeRequest();
+        assertEquals("POST", createRequest.getMethod());
+        assertTrue(createRequest.getPath().contains("/merge_requests/3/discussions"));
+        String payload = createRequest.getBody().readUtf8();
+        assertTrue(payload.contains("\"position_type\":\"text\""));
+        assertTrue(payload.contains("\"new_path\":\"src/App.java\""));
+        assertTrue(payload.contains("\"new_line\":5"));
+        assertTrue(payload.contains("\"base_sha\":\"base123\""));
+        assertTrue(payload.contains("\"start_sha\":\"start123\""));
+        assertTrue(payload.contains("\"head_sha\":\"head123\""));
+    }
+
+    @Test
+    void findsInlineCommentWithMarkerInDiscussions() throws InterruptedException
+    {
+        server.enqueue(json(200, "[{\"id\":\"d1\",\"notes\":[{\"id\":1,\"body\":\"other\"}]},"
+            + "{\"id\":\"d2\",\"notes\":[{\"id\":99,\"body\":\"hello\\n"
+            + ReviewDeliveryConstants.COMMENT_MARKER + "\"}]}]"));
+
+        Optional<GitPullRequestComment> found = client.findInlineCommentWithMarker(
+            repo, access, 7, ReviewDeliveryConstants.COMMENT_MARKER);
+
+        assertTrue(found.isPresent());
+        assertEquals("7:99", found.get().id());
+        RecordedRequest request = server.takeRequest();
+        assertTrue(request.getPath().contains("/merge_requests/7/discussions"));
     }
 
     @Test

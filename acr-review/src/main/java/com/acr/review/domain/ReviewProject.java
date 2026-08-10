@@ -28,6 +28,10 @@ public class ReviewProject extends BaseEntity
     private String pushReviewEnabled;
     /** 推送触发分支（换行/逗号分隔，支持 glob 通配）。 */
     private String pushTriggerBranches;
+    /** 是否启用行内评论（0启用 1停用，默认停用）。 */
+    private String inlineCommentEnabled;
+    /** 行内评论严重度白名单（逗号分隔，默认 CRITICAL,HIGH）。 */
+    private String inlineSeverities;
     private Long businessSystemId;
     private String businessSystemName;
     private Long deptId;
@@ -224,6 +228,26 @@ public class ReviewProject extends BaseEntity
     public void setPushTriggerBranches(String pushTriggerBranches)
     {
         this.pushTriggerBranches = pushTriggerBranches;
+    }
+
+    public String getInlineCommentEnabled()
+    {
+        return inlineCommentEnabled;
+    }
+
+    public void setInlineCommentEnabled(String inlineCommentEnabled)
+    {
+        this.inlineCommentEnabled = inlineCommentEnabled;
+    }
+
+    public String getInlineSeverities()
+    {
+        return inlineSeverities;
+    }
+
+    public void setInlineSeverities(String inlineSeverities)
+    {
+        this.inlineSeverities = inlineSeverities;
     }
 
     @NotNull(message = "所属业务系统不能为空")

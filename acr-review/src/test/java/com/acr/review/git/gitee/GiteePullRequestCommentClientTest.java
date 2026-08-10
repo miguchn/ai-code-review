@@ -11,6 +11,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import com.acr.review.delivery.ReviewDeliveryConstants;
 import com.acr.review.git.GitAccessContext;
+import com.acr.review.git.GitInlineCommentRequest;
+import com.acr.review.git.GitInlineCommentUnsupportedException;
 import com.acr.review.git.GitPullRequestComment;
 import com.acr.review.git.GitPullRequestCommentException;
 import com.acr.review.git.GitRepositoryCoordinates;
@@ -75,6 +77,49 @@ class GiteePullRequestCommentClientTest
         RecordedRequest updateReq = server.takeRequest();
         assertEquals("PATCH", updateReq.getMethod());
         assertTrue(updateReq.getPath().contains("/issues/comments/55"));
+    }
+
+    @Test
+    void createsInlineCommentWithLineField() throws InterruptedException
+    {
+        server.enqueue(json(201, "{\"id\":55,\"body\":\"inline body\"}"));
+        GitInlineCommentRequest request = new GitInlineCommentRequest(
+            "src/Main.java", null, 15, "inline body", "commitSha123");
+        GitPullRequestComment created = client.createInlineComment(repo, ACCESS, 3, request);
+        assertEquals("55", created.id());
+        RecordedRequest recorded = server.takeRequest();
+        assertEquals("POST", recorded.getMethod());
+        assertTrue(recorded.getPath().contains("/pulls/3/comments"));
+        String payload = recorded.getBody().readUtf8();
+        assertTrue(payload.contains("\"path\":\"src/Main.java\""));
+        assertTrue(payload.contains("\"commit_id\":\"commitSha123\""));
+        assertTrue(payload.contains("\"line\":15"));
+    }
+
+    @Test
+    void throwsUnsupportedWhenServerReturns422()
+    {
+        server.enqueue(json(422, "{\"message\":\"line not supported\"}"));
+        GitInlineCommentRequest request = new GitInlineCommentRequest(
+            "src/Main.java", null, 15, "inline body", "commitSha123");
+        GitInlineCommentUnsupportedException ex = assertThrows(GitInlineCommentUnsupportedException.class,
+            () -> client.createInlineComment(repo, ACCESS, 3, request));
+        assertEquals("Gitee 不支持行内评论", ex.getMessage());
+    }
+
+    @Test
+    void findsInlineCommentWithMarker() throws InterruptedException
+    {
+        server.enqueue(json(200, "[{\"id\":1,\"body\":\"other\"},"
+            + "{\"id\":99,\"body\":\"hello\\n" + ReviewDeliveryConstants.COMMENT_MARKER + "\"}]"));
+
+        Optional<GitPullRequestComment> found = client.findInlineCommentWithMarker(
+            repo, ACCESS, 7, ReviewDeliveryConstants.COMMENT_MARKER);
+
+        assertTrue(found.isPresent());
+        assertEquals("99", found.get().id());
+        RecordedRequest request = server.takeRequest();
+        assertTrue(request.getPath().contains("/pulls/7/comments"));
     }
 
     @Test

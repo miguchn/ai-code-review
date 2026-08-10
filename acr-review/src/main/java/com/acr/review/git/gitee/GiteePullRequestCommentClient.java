@@ -10,6 +10,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import com.acr.review.delivery.ReviewDeliveryConstants;
 import com.acr.review.git.GitAccessContext;
+import com.acr.review.git.GitInlineCommentRequest;
+import com.acr.review.git.GitInlineCommentUnsupportedException;
 import com.acr.review.git.GitProviderCodes;
 import com.acr.review.git.GitPullRequestComment;
 import com.acr.review.git.GitPullRequestCommentClient;
@@ -123,6 +125,87 @@ public class GiteePullRequestCommentClient implements GitPullRequestCommentClien
     }
 
     @Override
+    public boolean supportsInlineComments()
+    {
+        return true;
+    }
+
+    @Override
+    public GitPullRequestComment createInlineComment(GitRepositoryCoordinates repository,
+                                                     GitAccessContext access,
+                                                     int prNumber,
+                                                     GitInlineCommentRequest request)
+    {
+        String token = access.requireToken();
+        validate(repository, token, prNumber);
+        validateInlineRequest(request);
+        JSONObject payload = new JSONObject();
+        payload.put("body", request.body() == null ? "" : request.body());
+        payload.put("path", request.path());
+        payload.put("commit_id", request.headSha());
+        payload.put("line", resolveLine(request));
+        HttpUrl url = pullCommentsUrl(repository, prNumber, token);
+        Request httpRequest = requestBuilder(url)
+            .post(RequestBody.create(payload.toJSONString(), JSON_MEDIA))
+            .build();
+        String responseBody = executeInlineCreate(token, httpRequest, "创建 PR 行内评论");
+        return parseComment(responseBody, token);
+    }
+
+    @Override
+    public Optional<GitPullRequestComment> findInlineCommentWithMarker(GitRepositoryCoordinates repository,
+                                                                       GitAccessContext access,
+                                                                       int prNumber,
+                                                                       String marker)
+    {
+        String token = access.requireToken();
+        validate(repository, token, prNumber);
+        if (marker == null || marker.isBlank())
+        {
+            return Optional.empty();
+        }
+        try
+        {
+            for (int page = 1; page <= ReviewDeliveryConstants.COMMENT_MAX_PAGES; page++)
+            {
+                HttpUrl url = pullCommentsUrl(repository, prNumber, token)
+                    .newBuilder()
+                    .addQueryParameter("page", String.valueOf(page))
+                    .addQueryParameter("per_page", String.valueOf(ReviewDeliveryConstants.COMMENT_PAGE_SIZE))
+                    .build();
+                String body = execute(token, requestBuilder(url).get().build(), "列出 PR 行内评论");
+                JSONArray array = parseArray(body, token);
+                if (array.isEmpty())
+                {
+                    return Optional.empty();
+                }
+                for (int i = 0; i < array.size(); i++)
+                {
+                    JSONObject item = array.getJSONObject(i);
+                    if (item == null)
+                    {
+                        continue;
+                    }
+                    String commentBody = item.getString("body");
+                    if (commentBody != null && commentBody.contains(marker))
+                    {
+                        return Optional.of(new GitPullRequestComment(String.valueOf(item.get("id")), commentBody));
+                    }
+                }
+                if (array.size() < ReviewDeliveryConstants.COMMENT_PAGE_SIZE)
+                {
+                    return Optional.empty();
+                }
+            }
+        }
+        catch (GitPullRequestCommentException ex)
+        {
+            return Optional.empty();
+        }
+        return Optional.empty();
+    }
+
+    @Override
     public GitPullRequestComment updateIssueComment(GitRepositoryCoordinates repository,
                                                     GitAccessContext access,
                                                     String commentId,
@@ -163,6 +246,19 @@ public class GiteePullRequestCommentClient implements GitPullRequestCommentClien
             .build();
     }
 
+    private HttpUrl pullCommentsUrl(GitRepositoryCoordinates repository, int prNumber, String token)
+    {
+        return apiBaseUrl.newBuilder()
+            .addPathSegment("repos")
+            .addPathSegment(repository.owner())
+            .addPathSegment(repository.repository())
+            .addPathSegment("pulls")
+            .addPathSegment(String.valueOf(prNumber))
+            .addPathSegment("comments")
+            .addQueryParameter("access_token", token)
+            .build();
+    }
+
     private Request.Builder requestBuilder(HttpUrl url)
     {
         return new Request.Builder()
@@ -175,6 +271,83 @@ public class GiteePullRequestCommentClient implements GitPullRequestCommentClien
         JSONObject payload = new JSONObject();
         payload.put("body", body == null ? "" : body);
         return RequestBody.create(payload.toJSONString(), JSON_MEDIA);
+    }
+
+    private String executeInlineCreate(String token, Request request, String action)
+    {
+        try (Response response = client.newCall(request).execute())
+        {
+            int status = response.code();
+            String body = response.body() == null ? "" : response.body().string();
+            if (status >= 200 && status < 300)
+            {
+                return body;
+            }
+            if (status == 400 || status == 422 || status == 404 || indicatesInlineUnsupported(body))
+            {
+                throw new GitInlineCommentUnsupportedException("Gitee 不支持行内评论");
+            }
+            if (status == 401)
+            {
+                throw new GitPullRequestCommentException("Gitee 凭据无效或已过期，无法" + action);
+            }
+            if (status == 403)
+            {
+                throw new GitPullRequestCommentException("当前 Token 权限不足，无法" + action);
+            }
+            throw new GitPullRequestCommentException(
+                sanitize(action + "失败，Gitee 返回状态：" + status, token));
+        }
+        catch (GitInlineCommentUnsupportedException ex)
+        {
+            throw ex;
+        }
+        catch (InterruptedIOException ex)
+        {
+            Thread.currentThread().interrupt();
+            throw new GitPullRequestCommentException(action + "超时", ex);
+        }
+        catch (IOException ex)
+        {
+            throw new GitPullRequestCommentException(
+                sanitize("无法连接 Gitee：" + ex.getMessage(), token), ex);
+        }
+    }
+
+    private static boolean indicatesInlineUnsupported(String body)
+    {
+        if (body == null || body.isBlank())
+        {
+            return false;
+        }
+        String lower = body.toLowerCase();
+        return (lower.contains("path") || lower.contains("line"))
+            && (lower.contains("not support") || lower.contains("unsupported") || lower.contains("不支持"));
+    }
+
+    private static void validateInlineRequest(GitInlineCommentRequest request)
+    {
+        if (request == null || request.path() == null || request.path().isBlank())
+        {
+            throw new GitPullRequestCommentException("行内评论缺少文件路径");
+        }
+        if (request.headSha() == null || request.headSha().isBlank())
+        {
+            throw new GitPullRequestCommentException("行内评论缺少 commit SHA");
+        }
+        if (request.endLine() == null && request.startLine() == null)
+        {
+            throw new GitPullRequestCommentException("行内评论缺少行号");
+        }
+    }
+
+    private static int resolveLine(GitInlineCommentRequest request)
+    {
+        if (request.endLine() != null)
+        {
+            return request.endLine();
+        }
+        return request.startLine();
     }
 
     private String execute(String token, Request request, String action)

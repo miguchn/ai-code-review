@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.acr.review.mapper.InsightIdentityClaimMapper">
+
+    <resultMap id="InsightIdentityClaimResult" type="com.acr.review.insight.InsightIdentityClaim">
+        <id property="id" column="id" />
+        <result property="userId" column="user_id" />
+        <result property="authorEmail" column="author_email" />
+        <result property="authorName" column="author_name" />
+        <result property="createBy" column="create_by" />
+        <result property="createTime" column="create_time" />
+    </resultMap>
+
+    <select id="selectByUserId" resultMap="InsightIdentityClaimResult">
+        SELECT id, user_id, author_email, author_name, create_by, create_time
+        FROM review_insight_identity_claim
+        WHERE user_id = #{userId}
+        ORDER BY create_time ASC
+    </select>
+
+    <insert id="insertIgnore" parameterType="com.acr.review.insight.InsightIdentityClaim">
+        INSERT IGNORE INTO review_insight_identity_claim (
+            user_id, author_email, author_name, create_by, create_time
+        ) VALUES (
+            #{userId}, #{authorEmail}, #{authorName}, #{createBy}, SYSDATE()
+        )
+    </insert>
+</mapper>

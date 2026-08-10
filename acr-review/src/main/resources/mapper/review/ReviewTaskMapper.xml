@@ -22,6 +22,15 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="changedFiles" column="changed_files" />
         <result property="triggerType" column="trigger_type" />
         <result property="taskStatus" column="task_status" />
+        <result property="changeKey" column="change_key" />
+        <result property="nextRunAt" column="next_run_at" />
+        <result property="leaseOwner" column="lease_owner" />
+        <result property="leaseUntil" column="lease_until" />
+        <result property="heartbeatAt" column="heartbeat_at" />
+        <result property="executionEpoch" column="execution_epoch" />
+        <result property="retryCount" column="retry_count" />
+        <result property="lastErrorCode" column="last_error_code" />
+        <result property="supersededBy" column="superseded_by" />
         <result property="reviewConclusion" column="review_conclusion" />
         <result property="currentStep" column="current_step" />
         <result property="failureStep" column="failure_step" />
@@ -75,7 +84,9 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         select t.task_id, t.project_id, t.event_id, t.provider, t.event_source,
                t.pr_number, t.pr_title, t.pr_author, t.source_branch, t.target_branch, t.base_sha, t.head_sha,
                t.additions, t.deletions, t.changed_files,
-               t.trigger_type, t.task_status, t.review_conclusion, t.current_step, t.failure_step, t.failure_type,
+               t.trigger_type, t.task_status, t.change_key, t.next_run_at, t.lease_owner, t.lease_until,
+               t.heartbeat_at, t.execution_epoch, t.retry_count, t.last_error_code, t.superseded_by,
+               t.review_conclusion, t.current_step, t.failure_step, t.failure_type,
                t.failure_message, t.attempt_count, t.latest_run_id, t.started_time, t.finished_time, t.duration_ms,
                t.total_score, t.score_correctness, t.score_security, t.score_practice, t.score_performance,
                t.score_commit_quality, t.protocol_version, t.focus_issue_count, t.has_critical_security, t.parse_status,
@@ -100,7 +111,9 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         select t.task_id, t.project_id, t.event_id, t.provider, t.event_source,
                t.pr_number, t.pr_title, t.pr_author, t.source_branch, t.target_branch, t.base_sha, t.head_sha,
                t.additions, t.deletions, t.changed_files,
-               t.trigger_type, t.task_status, t.review_conclusion, t.current_step, t.failure_step, t.failure_type,
+               t.trigger_type, t.task_status, t.change_key, t.next_run_at, t.lease_owner, t.lease_until,
+               t.heartbeat_at, t.execution_epoch, t.retry_count, t.last_error_code, t.superseded_by,
+               t.review_conclusion, t.current_step, t.failure_step, t.failure_type,
                t.failure_message, t.attempt_count, t.latest_run_id, t.started_time, t.finished_time, t.duration_ms,
                t.total_score, t.score_correctness, t.score_security, t.score_practice, t.score_performance,
                t.score_commit_quality, t.protocol_version, t.focus_issue_count, t.has_critical_security, t.parse_status,
@@ -123,7 +136,9 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         select t.task_id, t.project_id, t.event_id, t.provider, t.event_source,
                t.pr_number, t.pr_title, t.pr_author, t.source_branch, t.target_branch, t.base_sha, t.head_sha,
                t.additions, t.deletions, t.changed_files,
-               t.trigger_type, t.task_status, t.review_conclusion, t.current_step, t.failure_step, t.failure_type,
+               t.trigger_type, t.task_status, t.change_key, t.next_run_at, t.lease_owner, t.lease_until,
+               t.heartbeat_at, t.execution_epoch, t.retry_count, t.last_error_code, t.superseded_by,
+               t.review_conclusion, t.current_step, t.failure_step, t.failure_type,
                t.failure_message, t.attempt_count, t.latest_run_id, t.started_time, t.finished_time, t.duration_ms,
                t.total_score, t.score_correctness, t.score_security, t.score_practice, t.score_performance,
                t.score_commit_quality, t.protocol_version, t.focus_issue_count, t.has_critical_security, t.parse_status,
@@ -146,7 +161,8 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     <insert id="insertReviewTask" parameterType="com.acr.review.domain.ReviewTask" useGeneratedKeys="true" keyProperty="taskId">
         insert into review_task
         (project_id, event_id, provider, event_source, pr_number, pr_title, pr_author, source_branch, target_branch,
-         base_sha, head_sha, additions, deletions, changed_files, trigger_type, task_status, failure_message, attempt_count,
+         base_sha, head_sha, additions, deletions, changed_files, trigger_type, task_status, change_key,
+         next_run_at, retry_count, execution_epoch, failure_message, attempt_count,
          snapshot_review_mode, snapshot_template_id, snapshot_template_name, snapshot_template_code,
          snapshot_template_version, snapshot_prompt_content,
          snapshot_model_id, snapshot_model_name, snapshot_model_provider, snapshot_model,
@@ -156,8 +172,8 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
          remark, create_by, create_time)
         values
         (#{projectId}, #{eventId}, #{provider}, #{eventSource}, #{prNumber}, #{prTitle}, #{prAuthor}, #{sourceBranch}, #{targetBranch},
-         #{baseSha}, #{headSha}, #{additions}, #{deletions}, #{changedFiles}, #{triggerType}, #{taskStatus}, #{failureMessage},
-         #{attemptCount,jdbcType=INTEGER},
+         #{baseSha}, #{headSha}, #{additions}, #{deletions}, #{changedFiles}, #{triggerType}, #{taskStatus}, #{changeKey},
+         sysdate(), 0, 0, #{failureMessage}, #{attemptCount,jdbcType=INTEGER},
          #{snapshotReviewMode}, #{snapshotTemplateId}, #{snapshotTemplateName}, #{snapshotTemplateCode},
          #{snapshotTemplateVersion}, #{snapshotPromptContent},
          #{snapshotModelId}, #{snapshotModelName}, #{snapshotModelProvider}, #{snapshotModel},
@@ -167,6 +183,40 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
          #{remark}, #{createBy}, sysdate())
     </insert>
 
+    <select id="selectDispatchableTasks" resultMap="ReviewTaskResult">
+        select task_id, project_id, task_status, next_run_at
+        from review_task
+        where task_status in ('PENDING', 'RETRYING')
+          and task_status &lt;&gt; 'SUPERSEDED'
+          and (next_run_at is null or next_run_at &lt;= sysdate())
+        order by ifnull(next_run_at, create_time), task_id
+        limit #{limit}
+    </select>
+
+    <update id="supersedePendingByChangeKey">
+        update review_task
+        set task_status = 'SUPERSEDED',
+            superseded_by = #{supersededBy},
+            next_run_at = null,
+            lease_owner = null,
+            lease_until = null,
+            heartbeat_at = null,
+            update_by = 'system',
+            update_time = sysdate()
+        where project_id = #{projectId}
+          and change_key = #{changeKey}
+          and task_status in ('PENDING', 'RETRYING')
+          and task_id &lt;&gt; #{supersededBy}
+    </update>
+
+    <select id="countNewerTasksByChangeKey" resultType="int">
+        select count(1)
+        from review_task
+        where project_id = #{projectId}
+          and change_key = #{changeKey}
+          and task_id &gt; #{taskId}
+    </select>
+
     <update id="claimTask">
         update review_task
         set task_status = 'RUNNING',
@@ -174,14 +224,171 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             failure_step = null,
             failure_type = null,
             failure_message = null,
-            started_time = #{startedTime},
+            next_run_at = null,
+            lease_owner = #{leaseOwner},
+            lease_until = date_add(sysdate(), interval #{leaseSeconds} second),
+            heartbeat_at = sysdate(),
+            execution_epoch = execution_epoch + 1,
+            started_time = sysdate(),
             finished_time = null,
             duration_ms = null,
             update_time = sysdate()
         where task_id = #{taskId}
-          and (task_status in ('PENDING', 'FAILED')
-               or (task_status = 'RUNNING'
-                   and started_time &lt; date_sub(sysdate(), interval #{staleRunningMinutes} minute)))
+          and task_status in ('PENDING', 'RETRYING')
+          and task_status &lt;&gt; 'SUPERSEDED'
+          and superseded_by is null
+          and (next_run_at is null or next_run_at &lt;= sysdate())
+          and not exists (
+              select 1 from (
+                  select peer.task_id, peer.project_id, peer.change_key, peer.task_status
+                  from review_task peer
+              ) running_peer
+              where running_peer.project_id = review_task.project_id
+                and running_peer.change_key = review_task.change_key
+                and running_peer.task_status = 'RUNNING'
+                and running_peer.task_id &lt;&gt; review_task.task_id
+          )
+    </update>
+
+    <update id="deferDispatchableTask">
+        update review_task
+        set next_run_at = date_add(sysdate(), interval #{delaySeconds} second),
+            last_error_code = 'CONCURRENCY_LIMIT',
+            failure_message = left(#{reason}, 480),
+            update_by = 'system',
+            update_time = sysdate()
+        where task_id = #{taskId}
+          and task_status in ('PENDING', 'RETRYING')
+          and (next_run_at is null or next_run_at &lt;= sysdate())
+    </update>
+
+    <update id="renewTaskLease">
+        update review_task
+        set heartbeat_at = sysdate(),
+            lease_until = date_add(sysdate(), interval #{leaseSeconds} second),
+            update_time = sysdate()
+        where task_id = #{taskId}
+          and task_status = 'RUNNING'
+          and execution_epoch = #{executionEpoch}
+          and lease_owner = #{leaseOwner}
+    </update>
+
+    <update id="requeueExpiredTasks">
+        update review_task
+        set task_status = 'RETRYING',
+            retry_count = retry_count + 1,
+            last_error_code = 'LEASE_EXPIRED',
+            failure_type = 'LEASE_EXPIRED',
+            failure_message = '执行租约已过期，等待自动恢复',
+            next_run_at = date_add(sysdate(), interval #{retryDelaySeconds} second),
+            lease_owner = null,
+            lease_until = null,
+            heartbeat_at = null,
+            update_by = 'system',
+            update_time = sysdate()
+        where task_status = 'RUNNING'
+          and lease_until is not null
+          and lease_until &lt; sysdate()
+          and retry_count &lt; #{maxRetries}
+    </update>
+
+    <update id="terminalizeExpiredTasks">
+        update review_task
+        set task_status = 'FAILED',
+            last_error_code = 'LEASE_EXPIRED',
+            failure_type = 'LEASE_EXPIRED',
+            failure_message = '执行租约连续过期且已达到自动恢复上限，请人工重试',
+            finished_time = sysdate(),
+            next_run_at = null,
+            lease_owner = null,
+            lease_until = null,
+            heartbeat_at = null,
+            update_by = 'system',
+            update_time = sysdate()
+        where task_status = 'RUNNING'
+          and lease_until is not null
+          and lease_until &lt; sysdate()
+          and retry_count &gt;= #{maxRetries}
+    </update>
+
+    <update id="requeueFailedTask">
+        update review_task
+        set task_status = 'RETRYING',
+            retry_count = 0,
+            next_run_at = sysdate(),
+            lease_owner = null,
+            lease_until = null,
+            heartbeat_at = null,
+            update_by = 'system',
+            update_time = sysdate()
+        where task_id = #{taskId}
+          and task_status = 'FAILED'
+    </update>
+
+    <update id="requeueExpiredTask">
+        update review_task
+        set task_status = 'RETRYING',
+            retry_count = 0,
+            last_error_code = 'LEASE_EXPIRED',
+            failure_type = 'LEASE_EXPIRED',
+            failure_message = '执行租约已过期，已由人工触发恢复',
+            next_run_at = sysdate(),
+            lease_owner = null,
+            lease_until = null,
+            heartbeat_at = null,
+            update_by = 'system',
+            update_time = sysdate()
+        where task_id = #{taskId}
+          and task_status = 'RUNNING'
+          and lease_until is not null
+          and lease_until &lt; sysdate()
+    </update>
+
+    <update id="releaseWorkerLeases">
+        update review_task
+        set task_status = 'RETRYING',
+            last_error_code = 'WORKER_SHUTDOWN',
+            failure_type = 'WORKER_SHUTDOWN',
+            failure_message = '执行节点正在停机，任务等待其他节点接管',
+            next_run_at = sysdate(),
+            lease_owner = null,
+            lease_until = null,
+            heartbeat_at = null,
+            update_by = 'system',
+            update_time = sysdate()
+        where task_status = 'RUNNING'
+          and lease_owner = #{leaseOwner}
+    </update>
+
+    <update id="expireWorkerLeases">
+        update review_task
+        set lease_until = date_sub(sysdate(), interval 1 second),
+            last_error_code = 'WORKER_SHUTDOWN',
+            failure_type = 'WORKER_SHUTDOWN',
+            failure_message = '执行节点优雅停机超时，租约已置过期，等待恢复扫描接管',
+            update_by = 'system',
+            update_time = sysdate()
+        where task_status = 'RUNNING'
+          and lease_owner = #{leaseOwner}
+          and (lease_until is null or lease_until &gt;= sysdate())
+    </update>
+
+    <update id="cancelTask">
+        update review_task
+        set task_status = 'CANCELLED',
+            current_step = null,
+            failure_message = '任务已被人工终止',
+            last_error_code = 'CANCELLED',
+            execution_epoch = execution_epoch + 1,
+            next_run_at = null,
+            lease_owner = null,
+            lease_until = null,
+            heartbeat_at = null,
+            finished_time = sysdate(),
+            update_by = #{operator},
+            update_time = sysdate()
+        where task_id = #{taskId}
+          and task_status in ('PENDING', 'RETRYING', 'RUNNING')
     </update>
 
     <update id="updateTaskExecution" parameterType="com.acr.review.domain.ReviewTask">
@@ -211,9 +418,32 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             focus_issue_count = #{focusIssueCount},
             has_critical_security = #{hasCriticalSecurity},
             parse_status = #{parseStatus},
+            retry_count = #{retryCount},
+            last_error_code = #{lastErrorCode},
+            <choose>
+                <when test="taskStatus == 'RUNNING'">
+                    heartbeat_at = sysdate(),
+                    lease_until = date_add(sysdate(), interval #{leaseDurationSeconds} second),
+                </when>
+                <when test="taskStatus == 'RETRYING'">
+                    next_run_at = date_add(sysdate(), interval #{retryDelaySeconds} second),
+                    lease_owner = null,
+                    lease_until = null,
+                    heartbeat_at = null,
+                </when>
+                <otherwise>
+                    next_run_at = null,
+                    lease_owner = null,
+                    lease_until = null,
+                    heartbeat_at = null,
+                </otherwise>
+            </choose>
             update_by = #{updateBy},
             update_time = sysdate()
         where task_id = #{taskId}
+          and task_status = 'RUNNING'
+          and execution_epoch = #{executionEpoch}
+          and lease_owner = #{leaseOwner}
     </update>
 
     <update id="updateTaskSnapshot" parameterType="com.acr.review.domain.ReviewTask">
@@ -236,6 +466,9 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             snapshot_scope_expand_enabled = #{snapshotScopeExpandEnabled},
             update_time = sysdate()
         where task_id = #{taskId}
+          and task_status = 'RUNNING'
+          and execution_epoch = #{executionEpoch}
+          and lease_owner = #{leaseOwner}
     </update>
 
     <select id="selectReviewTaskById" resultMap="ReviewTaskResult">
@@ -271,7 +504,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             and t.task_status = #{taskStatus}
         </if>
         <if test="queueOnly != null and queueOnly">
-            and t.task_status in ('PENDING', 'RUNNING', 'FAILED')
+            and t.task_status in ('PENDING', 'RUNNING', 'RETRYING', 'FAILED')
         </if>
         <if test="triggerType != null and triggerType != ''">
             and t.trigger_type = #{triggerType}

@@ -4,7 +4,6 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.Map;
-import java.util.concurrent.Semaphore;
 import org.springframework.stereotype.Service;
 import com.acr.common.exception.ServiceException;
 import com.acr.common.utils.StringUtils;
@@ -20,6 +19,9 @@ import com.acr.review.engine.ReviewEngineResult;
 import com.acr.review.engine.ReviewEngineSampleWorkspace;
 import com.acr.review.engine.ReviewEngineWorkspaceManager;
 import com.acr.review.engine.config.ReviewEngineProperties;
+import com.acr.review.scheduling.ReviewBudgetLease;
+import com.acr.review.scheduling.ReviewResourceBudgetService;
+import com.acr.review.scheduling.ReviewTaskRuntimeSettings;
 import com.acr.review.service.IReviewEngineService;
 import com.acr.system.domain.SysAiModelConfig;
 import com.acr.system.service.ISysAiModelConfigService;
@@ -34,12 +36,14 @@ public class ReviewEngineServiceImpl implements IReviewEngineService
     private final ReviewEngineSampleWorkspace sampleWorkspace;
     private final OcrModelConfigMapper modelConfigMapper;
     private final ISysAiModelConfigService aiModelConfigService;
-    private final Semaphore concurrencyLimiter;
+    private final ReviewResourceBudgetService budgetService;
+    private final ReviewTaskRuntimeSettings runtimeSettings;
     private final ReviewEngineRuntimeState runtimeState = new ReviewEngineRuntimeState();
 
     public ReviewEngineServiceImpl(ReviewEngineProperties properties, OpenCodeReviewCliAdapter reviewEngine,
         ReviewEngineWorkspaceManager workspaceManager, ReviewEngineSampleWorkspace sampleWorkspace,
-        OcrModelConfigMapper modelConfigMapper, ISysAiModelConfigService aiModelConfigService)
+        OcrModelConfigMapper modelConfigMapper, ISysAiModelConfigService aiModelConfigService,
+        ReviewResourceBudgetService budgetService, ReviewTaskRuntimeSettings runtimeSettings)
     {
         this.properties = properties;
         this.reviewEngine = reviewEngine;
@@ -47,7 +51,8 @@ public class ReviewEngineServiceImpl implements IReviewEngineService
         this.sampleWorkspace = sampleWorkspace;
         this.modelConfigMapper = modelConfigMapper;
         this.aiModelConfigService = aiModelConfigService;
-        this.concurrencyLimiter = new Semaphore(Math.max(1, properties.getMaxConcurrency()), true);
+        this.budgetService = budgetService;
+        this.runtimeSettings = runtimeSettings;
     }
 
     @Override
@@ -67,7 +72,7 @@ public class ReviewEngineServiceImpl implements IReviewEngineService
         info.setLastTestMessage(runtimeState.getLastTestMessage());
         info.setLastTestSuccess(runtimeState.isLastTestSuccess());
         info.setDefaultTimeoutSeconds(properties.getDefaultTimeoutSeconds());
-        info.setMaxConcurrency(properties.getMaxConcurrency());
+        info.setMaxConcurrency(runtimeSettings.ocrMaxConcurrency());
         info.setMaxOutputBytes(properties.getMaxOutputBytes());
         info.setWorkspaceRoot(workspaceManager.getWorkspaceRootText());
         return info;
@@ -77,14 +82,13 @@ public class ReviewEngineServiceImpl implements IReviewEngineService
     public ReviewEngineResult detectEnvironment()
     {
         Path workspace = null;
-        boolean acquired = false;
+        ReviewBudgetLease lease = budgetService.tryAcquireOcrProbe();
+        if (lease == null)
+        {
+            return concurrencyFailure();
+        }
         try
         {
-            acquired = acquirePermit();
-            if (!acquired)
-            {
-                return concurrencyFailure();
-            }
             workspace = workspaceManager.createIsolatedWorkspace();
             ReviewEngineRequest request = baseRequest(workspace);
             request.setInvocationType(ReviewEngineInvocationType.VERSION);
@@ -102,7 +106,7 @@ public class ReviewEngineServiceImpl implements IReviewEngineService
         finally
         {
             workspaceManager.cleanup(workspace);
-            releasePermit(acquired);
+            lease.close();
         }
     }
 
@@ -110,15 +114,13 @@ public class ReviewEngineServiceImpl implements IReviewEngineService
     public ReviewEngineResult testInvoke(ReviewEngineTestRequest testRequest)
     {
         Path workspace = null;
-        boolean acquired = false;
+        ReviewBudgetLease lease = budgetService.tryAcquireOcrProbe();
+        if (lease == null)
+        {
+            return concurrencyFailure();
+        }
         try
         {
-            acquired = acquirePermit();
-            if (!acquired)
-            {
-                return concurrencyFailure();
-            }
-
             SysAiModelConfig modelConfig = resolveModelConfig(testRequest != null ? testRequest.getModelId() : null);
             Map<String, String> modelEnvironment = modelConfigMapper.toEnvironment(modelConfig);
 
@@ -167,7 +169,7 @@ public class ReviewEngineServiceImpl implements IReviewEngineService
         finally
         {
             workspaceManager.cleanup(workspace);
-            releasePermit(acquired);
+            lease.close();
         }
     }
 
@@ -197,19 +199,6 @@ public class ReviewEngineServiceImpl implements IReviewEngineService
             throw new ServiceException("模型密钥未配置");
         }
         return config;
-    }
-
-    private boolean acquirePermit()
-    {
-        return concurrencyLimiter.tryAcquire();
-    }
-
-    private void releasePermit(boolean acquired)
-    {
-        if (acquired)
-        {
-            concurrencyLimiter.release();
-        }
     }
 
     private ReviewEngineResult concurrencyFailure()

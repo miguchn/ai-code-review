@@ -43,7 +43,14 @@ public class LlmCallServiceImpl implements LlmCallService
     public LlmCallResult chat(Long modelConfigId, String prompt)
     {
         SysAiModelConfig config = requireRuntimeConfig(modelConfigId);
-        return invokeChat(config, prompt, config.getMaxTokens(), config.getTemperature());
+        return invokeChat(config, prompt, config.getMaxTokens(), config.getTemperature(), null);
+    }
+
+    @Override
+    public LlmCallResult chat(Long modelConfigId, String prompt, int timeoutMs)
+    {
+        SysAiModelConfig config = requireRuntimeConfig(modelConfigId);
+        return invokeChat(config, prompt, config.getMaxTokens(), config.getTemperature(), Math.max(1, timeoutMs));
     }
 
     @Override
@@ -59,14 +66,14 @@ public class LlmCallServiceImpl implements LlmCallService
         {
             return LlmCallResult.failure(LlmCallErrorType.UNKNOWN, "未找到可用默认模型", 0, null);
         }
-        return invokeChat(config, prompt, config.getMaxTokens(), config.getTemperature());
+        return invokeChat(config, prompt, config.getMaxTokens(), config.getTemperature(), null);
     }
 
     @Override
     public LlmCallResult testConnection(Long modelConfigId, String apiUrl, String apiKey, String model, Integer timeout)
     {
         SysAiModelConfig config = buildTransientConfig(modelConfigId, apiUrl, apiKey, model, timeout, 10, null);
-        LlmCallResult result = invokeHttp(config, CONNECTION_PROMPT, 10, null, true, true);
+        LlmCallResult result = invokeHttp(config, CONNECTION_PROMPT, 10, null, true, true, null);
         persistLastCheck(modelConfigId, result);
         return result;
     }
@@ -77,19 +84,20 @@ public class LlmCallServiceImpl implements LlmCallService
     {
         int tokens = maxTokens != null && maxTokens > 0 ? maxTokens : 64;
         SysAiModelConfig config = buildTransientConfig(modelConfigId, apiUrl, apiKey, model, timeout, tokens, temperature);
-        LlmCallResult result = invokeHttp(config, MODEL_CALL_PROMPT, tokens, temperature, false, true);
+        LlmCallResult result = invokeHttp(config, MODEL_CALL_PROMPT, tokens, temperature, false, true, null);
         persistLastCheck(modelConfigId, result);
         return result;
     }
 
-    private LlmCallResult invokeChat(SysAiModelConfig config, String prompt, Integer maxTokens, Double temperature)
+    private LlmCallResult invokeChat(SysAiModelConfig config, String prompt, Integer maxTokens, Double temperature,
+        Integer callTimeoutMs)
     {
         int tokens = maxTokens != null && maxTokens > 0 ? maxTokens : 4096;
-        return invokeHttp(config, prompt, tokens, temperature, false, false);
+        return invokeHttp(config, prompt, tokens, temperature, false, false, callTimeoutMs);
     }
 
     private LlmCallResult invokeHttp(SysAiModelConfig config, String prompt, int maxTokens, Double temperature,
-        boolean connectionOnly, boolean allowPlainApiKey)
+        boolean connectionOnly, boolean allowPlainApiKey, Integer callTimeoutMs)
     {
         if (StringUtils.isEmpty(config.getApiUrl()))
         {
@@ -113,7 +121,9 @@ public class LlmCallServiceImpl implements LlmCallService
             return LlmCallResult.failure(LlmCallErrorType.MODEL_NOT_FOUND, "模型标识不能为空", 0, null);
         }
         String model = config.getModel();
-        int timeout = config.getTimeout() != null && config.getTimeout() > 0 ? config.getTimeout() : 60000;
+        int configuredTimeout = config.getTimeout() != null && config.getTimeout() > 0 ? config.getTimeout() : 60000;
+        int timeout = callTimeoutMs != null && callTimeoutMs > 0
+            ? Math.min(configuredTimeout, callTimeoutMs) : configuredTimeout;
         String body = buildRequestBody(model, prompt, maxTokens, temperature);
         HttpPostResult http = OkHttpUtils.postJsonDetailed(config.getApiUrl(), apiKey, body, timeout);
         if (http.getException() != null)
