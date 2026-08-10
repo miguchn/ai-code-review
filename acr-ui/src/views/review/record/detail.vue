@@ -76,6 +76,7 @@
           :task-id="detailTask.taskId"
           :task-status="detailTask.taskStatus"
           :event-source="detailTask.eventSource"
+          :inline-deliveries="detailInlineDeliveries"
           @retried="loadDetail"
         />
 
@@ -242,6 +243,7 @@
 <script setup name="ReviewRecordDetail">
 import { getReviewRecord } from '@/api/review/record'
 import { retryReviewTask } from '@/api/review/task'
+import { listInlineDeliveriesByTask } from '@/api/review/delivery'
 import DeliveryStatusView from '@/views/review/components/DeliveryStatusView.vue'
 import ImDeliveryStatusView from '@/views/review/components/ImDeliveryStatusView.vue'
 import ScopeDecisionView from '@/views/review/components/ScopeDecisionView.vue'
@@ -263,6 +265,7 @@ const detailLoading = ref(false)
 const detailTask = ref(null)
 const detailRuns = ref([])
 const detailDelivery = ref(null)
+const detailInlineDeliveries = ref([])
 const detailError = ref('')
 const activeTab = ref('result')
 
@@ -335,10 +338,24 @@ function loadDetail() {
     detailRuns.value = payload.runs || []
     detailDelivery.value = payload.delivery || null
     if (!detailTask.value) detailError.value = '未获取到审查记录'
+    loadInlineDeliveries()
     nextTick(() => focusIssuesIfNeeded())
   }).catch(error => {
     detailError.value = error?.message || '详情加载失败'
   }).finally(() => { detailLoading.value = false })
+}
+
+function loadInlineDeliveries() {
+  const id = detailTask.value?.taskId || taskId.value
+  if (!id || isPushTask(detailTask.value)) {
+    detailInlineDeliveries.value = []
+    return
+  }
+  listInlineDeliveriesByTask(id).then(response => {
+    detailInlineDeliveries.value = response.data || []
+  }).catch(() => {
+    detailInlineDeliveries.value = []
+  })
 }
 
 function focusIssuesIfNeeded() {

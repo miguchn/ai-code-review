@@ -179,6 +179,36 @@
         </section>
 
         <section class="detail-block">
+          <div class="detail-block-title">行内评论</div>
+          <template v-if="detailInlineDelivery">
+            <div class="delivery-summary">
+              <el-tag v-if="detailInlineDelivery.deliveryStatus === 'SUCCESS'" type="success" size="small">已发布</el-tag>
+              <el-tag v-else-if="detailInlineDelivery.deliveryStatus === 'PENDING'" type="primary" size="small">待投递</el-tag>
+              <el-tag v-else-if="detailInlineDelivery.deliveryStatus === 'FAILED'" type="danger" size="small">自动重试中</el-tag>
+              <el-tag v-else-if="detailInlineDelivery.deliveryStatus === 'MANUAL'" type="warning" size="small">待人工处置</el-tag>
+              <el-tag v-else-if="detailInlineDelivery.deliveryStatus === 'SKIPPED'" type="info" size="small">未发布</el-tag>
+              <span v-if="detailInlineDelivery.lastAttemptTime" class="delivery-time">
+                {{ formatDateTime(detailInlineDelivery.lastAttemptTime) }}
+              </span>
+            </div>
+            <p v-if="detailInlineDelivery.deliveryStatus === 'SUCCESS' && detailInlineDelivery.externalId" class="inline-external-id">
+              <el-button v-if="detailInlineMergeRequestUrl" link type="primary" @click="openInlineMergeRequest">
+                评论 #{{ detailInlineDelivery.externalId }}
+              </el-button>
+              <span v-else>评论 #{{ detailInlineDelivery.externalId }}</span>
+            </p>
+            <p
+              v-else-if="inlineDeliveryReason"
+              class="delivery-failure"
+              :title="inlineDeliveryReason"
+            >
+              {{ inlineDeliveryReason }}
+            </p>
+          </template>
+          <span v-else class="empty-tip">未发布 · 未达严重度门槛或未启用行内评论</span>
+        </section>
+
+        <section class="detail-block">
           <div class="detail-block-title">生命周期时间线</div>
           <el-empty v-if="!detailActions.length" description="暂无处置记录" :image-size="48" />
           <el-timeline v-else class="action-timeline">
@@ -283,6 +313,7 @@
 <script setup>
 import { useRouter } from 'vue-router'
 import { listIssue, getIssue, confirmIssue, closeIssue, dismissIssue, reopenIssue } from '@/api/review/issue'
+import { getInlineDeliveryByIssue } from '@/api/review/delivery'
 import auth from '@/plugins/auth'
 import {
   emptyDash, formatDateTime, formatIssueLines, shortSha, isPushTask,
@@ -330,6 +361,7 @@ const detailFirstTask = ref(null)
 const detailLastTask = ref(null)
 const detailActions = ref([])
 const detailSummaryDelivery = ref(null)
+const detailInlineDelivery = ref(null)
 const relatedIssues = ref([])
 const actionLoading = ref(false)
 
@@ -367,6 +399,14 @@ const sameMatchedTask = computed(() => {
 
 const lifecycleNodes = computed(() => buildLifecycleNodes(detailIssue.value, detailActions.value, formatDateTime))
 const detailMergeRequestUrl = computed(() => buildMergeRequestUrl(detailLastTask.value || detailIssue.value || {}))
+const detailInlineMergeRequestUrl = computed(() => buildMergeRequestUrl(detailIssue.value || {}))
+const inlineDeliveryReason = computed(() => {
+  const delivery = detailInlineDelivery.value
+  if (!delivery) return ''
+  if (delivery.failureMessage) return delivery.failureMessage
+  if (delivery.deliveryStatus === 'SKIPPED') return '未达严重度门槛或未启用行内评论'
+  return ''
+})
 const changeSourceLabel = computed(() => {
   const issue = detailIssue.value
   if (!issue) return '—'
@@ -465,6 +505,7 @@ function resetDetail() {
   detailLastTask.value = null
   detailActions.value = []
   detailSummaryDelivery.value = null
+  detailInlineDelivery.value = null
   relatedIssues.value = []
 }
 
@@ -480,6 +521,7 @@ function loadDetail(issueId) {
     detailLastTask.value = payload.lastTask || payload.sourceTask || null
     detailActions.value = payload.actions || []
     detailSummaryDelivery.value = payload.summaryDelivery || null
+    loadInlineDelivery(issueId)
     if (detailIssue.value?.status === 'RECHECKING') {
       loadRelatedIssues(detailIssue.value)
     }
@@ -487,6 +529,14 @@ function loadDetail(issueId) {
     proxy.$modal.msgError(error?.message || '详情加载失败')
     handleBeforeClose()
   }).finally(() => { detailLoading.value = false })
+}
+
+function loadInlineDelivery(issueId) {
+  getInlineDeliveryByIssue(issueId).then(response => {
+    detailInlineDelivery.value = response.data || null
+  }).catch(() => {
+    detailInlineDelivery.value = null
+  })
 }
 
 function loadRelatedIssues(issue) {
@@ -538,6 +588,12 @@ function goTask(task) {
 function openMergeRequest() {
   if (detailMergeRequestUrl.value) {
     window.open(detailMergeRequestUrl.value, '_blank', 'noopener,noreferrer')
+  }
+}
+
+function openInlineMergeRequest() {
+  if (detailInlineMergeRequestUrl.value) {
+    window.open(detailInlineMergeRequestUrl.value, '_blank', 'noopener,noreferrer')
   }
 }
 
@@ -768,6 +824,11 @@ function submitDismiss() {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.inline-external-id {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
 }
 .detail-text {
   margin: 0;

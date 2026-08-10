@@ -17,6 +17,8 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="prTargetBranches" column="pr_target_branches" />
         <result property="pushReviewEnabled" column="push_review_enabled" />
         <result property="pushTriggerBranches" column="push_trigger_branches" />
+        <result property="inlineCommentEnabled" column="inline_comment_enabled" />
+        <result property="inlineSeverities" column="inline_severities" />
         <result property="businessSystemId" column="business_system_id" />
         <result property="businessSystemName" column="business_system_name" />
         <result property="deptId" column="dept_id" />
@@ -62,7 +64,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         select p.project_id, p.project_name, p.provider, p.repository_url,
                p.repository_owner, p.repository_name, p.repository_full_path, p.default_branch,
                p.pr_review_enabled, p.pr_target_branches,
-               p.push_review_enabled, p.push_trigger_branches,
+               p.push_review_enabled, p.push_trigger_branches, p.inline_comment_enabled, p.inline_severities,
                p.business_system_id, bs.system_name as business_system_name,
                p.dept_id, d.dept_name,
                p.owner_user_id, owner.nick_name as owner_name,
@@ -166,7 +168,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 
     <select id="selectByRepository" resultMap="ReviewProjectResult">
         select project_id, project_name, provider, repository_owner, repository_name, repository_full_path,
-               status, pr_review_enabled, pr_target_branches, push_review_enabled, push_trigger_branches,
+               status, pr_review_enabled, pr_target_branches, push_review_enabled, push_trigger_branches, inline_comment_enabled, inline_severities,
                webhook_secret_ciphertext, credential_id,
                model_id, primary_stack, template_id, review_mode, engine_code,
                scope_exclude_patterns, scope_include_tests, scope_report_existing, scope_expand_enabled,
@@ -183,7 +185,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 
     <select id="selectByFullPath" resultMap="ReviewProjectResult">
         select project_id, project_name, provider, repository_owner, repository_name, repository_full_path,
-               status, pr_review_enabled, pr_target_branches, push_review_enabled, push_trigger_branches,
+               status, pr_review_enabled, pr_target_branches, push_review_enabled, push_trigger_branches, inline_comment_enabled, inline_severities,
                webhook_secret_ciphertext, credential_id,
                model_id, primary_stack, template_id, review_mode, engine_code,
                scope_exclude_patterns, scope_include_tests, scope_report_existing, scope_expand_enabled,
@@ -200,7 +202,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     <insert id="insertReviewProject" parameterType="com.acr.review.domain.ReviewProject" useGeneratedKeys="true" keyProperty="projectId">
         insert into review_project
         (project_name, provider, repository_url, repository_owner, repository_name, repository_full_path,
-         default_branch, pr_review_enabled, pr_target_branches, push_review_enabled, push_trigger_branches,
+         default_branch, pr_review_enabled, pr_target_branches, push_review_enabled, push_trigger_branches, inline_comment_enabled, inline_severities,
          business_system_id, dept_id, owner_user_id,
          credential_id, model_id, primary_stack, template_id, review_mode, engine_code,
          scope_exclude_patterns, scope_include_tests, scope_report_existing, scope_expand_enabled,
@@ -211,7 +213,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
          remark, create_by, create_time)
         values
         (#{projectName}, #{provider}, #{repositoryUrl}, #{repositoryOwner}, #{repositoryName}, #{repositoryFullPath},
-         #{defaultBranch}, #{prReviewEnabled}, #{prTargetBranches}, #{pushReviewEnabled}, #{pushTriggerBranches},
+         #{defaultBranch}, #{prReviewEnabled}, #{prTargetBranches}, #{pushReviewEnabled}, #{pushTriggerBranches}, #{inlineCommentEnabled}, #{inlineSeverities},
          #{businessSystemId}, #{deptId}, #{ownerUserId},
          #{credentialId}, #{modelId}, #{primaryStack}, #{templateId}, #{reviewMode}, #{engineCode},
          #{scopeExcludePatterns}, #{scopeIncludeTests}, #{scopeReportExisting}, #{scopeExpandEnabled},
@@ -234,6 +236,8 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             pr_target_branches = #{prTargetBranches},
             push_review_enabled = #{pushReviewEnabled},
             push_trigger_branches = #{pushTriggerBranches},
+            inline_comment_enabled = #{inlineCommentEnabled},
+            inline_severities = #{inlineSeverities},
             business_system_id = #{businessSystemId},
             dept_id = #{deptId},
             owner_user_id = #{ownerUserId},

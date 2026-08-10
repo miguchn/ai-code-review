@@ -287,6 +287,68 @@ class ReviewProjectServiceImplTest
     }
 
     @Test
+    void insertNormalizesMissingInlineCommentFields()
+    {
+        ReviewProjectMapper projectMapper = mock(ReviewProjectMapper.class);
+        GitCredentialMapper credentialMapper = mock(GitCredentialMapper.class);
+        IGitCredentialService credentialService = mock(IGitCredentialService.class);
+        ISysBusinessSystemService businessSystemService = mock(ISysBusinessSystemService.class);
+        ISysDeptService deptService = mock(ISysDeptService.class);
+        ISysUserService userService = mock(ISysUserService.class);
+        GitProvider gitProvider = mock(GitProvider.class);
+        GitAdapterRegistry adapterRegistry = mock(GitAdapterRegistry.class);
+        GitRepositoryCoordinates repository = new GitRepositoryCoordinates(
+            "owner", "repo", "owner/repo", "https://github.com/owner/repo");
+        GitCredential credential = new GitCredential();
+        credential.setCredentialId(1L);
+        credential.setProvider("GITHUB");
+        credential.setStatus("0");
+        when(credentialMapper.selectGitCredentialById(1L)).thenReturn(credential);
+        when(adapterRegistry.requireProvider("GITHUB")).thenReturn(gitProvider);
+        when(gitProvider.parseRepository(eq("https://github.com/owner/repo"), any())).thenReturn(repository);
+        when(projectMapper.selectByFullPath(any(), any(), isNull())).thenReturn(null);
+        when(projectMapper.selectByRepository(any(), any(), any(), isNull())).thenReturn(null);
+        SysBusinessSystem system = new SysBusinessSystem();
+        system.setSystemId(9L);
+        system.setDeptId(100L);
+        system.setStatus("0");
+        when(businessSystemService.selectSysBusinessSystemById(9L)).thenReturn(system);
+        when(userService.selectUserById(11L)).thenReturn(user(11L, 100L, "张三"));
+        when(credentialService.getPlainToken(1L, true)).thenReturn("token");
+        when(gitProvider.readRepository(any(), any())).thenReturn(
+            GitRepositoryInfoResult.success(repository, repository.canonicalUrl(), "main", List.of("main", "dev")));
+        when(projectMapper.insertReviewProject(any())).thenReturn(1);
+
+        ReviewProjectServiceImpl service = new ReviewProjectServiceImpl(projectMapper, credentialMapper,
+            mock(ReviewNotifyChannelMapper.class), credentialService, adapterRegistry, businessSystemService,
+            mock(ISysConfigService.class), deptService, userService, mock(ISysAiModelConfigService.class),
+            mock(IReviewTemplateService.class), mock(CredentialCryptoService.class), "http://localhost:8080");
+
+        ReviewProject project = baseInsertProject();
+        project.setPrReviewEnabled("0");
+        project.setPushReviewEnabled("1");
+        project.setPrTargetBranches("main");
+        project.setInlineCommentEnabled(null);
+        project.setInlineSeverities(null);
+
+        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class))
+        {
+            security.when(SecurityUtils::getUsername).thenReturn("admin");
+            security.when(SecurityUtils::isAdmin).thenReturn(true);
+            service.insertReviewProject(project);
+            assertEquals("1", project.getInlineCommentEnabled());
+            assertEquals("CRITICAL,HIGH", project.getInlineSeverities());
+        }
+
+        assertEquals("CRITICAL,HIGH",
+            ReviewProjectServiceImpl.normalizeInlineSeverities(""));
+        assertEquals("CRITICAL,HIGH",
+            ReviewProjectServiceImpl.normalizeInlineSeverities("FOO,BAR"));
+        assertEquals("HIGH,MEDIUM",
+            ReviewProjectServiceImpl.normalizeInlineSeverities(" high , MEDIUM , junk "));
+    }
+
+    @Test
     void insertRejectsPushEnabledWithoutTriggerBranches()
     {
         ReviewProjectMapper projectMapper = mock(ReviewProjectMapper.class);

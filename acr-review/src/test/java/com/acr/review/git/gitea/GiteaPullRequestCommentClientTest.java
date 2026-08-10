@@ -11,6 +11,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import com.acr.review.delivery.ReviewDeliveryConstants;
 import com.acr.review.git.GitAccessContext;
+import com.acr.review.git.GitInlineCommentRequest;
 import com.acr.review.git.GitPullRequestComment;
 import com.acr.review.git.GitPullRequestCommentException;
 import com.acr.review.git.GitRepositoryCoordinates;
@@ -75,6 +76,38 @@ class GiteaPullRequestCommentClientTest
         RecordedRequest updateReq = server.takeRequest();
         assertEquals("PATCH", updateReq.getMethod());
         assertTrue(updateReq.getPath().endsWith("/issues/comments/55"));
+    }
+
+    @Test
+    void createsInlineCommentViaReview() throws InterruptedException
+    {
+        server.enqueue(json(201, "{\"id\":42,\"comments\":[{\"id\":77,\"body\":\"inline body\"}]}"));
+        GitInlineCommentRequest request = new GitInlineCommentRequest(
+            "pkg/main.go", null, 8, "inline body", "unused");
+        GitPullRequestComment created = client.createInlineComment(repo, access, 4, request);
+        assertEquals("77", created.id());
+        RecordedRequest recorded = server.takeRequest();
+        assertEquals("POST", recorded.getMethod());
+        assertTrue(recorded.getPath().contains("/api/v1/repos/acme/demo/pulls/4/reviews"));
+        String payload = recorded.getBody().readUtf8();
+        assertTrue(payload.contains("\"event\":\"COMMENT\""));
+        assertTrue(payload.contains("\"path\":\"pkg/main.go\""));
+        assertTrue(payload.contains("\"new_line\":8"));
+    }
+
+    @Test
+    void findsInlineCommentWithMarker() throws InterruptedException
+    {
+        server.enqueue(json(200, "[{\"id\":1,\"body\":\"other\"},"
+            + "{\"id\":88,\"body\":\"hello\\n" + ReviewDeliveryConstants.COMMENT_MARKER + "\"}]"));
+
+        Optional<GitPullRequestComment> found = client.findInlineCommentWithMarker(
+            repo, access, 7, ReviewDeliveryConstants.COMMENT_MARKER);
+
+        assertTrue(found.isPresent());
+        assertEquals("88", found.get().id());
+        RecordedRequest request = server.takeRequest();
+        assertTrue(request.getPath().contains("/api/v1/repos/acme/demo/pulls/7/comments"));
     }
 
     @Test

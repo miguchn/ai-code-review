@@ -344,6 +344,28 @@
               </div>
             </el-form-item>
 
+            <template v-if="prReviewChecked">
+              <el-form-item label="行内评论">
+                <div class="form-control-block">
+                  <el-switch v-model="form.inlineCommentEnabled" active-value="0" inactive-value="1"
+                    active-text="启用" inactive-text="关闭" />
+                  <div class="inline-tip">将重点问题以行内评论发布到合并请求的代码行上，同一问题全生命周期只发布一次；未发布行内评论的问题仍可在总结评论与问题台账中查看。</div>
+                </div>
+              </el-form-item>
+              <el-form-item v-if="form.inlineCommentEnabled === '0'" label="严重度">
+                <div class="form-control-block">
+                  <el-select v-model="form.inlineSeverities" multiple filterable collapse-tags :max-collapse-tags="4"
+                    placeholder="请选择严重度">
+                    <el-option label="严重" value="CRITICAL" />
+                    <el-option label="高" value="HIGH" />
+                    <el-option label="中" value="MEDIUM" />
+                    <el-option label="低" value="LOW" />
+                  </el-select>
+                  <div class="inline-tip">仅达到所选严重度的问题会发布行内评论。</div>
+                </div>
+              </el-form-item>
+            </template>
+
             <el-form-item v-if="pushReviewChecked" label="触发分支" prop="pushTriggerBranches">
               <div class="form-control-block">
                 <el-select v-model="form.pushTriggerBranches" multiple filterable allow-create default-first-option
@@ -743,7 +765,8 @@ function reset() {
   form.value = {
     projectId: undefined, projectName: undefined, provider: 'GITHUB', repositoryUrl: undefined,
     repositoryOwner: undefined, repositoryName: undefined, repositoryFullPath: undefined, defaultBranch: undefined,
-    prReviewEnabled: '0', pushReviewEnabled: '1', prTargetBranches: [], pushTriggerBranches: [], businessSystemId: undefined, deptId: undefined,
+    prReviewEnabled: '0', pushReviewEnabled: '1', inlineCommentEnabled: '1', inlineSeverities: ['CRITICAL', 'HIGH'],
+    prTargetBranches: [], pushTriggerBranches: [], businessSystemId: undefined, deptId: undefined,
     ownerUserId: undefined, credentialId: undefined, modelId: undefined, templateId: undefined,
     primaryStack: 'FULLSTACK', reviewMode: 'OCR_ENGINE', engineCode: 'OPEN_CODE_REVIEW',
     status: '1', lastBranchSyncStatus: 'UNSYNCED',
@@ -791,6 +814,8 @@ function handleUpdate(row) {
     project.prTargetBranches = splitBranches(project.prTargetBranches)
     project.pushTriggerBranches = splitBranches(project.pushTriggerBranches)
     project.pushReviewEnabled = project.pushReviewEnabled || '1'
+    project.inlineCommentEnabled = project.inlineCommentEnabled || '1'
+    project.inlineSeverities = splitSeverities(project.inlineSeverities)
     project.reviewMode = normalizeReviewMode(project.reviewMode)
     project.primaryStack = project.primaryStack || 'FULLSTACK'
     project.scopeIncludeTests = project.scopeIncludeTests || 'N'
@@ -1052,7 +1077,8 @@ function submitForm() {
       ...form.value,
       reviewMode: normalizeReviewMode(form.value.reviewMode),
       prTargetBranches: (form.value.prTargetBranches || []).join(','),
-      pushTriggerBranches: (form.value.pushTriggerBranches || []).join(',')
+      pushTriggerBranches: (form.value.pushTriggerBranches || []).join(','),
+      inlineSeverities: (form.value.inlineSeverities || []).join(',')
     }
     if (payload.reviewMode === 'LLM_DIRECT') {
       payload.engineCode = null
@@ -1106,6 +1132,11 @@ function repositorySignature(project) {
 function splitBranches(value) {
   if (!value) return []
   return value.split(',').map(item => item.trim()).filter(Boolean)
+}
+
+function splitSeverities(value) {
+  const items = splitBranches(value)
+  return items.length ? items : ['CRITICAL', 'HIGH']
 }
 
 function formatTargetBranches(value) {

@@ -11,6 +11,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import com.acr.review.git.GitAccessContext;
 import com.acr.review.delivery.ReviewDeliveryConstants;
+import com.acr.review.git.GitInlineCommentRequest;
 import com.acr.review.git.GitPullRequestComment;
 import com.acr.review.git.GitPullRequestCommentException;
 import com.acr.review.git.GitRepositoryCoordinates;
@@ -60,6 +61,26 @@ class GitHubPullRequestCommentClientTest
     }
 
     @Test
+    void findsLegacyMarkerAndNewRunEmbeddedMarkerWithSameConstant() throws InterruptedException
+    {
+        String legacy = "old\\n" + ReviewDeliveryConstants.COMMENT_MARKER;
+        String modern = "new\\n" + ReviewDeliveryConstants.COMMENT_MARKER
+            + ReviewDeliveryConstants.commentRunMarker(77L);
+        server.enqueue(json(200, "[{\"id\":11,\"body\":\"" + legacy + "\"}]"));
+        Optional<GitPullRequestComment> legacyHit = client.findCommentWithMarker(
+            repo, ACCESS, 7, ReviewDeliveryConstants.COMMENT_MARKER);
+        assertTrue(legacyHit.isPresent());
+        assertEquals("11", legacyHit.get().id());
+        server.takeRequest();
+
+        server.enqueue(json(200, "[{\"id\":22,\"body\":\"" + modern + "\"}]"));
+        Optional<GitPullRequestComment> modernHit = client.findCommentWithMarker(
+            repo, ACCESS, 7, ReviewDeliveryConstants.COMMENT_MARKER);
+        assertTrue(modernHit.isPresent());
+        assertEquals("22", modernHit.get().id());
+    }
+
+    @Test
     void createsAndUpdatesComment() throws InterruptedException
     {
         server.enqueue(json(201, "{\"id\":55,\"body\":\"new\"}"));
@@ -75,6 +96,41 @@ class GitHubPullRequestCommentClientTest
         RecordedRequest updateReq = server.takeRequest();
         assertEquals("PATCH", updateReq.getMethod());
         assertTrue(updateReq.getPath().endsWith("/issues/comments/55"));
+    }
+
+    @Test
+    void createsInlineCommentWithCorrectPayload() throws InterruptedException
+    {
+        server.enqueue(json(201, "{\"id\":77,\"body\":\"inline body\"}"));
+        GitInlineCommentRequest request = new GitInlineCommentRequest(
+            "src/Main.java", 10, 12, "inline body", "abc123head");
+        GitPullRequestComment created = client.createInlineComment(repo, ACCESS, 5, request);
+        assertEquals("77", created.id());
+        RecordedRequest recorded = server.takeRequest();
+        assertEquals("POST", recorded.getMethod());
+        assertTrue(recorded.getPath().contains("/repos/acme/demo/pulls/5/comments"));
+        String payload = recorded.getBody().readUtf8();
+        assertTrue(payload.contains("\"commit_id\":\"abc123head\""));
+        assertTrue(payload.contains("\"path\":\"src/Main.java\""));
+        assertTrue(payload.contains("\"line\":12"));
+        assertTrue(payload.contains("\"side\":\"RIGHT\""));
+        assertTrue(payload.contains("\"start_line\":10"));
+        assertTrue(payload.contains("\"start_side\":\"RIGHT\""));
+    }
+
+    @Test
+    void findsInlineCommentWithMarker() throws InterruptedException
+    {
+        server.enqueue(json(200, "[{\"id\":1,\"body\":\"other\"},"
+            + "{\"id\":88,\"body\":\"hello\\n" + ReviewDeliveryConstants.COMMENT_MARKER + "\"}]"));
+
+        Optional<GitPullRequestComment> found = client.findInlineCommentWithMarker(
+            repo, ACCESS, 7, ReviewDeliveryConstants.COMMENT_MARKER);
+
+        assertTrue(found.isPresent());
+        assertEquals("88", found.get().id());
+        RecordedRequest request = server.takeRequest();
+        assertTrue(request.getPath().contains("/repos/acme/demo/pulls/7/comments"));
     }
 
     @Test

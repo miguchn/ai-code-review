@@ -36,4 +36,39 @@ public interface GitPullRequestCommentClient
                                              GitAccessContext access,
                                              String commentId,
                                              String body);
+
+    /** 当前适配器是否支持行内评论；默认否。 */
+    default boolean supportsInlineComments()
+    {
+        return false;
+    }
+
+    /**
+     * 在 PR/MR 指定文件行创建行内评论。
+     *
+     * @throws GitInlineCommentUnsupportedException 平台不支持行内评论
+     * @throws GitPullRequestCommentException 网络/鉴权等失败
+     */
+    default GitPullRequestComment createInlineComment(GitRepositoryCoordinates repository,
+                                                      GitAccessContext access,
+                                                      int prNumber,
+                                                      GitInlineCommentRequest request)
+    {
+        throw new GitInlineCommentUnsupportedException(
+            providerCode() + " 不支持行内评论");
+    }
+
+    /**
+     * 分页查找正文含指定标记的行内评论；默认空（不支持或未实现查找）。
+     *
+     * @throws GitPullRequestCommentException 网络/鉴权等失败
+     */
+    default Optional<GitPullRequestComment> findInlineCommentWithMarker(
+        GitRepositoryCoordinates repository,
+        GitAccessContext access,
+        int prNumber,
+        String marker)
+    {
+        return Optional.empty();
+    }
 }

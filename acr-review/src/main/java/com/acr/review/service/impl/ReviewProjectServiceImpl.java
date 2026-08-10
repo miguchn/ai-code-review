@@ -39,6 +39,7 @@ import com.acr.review.security.CredentialCryptoService;
 import com.acr.review.service.IGitCredentialService;
 import com.acr.review.service.IReviewProjectService;
 import com.acr.review.service.IReviewTemplateService;
+import com.acr.review.service.ReviewScoringConstants;
 import com.acr.system.domain.SysAiModelConfig;
 import com.acr.system.domain.SysBusinessSystem;
 import com.acr.system.service.ISysAiModelConfigService;
@@ -469,6 +470,7 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
         {
             project.setPushReviewEnabled("1");
         }
+        normalizeInlineCommentConfig(project);
         if (!"0".equals(project.getPrReviewEnabled()) && !"0".equals(project.getPushReviewEnabled()))
         {
             throw new ServiceException("请至少选择一种审查类型");
@@ -521,6 +523,48 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
         {
             project.setStatus("1");
         }
+    }
+
+    /**
+     * 行内评论配置归一：开关非法/空回落停用（'1'）；
+     * 严重度白名单空或全非法回落 CRITICAL,HIGH，仅保留 CRITICAL/HIGH/MEDIUM/LOW。
+     */
+    private void normalizeInlineCommentConfig(ReviewProject project)
+    {
+        if (!"0".equals(project.getInlineCommentEnabled()) && !"1".equals(project.getInlineCommentEnabled()))
+        {
+            project.setInlineCommentEnabled("1");
+        }
+        project.setInlineSeverities(normalizeInlineSeverities(project.getInlineSeverities()));
+    }
+
+    static String normalizeInlineSeverities(String csv)
+    {
+        if (StringUtils.isEmpty(csv))
+        {
+            return ReviewDeliveryConstants.DEFAULT_INLINE_SEVERITIES;
+        }
+        java.util.LinkedHashSet<String> allowed = new java.util.LinkedHashSet<>();
+        for (String part : csv.split("[,;\\s]+"))
+        {
+            if (part == null || part.isBlank())
+            {
+                continue;
+            }
+            String severity = part.trim().toUpperCase(java.util.Locale.ROOT);
+            if (ReviewScoringConstants.SEVERITY_CRITICAL.equals(severity)
+                || ReviewScoringConstants.SEVERITY_HIGH.equals(severity)
+                || ReviewScoringConstants.SEVERITY_MEDIUM.equals(severity)
+                || ReviewScoringConstants.SEVERITY_LOW.equals(severity))
+            {
+                allowed.add(severity);
+            }
+        }
+        if (allowed.isEmpty())
+        {
+            return ReviewDeliveryConstants.DEFAULT_INLINE_SEVERITIES;
+        }
+        return String.join(",", allowed);
     }
 
     /** 审查范围配置归一：排除 glob 逐行 trim 去空行去重，三开关非法值回落默认（N/N/Y）。 */

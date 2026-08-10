@@ -13,6 +13,11 @@
             </el-button>
           </span>
         </el-tooltip>
+        <el-tooltip :content="cancelActionTip(detailTask)" placement="top" :disabled="canCancel(detailTask)">
+          <span class="action-wrap">
+            <el-button type="danger" plain :disabled="!canCancel(detailTask)" @click="handleCancel">终止</el-button>
+          </span>
+        </el-tooltip>
       </div>
     </div>
 
@@ -39,7 +44,17 @@
             <el-descriptions-item label="分支">{{ emptyDash(detailTask.sourceBranch) }} → {{ emptyDash(detailTask.targetBranch) }}</el-descriptions-item>
             <el-descriptions-item label="代码变更">{{ formatCodeChange(detailTask.changedFiles, detailTask.additions, detailTask.deletions) }}</el-descriptions-item>
             <el-descriptions-item label="任务状态">
-              <dict-tag :options="review_task_status" :value="detailTask.taskStatus" />
+              <div class="task-status-cell">
+                <dict-tag :options="review_task_status" :value="detailTask.taskStatus" />
+                <span v-if="detailTask.taskStatus === 'RETRYING' && detailTask.nextRunAt" class="next-run">
+                  下次重试 {{ formatDateTime(detailTask.nextRunAt) }}
+                </span>
+                <router-link
+                  v-if="detailTask.taskStatus === 'SUPERSEDED' && detailTask.supersededBy"
+                  :to="'/review/task-detail/index/' + detailTask.supersededBy"
+                  class="superseded-link"
+                >替代任务 #{{ detailTask.supersededBy }}</router-link>
+              </div>
             </el-descriptions-item>
             <el-descriptions-item label="当前步骤">
               <dict-tag v-if="detailTask.currentStep" :options="review_task_step" :value="detailTask.currentStep" />
@@ -67,6 +82,7 @@
           :task-id="detailTask.taskId"
           :task-status="detailTask.taskStatus"
           :event-source="detailTask.eventSource"
+          :inline-deliveries="detailInlineDeliveries"
           @retried="loadDetail"
         />
 
@@ -119,7 +135,8 @@
 </template>
 
 <script setup name="ReviewTaskDetail">
-import { getReviewTask, retryReviewTask } from '@/api/review/task'
+import { getReviewTask, retryReviewTask, cancelReviewTask } from '@/api/review/task'
+import { listInlineDeliveriesByTask } from '@/api/review/delivery'
 import auth from '@/plugins/auth'
 import DeliveryStatusView from '@/views/review/components/DeliveryStatusView.vue'
 import ImDeliveryStatusView from '@/views/review/components/ImDeliveryStatusView.vue'
@@ -142,6 +159,7 @@ const detailLoading = ref(false)
 const detailTask = ref(null)
 const detailRuns = ref([])
 const detailDelivery = ref(null)
+const detailInlineDeliveries = ref([])
 const detailError = ref('')
 const pollTimer = ref(null)
 
@@ -160,11 +178,25 @@ function loadDetail() {
     detailRuns.value = payload.runs || []
     detailDelivery.value = payload.delivery || null
     if (!detailTask.value) detailError.value = '未获取到任务详情'
+    loadInlineDeliveries()
   }).catch(error => {
     detailError.value = error?.message || '详情加载失败'
   }).finally(() => {
     detailLoading.value = false
     schedulePolling()
+  })
+}
+
+function loadInlineDeliveries() {
+  const id = detailTask.value?.taskId || taskId.value
+  if (!id || detailTask.value?.eventSource === 'PUSH') {
+    detailInlineDeliveries.value = []
+    return
+  }
+  listInlineDeliveriesByTask(id).then(response => {
+    detailInlineDeliveries.value = response.data || []
+  }).catch(() => {
+    detailInlineDeliveries.value = []
   })
 }
 
@@ -183,7 +215,12 @@ onBeforeUnmount(() => clearPolling())
 
 function canRetry(row) {
   return auth.hasPermi('review:task:retry')
-    && (row?.taskStatus === 'FAILED' || row?.taskStatus === 'PENDING' || row?.taskStatus === 'RUNNING')
+    && (row?.taskStatus === 'FAILED' || row?.taskStatus === 'PENDING' || row?.taskStatus === 'RUNNING' || row?.taskStatus === 'RETRYING')
+}
+
+function canCancel(row) {
+  return auth.hasPermi('review:task:cancel')
+    && (row?.taskStatus === 'PENDING' || row?.taskStatus === 'RETRYING' || row?.taskStatus === 'RUNNING')
 }
 
 function retryActionLabel(row) {
@@ -201,9 +238,28 @@ function retryActionTip(row) {
   const status = row.taskStatus
   if (status === 'FAILED') return '可重试，历史执行记录会保留'
   if (status === 'PENDING') return '可手动触发执行'
+  if (status === 'RETRYING') {
+    return row.nextRunAt
+      ? `待重试，下次重试时间 ${formatDateTime(row.nextRunAt)}`
+      : '待重试，可手动触发'
+  }
   if (status === 'RUNNING') return '执行中；中断超过 30 分钟可回收重试'
   if (status === 'SUCCESS') return `状态为「${statusLabel(status)}」，请到审查记录查看结果`
+  if (status === 'CANCELLED') return '任务已取消，不可再执行'
+  if (status === 'SUPERSEDED') {
+    const by = row.supersededBy
+    return by
+      ? `已被更新任务 #${by} 替代，本任务仅保留历史`
+      : '已被更新任务替代，本任务仅保留历史'
+  }
   return '当前状态不可执行'
+}
+
+function cancelActionTip(row) {
+  if (!row) return '加载中…'
+  if (!auth.hasPermi('review:task:cancel')) return '当前账号没有任务终止权限'
+  if (canCancel(row)) return '终止后变为「已取消」，旧执行写入将被围栏拒绝'
+  return `当前状态「${statusLabel(row.taskStatus) || '未知'}」不可终止`
 }
 
 function handleRetry() {
@@ -216,6 +272,19 @@ function handleRetry() {
     .then(() => retryReviewTask(detailTask.value.taskId))
     .then(() => {
       proxy.$modal.msgSuccess(pending ? '已提交执行' : '已提交重试')
+      loadDetail()
+    }).catch(() => {})
+}
+
+function handleCancel() {
+  if (!canCancel(detailTask.value)) {
+    proxy.$modal.msgWarning(cancelActionTip(detailTask.value))
+    return
+  }
+  proxy.$modal.confirm('确认终止该任务？终止后状态变为「已取消」，且不会再被调度领取。')
+    .then(() => cancelReviewTask(detailTask.value.taskId))
+    .then(() => {
+      proxy.$modal.msgSuccess('已终止')
       loadDetail()
     }).catch(() => {})
 }
@@ -250,4 +319,8 @@ watch(taskId, () => loadDetail(), { immediate: true })
 .action-wrap { display: inline-block; }
 .run-expand { padding: 8px 12px; }
 .run-expand-title { margin-bottom: 8px; font-size: 13px; font-weight: 600; }
+.task-status-cell { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.superseded-link { color: var(--el-color-primary); font-size: 13px; text-decoration: none; }
+.superseded-link:hover { text-decoration: underline; }
+.next-run { font-size: 13px; color: #64748b; }
 </style>

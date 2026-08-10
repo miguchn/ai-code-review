@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import com.acr.review.delivery.ReviewDeliveryConstants;
 import com.acr.review.git.GitAccessContext;
+import com.acr.review.git.GitInlineCommentRequest;
 import com.acr.review.git.GitPullRequestComment;
 import com.acr.review.git.GitPullRequestCommentClient;
 import com.acr.review.git.GitPullRequestCommentException;
@@ -112,6 +113,102 @@ public class GitLabPullRequestCommentClient implements GitPullRequestCommentClie
     }
 
     @Override
+    public boolean supportsInlineComments()
+    {
+        return true;
+    }
+
+    @Override
+    public GitPullRequestComment createInlineComment(GitRepositoryCoordinates repository,
+                                                     GitAccessContext access,
+                                                     int prNumber,
+                                                     GitInlineCommentRequest request)
+    {
+        String token = access.requireToken();
+        validate(repository, token, prNumber);
+        validateInlineRequest(request);
+        DiffRefs diffRefs = fetchDiffRefs(repository, access, token, prNumber, request.headSha());
+        JSONObject position = new JSONObject();
+        position.put("base_sha", diffRefs.baseSha());
+        position.put("start_sha", diffRefs.startSha());
+        position.put("head_sha", diffRefs.headSha());
+        position.put("position_type", "text");
+        position.put("new_path", request.path());
+        position.put("new_line", resolveLine(request));
+        JSONObject payload = new JSONObject();
+        payload.put("body", request.body() == null ? "" : request.body());
+        payload.put("position", position);
+        HttpUrl url = GitLabProvider.projectUrl(access, repository.fullPath(),
+            "merge_requests/" + prNumber + "/discussions");
+        Request httpRequest = requestBuilder(token, url)
+            .post(RequestBody.create(payload.toJSONString(), JSON_MEDIA))
+            .build();
+        String responseBody = execute(token, httpRequest, "创建 MR 行内评论");
+        return parseDiscussionComment(responseBody, token, prNumber, request.body());
+    }
+
+    @Override
+    public Optional<GitPullRequestComment> findInlineCommentWithMarker(GitRepositoryCoordinates repository,
+                                                                       GitAccessContext access,
+                                                                       int prNumber,
+                                                                       String marker)
+    {
+        String token = access.requireToken();
+        validate(repository, token, prNumber);
+        if (marker == null || marker.isBlank())
+        {
+            return Optional.empty();
+        }
+        for (int page = 1; page <= ReviewDeliveryConstants.COMMENT_MAX_PAGES; page++)
+        {
+            HttpUrl url = GitLabProvider.projectUrl(access, repository.fullPath(),
+                    "merge_requests/" + prNumber + "/discussions")
+                .newBuilder()
+                .addQueryParameter("per_page", String.valueOf(ReviewDeliveryConstants.COMMENT_PAGE_SIZE))
+                .addQueryParameter("page", String.valueOf(page))
+                .build();
+            String body = execute(token, requestBuilder(token, url).get().build(), "列出 MR 讨论");
+            JSONArray array = parseArray(body, token);
+            if (array.isEmpty())
+            {
+                return Optional.empty();
+            }
+            for (int i = 0; i < array.size(); i++)
+            {
+                JSONObject discussion = array.getJSONObject(i);
+                if (discussion == null)
+                {
+                    continue;
+                }
+                JSONArray notes = discussion.getJSONArray("notes");
+                if (notes == null)
+                {
+                    continue;
+                }
+                for (int j = 0; j < notes.size(); j++)
+                {
+                    JSONObject note = notes.getJSONObject(j);
+                    if (note == null)
+                    {
+                        continue;
+                    }
+                    String noteBody = note.getString("body");
+                    if (noteBody != null && noteBody.contains(marker))
+                    {
+                        return Optional.of(new GitPullRequestComment(
+                            compositeId(prNumber, note.get("id")), noteBody));
+                    }
+                }
+            }
+            if (array.size() < ReviewDeliveryConstants.COMMENT_PAGE_SIZE)
+            {
+                return Optional.empty();
+            }
+        }
+        return Optional.empty();
+    }
+
+    @Override
     public GitPullRequestComment updateIssueComment(GitRepositoryCoordinates repository,
                                                     GitAccessContext access,
                                                     String commentId,
@@ -192,6 +289,112 @@ public class GitLabPullRequestCommentClient implements GitPullRequestCommentClie
             throw new GitPullRequestCommentException(
                 sanitize("无法连接 GitLab：" + ex.getMessage(), token), ex);
         }
+    }
+
+    private DiffRefs fetchDiffRefs(GitRepositoryCoordinates repository,
+                                   GitAccessContext access,
+                                   String token,
+                                   int prNumber,
+                                   String fallbackHeadSha)
+    {
+        HttpUrl url = GitLabProvider.projectUrl(access, repository.fullPath(), "merge_requests/" + prNumber);
+        String body = execute(token, requestBuilder(token, url).get().build(), "读取 MR diff_refs");
+        try
+        {
+            JSONObject json = JSON.parseObject(body);
+            JSONObject diffRefs = json == null ? null : json.getJSONObject("diff_refs");
+            if (diffRefs == null)
+            {
+                throw new GitPullRequestCommentException("MR 缺少 diff_refs，无法创建行内评论");
+            }
+            String baseSha = diffRefs.getString("base_sha");
+            String startSha = diffRefs.getString("start_sha");
+            String headSha = diffRefs.getString("head_sha");
+            if (headSha == null || headSha.isBlank())
+            {
+                headSha = fallbackHeadSha;
+            }
+            if (baseSha == null || baseSha.isBlank() || startSha == null || startSha.isBlank()
+                || headSha == null || headSha.isBlank())
+            {
+                throw new GitPullRequestCommentException("MR diff_refs 不完整，无法创建行内评论");
+            }
+            return new DiffRefs(baseSha, startSha, headSha);
+        }
+        catch (GitPullRequestCommentException ex)
+        {
+            throw ex;
+        }
+        catch (Exception ex)
+        {
+            throw new GitPullRequestCommentException(sanitize("读取 MR diff_refs 响应解析失败", token), ex);
+        }
+    }
+
+    private static GitPullRequestComment parseDiscussionComment(String body,
+                                                                String token,
+                                                                int iid,
+                                                                String fallbackBody)
+    {
+        try
+        {
+            JSONObject json = JSON.parseObject(body);
+            if (json == null)
+            {
+                throw new GitPullRequestCommentException("行内评论响应格式异常");
+            }
+            JSONArray notes = json.getJSONArray("notes");
+            if (notes != null && !notes.isEmpty())
+            {
+                JSONObject note = notes.getJSONObject(0);
+                if (note != null && note.get("id") != null)
+                {
+                    return new GitPullRequestComment(
+                        compositeId(iid, note.get("id")),
+                        note.getString("body") == null ? fallbackBody : note.getString("body"));
+                }
+            }
+            if (json.get("id") != null)
+            {
+                return new GitPullRequestComment(
+                    compositeId(iid, json.get("id")),
+                    json.getString("body") == null ? fallbackBody : json.getString("body"));
+            }
+            throw new GitPullRequestCommentException("行内评论响应缺少 id");
+        }
+        catch (GitPullRequestCommentException ex)
+        {
+            throw ex;
+        }
+        catch (Exception ex)
+        {
+            throw new GitPullRequestCommentException(sanitize("行内评论响应解析失败", token), ex);
+        }
+    }
+
+    private static void validateInlineRequest(GitInlineCommentRequest request)
+    {
+        if (request == null || request.path() == null || request.path().isBlank())
+        {
+            throw new GitPullRequestCommentException("行内评论缺少文件路径");
+        }
+        if (request.endLine() == null && request.startLine() == null)
+        {
+            throw new GitPullRequestCommentException("行内评论缺少行号");
+        }
+    }
+
+    private static int resolveLine(GitInlineCommentRequest request)
+    {
+        if (request.endLine() != null)
+        {
+            return request.endLine();
+        }
+        return request.startLine();
+    }
+
+    private record DiffRefs(String baseSha, String startSha, String headSha)
+    {
     }
 
     private static void validate(GitRepositoryCoordinates repository, String token, int prNumber)
