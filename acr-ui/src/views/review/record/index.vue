@@ -42,7 +42,7 @@
     </el-row>
 
     <el-table class="record-table" v-loading="loading" :data="recordList" empty-text="暂无审查记录">
-      <el-table-column label="项目名称" width="120">
+      <el-table-column label="项目名称" min-width="130">
         <template #default="scope">
           <div class="project-cell">
             <span class="project-name" :title="scope.row.projectName || ''">{{ recordDisplayValue(scope.row.projectName) }}</span>
@@ -50,7 +50,7 @@
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="变更来源" width="145">
+      <el-table-column label="变更来源" min-width="220">
         <template #default="scope">
           <template v-if="isPushTask(scope.row)">
             <div class="source-cell">
@@ -78,7 +78,7 @@
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="代码变更" width="145" align="center">
+      <el-table-column label="代码变更" width="150" align="center">
         <template #default="scope">
           <div v-if="hasChangeMetrics(scope.row)" class="change-summary" :aria-label="changeSummaryLabel(scope.row)">
             <span class="change-metric change-metric-files">
@@ -99,7 +99,7 @@
           <span v-else :class="['metric-state', metricStateClass(scope.row)]">{{ metricUnavailableLabel(scope.row) }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="审查结论" width="90">
+      <el-table-column label="审查结论" width="100">
         <template #default="scope">
           <el-tooltip v-if="scope.row.taskStatus === 'FAILED'" :content="readableFailureMessage(scope.row.failureMessage)" placement="top">
             <el-tag :type="recordConclusionTagType(scope.row)" size="small">{{ recordConclusionLabel(scope.row) }}</el-tag>
@@ -107,12 +107,12 @@
           <el-tag v-else :type="recordConclusionTagType(scope.row)" size="small">{{ recordConclusionDisplay(scope.row) }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="评分" width="60" align="center">
+      <el-table-column label="评分" width="70" align="center">
         <template #default="scope">
           <span :class="['metric-state', metricStateClass(scope.row)]">{{ scoreDisplay(scope.row) }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="重点问题" width="145">
+      <el-table-column label="重点问题" min-width="180">
         <template #default="scope">
           <template v-if="focusIssueMetrics[scope.row.taskId]?.hasBreakdown">
             <div class="focus-counts" title="基于结构化 Top 3 重点问题分级统计，非全量问题" aria-label="重点问题分级统计">
@@ -143,10 +143,10 @@
       <el-table-column label="完成时间" width="125">
         <template #default="scope">{{ recordDateTime(scope.row.finishedTime) }}</template>
       </el-table-column>
-      <el-table-column label="发起人" width="90" :show-overflow-tooltip="true">
+      <el-table-column label="发起人" width="100" :show-overflow-tooltip="true">
         <template #default="scope">{{ recordDisplayValue(scope.row.prAuthor) }}</template>
       </el-table-column>
-      <el-table-column label="分支" width="130">
+      <el-table-column label="分支" min-width="160">
         <template #default="scope">
           <span class="branch-flow" :title="`${recordDisplayValue(scope.row.sourceBranch)} → ${recordDisplayValue(scope.row.targetBranch)}`">
             {{ recordDisplayValue(scope.row.sourceBranch) }} → {{ recordDisplayValue(scope.row.targetBranch) }}
@@ -215,10 +215,7 @@ const showAdvancedSearch = ref(false)
 const total = ref(0)
 const dateRange = ref([])
 
-const sourceOptions = computed(() => (review_event_source.value || []).map(item => ({
-  ...item,
-  label: item.value === 'PUSH' ? 'Push' : 'PR / MR'
-})))
+const sourceOptions = computed(() => review_event_source.value || [])
 
 const focusIssueMetrics = computed(() => {
   const metrics = {}

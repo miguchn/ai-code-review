@@ -393,7 +393,7 @@ const recordMergeRequestUrl = computed(() => buildMergeRequestUrl(recordContext.
 const recordChangeLabel = computed(() => {
   const record = recordContext.value?.record
   if (!record) return '—'
-  if (isPushTask(record)) return `Push ${formatPushRefDisplay(record)}`
+  if (isPushTask(record)) return `推送 ${formatPushRefDisplay(record)}`
   return `${mergeRequestLabel(record.provider)} #${record.prNumber} · ${emptyDash(record.prTitle)}`
 })
 const recordBranchLabel = computed(() => branchLabel(recordContext.value?.record))

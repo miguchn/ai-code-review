@@ -13,7 +13,7 @@
       >{{ retryLabel }}</el-button>
     </div>
     <p v-if="isPush" class="section-hint">
-      Push 审查没有可挂载的代码平台评论；审查结果通过通知和问题台账交付。
+      推送审查没有可挂载的代码平台评论；审查结果通过通知和问题台账交付。
     </p>
     <p v-else class="section-hint">与审查结论独立：投递失败不影响任务成功状态。同一变更来源仅维护一条 ACR 总结评论。</p>
     <p v-if="isPush" class="section-hint">本任务无需投递代码平台评论。</p>

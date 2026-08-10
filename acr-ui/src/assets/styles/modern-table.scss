@@ -100,6 +100,27 @@
   padding-left: 16px;
 }
 
+/* 行距：主表格单元格上下留白加大，阅读与点选更从容（嵌套小表格沿用紧凑规格） */
+#app .main-container .app-main .el-table td.el-table__cell {
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+/* 列宽拖拽提示：表头悬浮时右缘出现拖拽指示条（Element Plus 原生支持列宽拖拽） */
+#app .main-container .app-main .el-table th.el-table__cell {
+  position: relative;
+}
+#app .main-container .app-main .el-table th.el-table__cell:hover::after {
+  content: '';
+  position: absolute;
+  top: 25%;
+  right: 0;
+  width: 2px;
+  height: 50%;
+  background: var(--el-border-color);
+  border-radius: 1px;
+}
+
 #app .main-container .app-main .el-table .current-row > td.el-table__cell,
 #app .main-container .app-main .el-table .el-table__body tr.current-row:hover > td.el-table__cell {
   background: var(--brand-bg-selected) !important;

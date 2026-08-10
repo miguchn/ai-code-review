@@ -226,17 +226,15 @@ function resolveRepositoryBase(task) {
   return ''
 }
 
-/** 合并请求外链标签：GitLab 为 MR，其余为 PR。 */
+/** 合并请求外链标签：统一中文「合并请求」（GitLab 官方中文同为合并请求，不再区分 MR/PR）。 */
 export function mergeRequestLabel(provider) {
-  return (provider || '').toUpperCase() === 'GITLAB' ? 'MR' : 'PR'
+  return '合并请求'
 }
 
-/** 变更来源展示：平台与触发方式合并为一个明确值。 */
+/** 变更来源展示：统一中文触发类型（合并请求 / 推送），平台信息由上下文承载。 */
 export function changeSourceLabel(task) {
-  if (isPushTask(task)) return 'Push'
-  const providerLabels = { GITHUB: 'GitHub', GITLAB: 'GitLab', GITEE: 'Gitee', GITEA: 'Gitea' }
-  const provider = String(task?.provider || 'GITHUB').toUpperCase()
-  return `${providerLabels[provider] || '代码平台'} ${mergeRequestLabel(task?.provider)}`
+  if (isPushTask(task)) return '推送'
+  return '合并请求'
 }
 
 /** 由平台、仓库坐标与合并请求编号生成 Web 链接。 */

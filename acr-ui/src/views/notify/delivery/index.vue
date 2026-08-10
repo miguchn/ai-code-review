@@ -58,8 +58,11 @@
           <dict-tag :options="review_delivery_status" :value="scope.row.deliveryStatus" />
         </template>
       </el-table-column>
-      <el-table-column label="PR" width="90">
-        <template #default="scope">#{{ scope.row.prNumber }}</template>
+      <el-table-column label="变更编号" width="90">
+        <template #default="scope">
+          <span v-if="Number(scope.row.prNumber) > 0">#{{ scope.row.prNumber }}</span>
+          <span v-else class="empty-tip">—</span>
+        </template>
       </el-table-column>
       <el-table-column label="任务 ID" prop="taskId" width="100" />
       <el-table-column label="失败原因" prop="failureMessage" min-width="220" :show-overflow-tooltip="true" />

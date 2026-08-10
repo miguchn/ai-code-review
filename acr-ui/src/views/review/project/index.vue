@@ -481,7 +481,7 @@
         <el-table-column label="标记" width="180">
           <template #default="scope">
             <el-tag v-if="scope.row.name === form.defaultBranch" type="info" size="small" class="mr8">默认分支</el-tag>
-            <el-tag v-if="form.prTargetBranches.includes(scope.row.name)" type="primary" size="small" class="mr8">PR 目标</el-tag>
+            <el-tag v-if="form.prTargetBranches.includes(scope.row.name)" type="primary" size="small" class="mr8">合并目标</el-tag>
             <el-tag v-if="form.pushTriggerBranches.includes(scope.row.name)" type="success" size="small">推送触发</el-tag>
           </template>
         </el-table-column>
