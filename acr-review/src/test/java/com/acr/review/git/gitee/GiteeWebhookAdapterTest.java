@@ -50,8 +50,20 @@ class GiteeWebhookAdapterTest
           "pusher": { "name": "alice", "email": "a@x.com" },
           "sender": { "login": "alice" },
           "commits": [
-            { "id": "aaaabbbbccccddddeeeeffff0000111122223333", "message": "first", "distinct": true },
-            { "id": "ffffeeeeddddccccbbbbaaaa3333222211110000", "message": "second fix", "distinct": true }
+            {
+              "id": "aaaabbbbccccddddeeeeffff0000111122223333",
+              "message": "first\n\nbody",
+              "timestamp": "2026-08-01T10:00:00+08:00",
+              "author": { "name": "Alice", "email": "alice@example.com" },
+              "distinct": true
+            },
+            {
+              "id": "ffffeeeeddddccccbbbbaaaa3333222211110000",
+              "message": "second fix",
+              "timestamp": "2026-08-01T11:00:00+08:00",
+              "author": { "name": "Bob", "email": "bob@example.com" },
+              "distinct": true
+            }
           ],
           "head_commit": { "id": "ffffeeeeddddccccbbbbaaaa3333222211110000", "message": "second fix" },
           "repository": {
@@ -272,6 +284,64 @@ class GiteeWebhookAdapterTest
         assertEquals("second fix", event.headCommitMessage());
         assertFalse(event.created());
         assertFalse(event.deleted());
+        assertEquals(2, event.commits().size());
+        assertEquals("Alice", event.commits().get(0).authorName());
+        assertEquals("alice@example.com", event.commits().get(0).authorEmail());
+        assertEquals("first", event.commits().get(0).messageFirstLine());
+        assertNotNull(event.commits().get(0).timestamp());
+    }
+
+    @Test
+    void parsesPushCommitsEmptyArrayAsEmptyList()
+    {
+        String payload = PUSH_PAYLOAD.replaceAll(
+            "\"commits\": \\[[\\s\\S]*?\\]", "\"commits\": []");
+        GitPushEvent event = adapter.parsePushEvent(
+            "Push Hook", "delivery-empty-commits", payload.getBytes(StandardCharsets.UTF_8));
+
+        assertNotNull(event);
+        assertNotNull(event.commits());
+        assertTrue(event.commits().isEmpty());
+    }
+
+    @Test
+    void skipsPushCommitsMissingShaWithoutAborting()
+    {
+        String payload = """
+            {
+              "ref": "refs/heads/main",
+              "before": "aaaabbbbccccddddeeeeffff0000111122223333",
+              "after": "ffffeeeeddddccccbbbbaaaa3333222211110000",
+              "created": false,
+              "deleted": false,
+              "pusher": { "name": "alice", "email": "a@x.com" },
+              "sender": { "login": "alice" },
+              "commits": [
+                { "message": "no sha", "author": { "name": "Alice", "email": "a@x.com" } },
+                {
+                  "id": "ffffeeeeddddccccbbbbaaaa3333222211110000",
+                  "message": "ok",
+                  "timestamp": 1722506400,
+                  "author": { "name": "Bob" }
+                }
+              ],
+              "head_commit": { "id": "ffffeeeeddddccccbbbbaaaa3333222211110000", "message": "ok" },
+              "repository": {
+                "name": "demo-repo",
+                "full_name": "miguchn/demo-repo",
+                "owner": { "login": "miguchn" }
+              }
+            }
+            """;
+        GitPushEvent event = adapter.parsePushEvent(
+            "Push Hook", "delivery-skip-sha", payload.getBytes(StandardCharsets.UTF_8));
+
+        assertNotNull(event);
+        assertEquals(1, event.commits().size());
+        assertEquals("ffffeeeeddddccccbbbbaaaa3333222211110000", event.commits().get(0).sha());
+        assertEquals("Bob", event.commits().get(0).authorName());
+        assertNull(event.commits().get(0).authorEmail());
+        assertNotNull(event.commits().get(0).timestamp());
     }
 
     @Test

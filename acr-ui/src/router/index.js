@@ -178,6 +178,20 @@ export const dynamicRoutes = [
         meta: { title: '审查记录详情', activeMenu: '/review/record' }
       }
     ]
+  },
+  {
+    path: '/insight/project-detail',
+    component: Layout,
+    hidden: true,
+    permissions: ['insight:project:view'],
+    children: [
+      {
+        path: 'index/:projectId(\\d+)',
+        component: () => import('@/views/insight/project/detail'),
+        name: 'InsightProjectDetail',
+        meta: { title: '项目分析详情', activeMenu: '/insight/project' }
+      }
+    ]
   }
 ]
 

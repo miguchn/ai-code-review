@@ -11,3 +11,7 @@ export function getReviewTask(taskId) {
 export function retryReviewTask(taskId) {
   return request({ url: '/review/task/' + taskId + '/retry', method: 'post' })
 }
+
+export function cancelReviewTask(taskId) {
+  return request({ url: '/review/task/' + taskId + '/cancel', method: 'post' })
+}

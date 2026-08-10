@@ -16,6 +16,9 @@ public interface IReviewTaskService
 
     void retryTask(Long taskId);
 
+    /** 人工终止：置 CANCELLED，旧执行由 epoch/租约围栏拒绝后续写入。 */
+    void cancelTask(Long taskId);
+
     /** 与任务列表同口径计数。 */
     int countReviewTaskList(ReviewTask task);
 

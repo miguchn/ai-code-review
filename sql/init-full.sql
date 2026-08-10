@@ -1,7 +1,7 @@
 -- ============================================================================
 -- AI Code Review 一次性初始化脚本（仅适用于全新环境）
 --
--- 本脚本是 sql/01_core_schema.sql … sql/32_issue_pr_close_source.sql
+-- 本脚本是 sql/01_core_schema.sql … sql/40_review_runtime_ops.sql
 -- 全部执行完成后的最终状态（表结构 + 初始化数据），新环境一条命令即可完成初始化：
 --
 --   mysql --default-character-set=utf8mb4 -u root -p < sql/init-full.sql
@@ -15,15 +15,17 @@
 -- 4. 初始管理员为 admin / admin123，首次登录后请立即修改密码。
 -- 5. 新增编号增量脚本后必须同步重新生成本脚本（生成方式见 sql/README.md）。
 --
--- 生成日期：2026-08-06；基线：feature/m8.1-issue-lifecycle-view（已含 01-32 全部增量脚本）
+-- 生成日期：2026-08-10；基线：企业级架构风险修复 S6 + M11 行内评论 + M12 数据洞察
+-- （已含 01-40 全部增量脚本）
 -- ============================================================================
 
 CREATE DATABASE IF NOT EXISTS `ai_code_review` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
 USE `ai_code_review`;
 
 -- ----------------------------------------------------------------------------
--- 第一部分：表结构最终态（01-31 增量合并后的 41 张表）
+-- 第一部分：表结构最终态（01-40 增量合并后的最终状态）
 -- ----------------------------------------------------------------------------
+
 
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
 /*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
@@ -197,6 +199,24 @@ CREATE TABLE `QRTZ_TRIGGERS` (
   CONSTRAINT `qrtz_triggers_ibfk_1` FOREIGN KEY (`sched_name`, `job_name`, `job_group`) REFERENCES `QRTZ_JOB_DETAILS` (`sched_name`, `job_name`, `job_group`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='触发器详细信息表';
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `review_commit_fact`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `review_commit_fact` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `project_id` bigint NOT NULL COMMENT '项目ID',
+  `commit_sha` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '提交 SHA',
+  `commit_time` datetime NOT NULL COMMENT '提交时间',
+  `author_name` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '作者名',
+  `author_email` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '作者邮箱',
+  `message_first_line` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '提交消息首行',
+  `source_event_id` bigint DEFAULT NULL COMMENT '抽取来源 Webhook 事件ID',
+  `create_time` datetime DEFAULT NULL COMMENT '入库时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_commit_project_sha` (`project_id`,`commit_sha`),
+  KEY `idx_commit_author_time` (`project_id`,`author_email`,`commit_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='推送提交事实';
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `review_delivery_record`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
@@ -208,12 +228,17 @@ CREATE TABLE `review_delivery_record` (
   `provider` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'GITHUB' COMMENT 'Git Provider',
   `channel` varchar(40) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '投递渠道(GITHUB_PR_SUMMARY_COMMENT)',
   `pr_number` int NOT NULL COMMENT 'PR编号',
+  `issue_id` bigint DEFAULT NULL COMMENT '行内评论关联问题ID(总结/IM为NULL)',
   `idempotency_key` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '幂等键',
   `external_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '外部评论ID（GitHub comment id）',
-  `delivery_status` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '投递状态(SUCCESS/FAILED)',
+  `delivery_status` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '投递状态(PENDING/SUCCESS/FAILED/MANUAL/SKIPPED)',
   `failure_message` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '失败原因（已脱敏）',
-  `attempt_count` int NOT NULL DEFAULT '1' COMMENT '投递尝试次数',
-  `last_attempt_time` datetime NOT NULL COMMENT '最近尝试时间',
+  `attempt_count` int NOT NULL DEFAULT '0' COMMENT '已完成投递尝试次数',
+  `next_attempt_at` datetime DEFAULT NULL COMMENT '下次可投递时间(DB时钟)',
+  `last_error_code` varchar(64) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '最近稳定错误码',
+  `lease_owner` varchar(128) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '投递租约持有者',
+  `lease_until` datetime DEFAULT NULL COMMENT '投递租约到期时间(DB时钟)',
+  `last_attempt_time` datetime DEFAULT NULL COMMENT '最近尝试时间',
   `trigger_source` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '触发来源(TASK_SUCCESS/ISSUE_DISPOSITION/MANUAL_RETRY)',
   `content_snapshot` mediumtext CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci COMMENT '实际发出正文快照(JSON)',
   `create_by` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT '',
@@ -224,7 +249,9 @@ CREATE TABLE `review_delivery_record` (
   UNIQUE KEY `uk_delivery_idempotency` (`idempotency_key`),
   KEY `idx_delivery_task` (`task_id`),
   KEY `idx_delivery_project_pr` (`project_id`,`pr_number`),
-  KEY `idx_delivery_status` (`delivery_status`)
+  KEY `idx_delivery_status` (`delivery_status`),
+  KEY `idx_delivery_pending` (`delivery_status`,`next_attempt_at`),
+  KEY `idx_delivery_issue` (`issue_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='审查结果投递记录';
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `review_git_credential`;
@@ -251,6 +278,21 @@ CREATE TABLE `review_git_credential` (
   KEY `idx_review_credential_status` (`status`),
   KEY `idx_review_credential_check_status` (`last_check_status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='Git 访问凭据表';
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `review_insight_identity_claim`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `review_insight_identity_claim` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `user_id` bigint NOT NULL COMMENT '平台用户ID',
+  `author_email` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '认领邮箱',
+  `author_name` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '认领展示名',
+  `create_by` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT '',
+  `create_time` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_insight_claim_user_email` (`user_id`,`author_email`),
+  KEY `idx_insight_claim_email` (`author_email`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='数据洞察提交身份认领';
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `review_issue`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -316,6 +358,27 @@ CREATE TABLE `review_issue_action` (
   KEY `idx_issue_action_issue_time` (`issue_id`,`create_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='审查问题动作流水';
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `review_member_stats_daily`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `review_member_stats_daily` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `project_id` bigint NOT NULL COMMENT '项目ID',
+  `author_key` varchar(320) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '提交身份键(邮箱优先否则名称)',
+  `author_name` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '展示名',
+  `stat_date` date NOT NULL COMMENT '统计日',
+  `commit_count` int NOT NULL DEFAULT '0' COMMENT '提交数',
+  `tasks_reviewed` int NOT NULL DEFAULT '0' COMMENT '被审任务数(pr_author弱匹配)',
+  `issues_new` int NOT NULL DEFAULT '0' COMMENT '关联任务新增问题数',
+  `issues_open` int NOT NULL DEFAULT '0' COMMENT '关联任务未关闭问题数(当日快照)',
+  `create_time` datetime DEFAULT NULL COMMENT '创建时间',
+  `update_time` datetime DEFAULT NULL COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_member_stats` (`project_id`,`author_key`,`stat_date`),
+  KEY `idx_member_stats_date` (`stat_date`),
+  KEY `idx_member_stats_author` (`author_key`,`stat_date`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='成员日聚合(项目×身份×日)';
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `review_notify_channel`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
@@ -356,6 +419,8 @@ CREATE TABLE `review_project` (
   `pr_target_branches` varchar(1000) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT 'PR目标分支，逗号分隔',
   `push_review_enabled` char(1) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '1' COMMENT '是否启用推送审查(0启用 1停用)',
   `push_trigger_branches` varchar(1000) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '推送触发分支，换行或逗号分隔，支持通配 release/*',
+  `inline_comment_enabled` char(1) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '1' COMMENT '是否启用行内评论(0启用 1停用)',
+  `inline_severities` varchar(40) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'CRITICAL,HIGH' COMMENT '行内评论严重度白名单,逗号分隔',
   `business_system_id` bigint NOT NULL COMMENT '业务系统ID',
   `dept_id` bigint NOT NULL COMMENT '所属部门ID',
   `owner_user_id` bigint NOT NULL COMMENT '项目负责人用户ID',
@@ -398,6 +463,38 @@ CREATE TABLE `review_project` (
   KEY `idx_review_project_notify_channel` (`notify_channel_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='代码审查项目表';
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `review_stats_daily`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `review_stats_daily` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `project_id` bigint NOT NULL COMMENT '项目ID',
+  `stat_date` date NOT NULL COMMENT '统计日',
+  `task_total` int NOT NULL DEFAULT '0' COMMENT '终态任务数(SUCCESS+FAILED)',
+  `task_success` int NOT NULL DEFAULT '0' COMMENT '成功任务数',
+  `task_failed` int NOT NULL DEFAULT '0' COMMENT '失败任务数',
+  `task_push` int NOT NULL DEFAULT '0' COMMENT 'PUSH 来源任务数',
+  `task_covered` int NOT NULL DEFAULT '0' COMMENT 'SUCCESS且至少一次投递SUCCESS的任务数',
+  `duration_p95_ms` bigint NOT NULL DEFAULT '0' COMMENT '成功任务 duration_ms 的 P95',
+  `issue_new` int NOT NULL DEFAULT '0' COMMENT '新增问题(origin=NEW)',
+  `issue_critical` int NOT NULL DEFAULT '0' COMMENT '新增 CRITICAL',
+  `issue_high` int NOT NULL DEFAULT '0' COMMENT '新增 HIGH',
+  `issue_medium` int NOT NULL DEFAULT '0' COMMENT '新增 MEDIUM',
+  `issue_low` int NOT NULL DEFAULT '0' COMMENT '新增 LOW',
+  `issue_closed` int NOT NULL DEFAULT '0' COMMENT '当日关闭(CLOSED)',
+  `issue_confirmed` int NOT NULL DEFAULT '0' COMMENT '当日确认(CONFIRM动作)',
+  `issue_false_positive` int NOT NULL DEFAULT '0' COMMENT '当日误报(FALSE_POSITIVE)',
+  `delivery_total` int NOT NULL DEFAULT '0' COMMENT '投递尝试数(终态)',
+  `delivery_success` int NOT NULL DEFAULT '0' COMMENT '投递成功数',
+  `event_accepted` int NOT NULL DEFAULT '0' COMMENT 'ACCEPTED 事件数',
+  `event_ignored` int NOT NULL DEFAULT '0' COMMENT 'IGNORED 事件数',
+  `create_time` datetime DEFAULT NULL COMMENT '创建时间',
+  `update_time` datetime DEFAULT NULL COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_stats_project_date` (`project_id`,`stat_date`),
+  KEY `idx_stats_date` (`stat_date`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='审查日聚合(项目×日)';
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `review_task`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
@@ -418,7 +515,16 @@ CREATE TABLE `review_task` (
   `deletions` int DEFAULT NULL COMMENT 'PR 删除行数',
   `changed_files` int DEFAULT NULL COMMENT 'PR 变更文件数',
   `trigger_type` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'WEBHOOK' COMMENT '触发方式(WEBHOOK/MANUAL/SCHEDULE)',
-  `task_status` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'PENDING' COMMENT '任务状态(PENDING/RUNNING/SUCCESS/FAILED/CANCELLED)',
+  `task_status` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'PENDING' COMMENT '任务状态(PENDING/RUNNING/RETRYING/SUCCESS/FAILED/CANCELLED/SUPERSEDED)',
+  `change_key` varchar(300) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL COMMENT '逻辑变更键(PR#编号/PUSH#分支)',
+  `next_run_at` datetime DEFAULT NULL COMMENT '下次可执行时间(DB时钟)',
+  `lease_owner` varchar(128) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '执行租约持有者',
+  `lease_until` datetime DEFAULT NULL COMMENT '执行租约到期时间(DB时钟)',
+  `heartbeat_at` datetime DEFAULT NULL COMMENT '最近心跳时间(DB时钟)',
+  `execution_epoch` bigint NOT NULL DEFAULT '0' COMMENT '执行代次(fencing token)',
+  `retry_count` int NOT NULL DEFAULT '0' COMMENT '自动重试/恢复次数',
+  `last_error_code` varchar(64) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '最近稳定错误码',
+  `superseded_by` bigint DEFAULT NULL COMMENT '替代本任务的新任务ID',
   `review_conclusion` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '审查结论(PASS/WARN/BLOCK)',
   `current_step` varchar(40) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '当前/最近执行步骤',
   `failure_step` varchar(40) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '失败步骤',
@@ -464,7 +570,10 @@ CREATE TABLE `review_task` (
   UNIQUE KEY `uk_task_event` (`event_id`),
   KEY `idx_task_project` (`project_id`),
   KEY `idx_task_status` (`task_status`),
-  KEY `idx_task_pr` (`project_id`,`pr_number`)
+  KEY `idx_task_pr` (`project_id`,`pr_number`),
+  KEY `idx_task_dispatch` (`task_status`,`next_run_at`),
+  KEY `idx_task_recovery` (`task_status`,`lease_until`),
+  KEY `idx_task_change` (`project_id`,`change_key`,`task_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='审查任务表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `review_task_run`;
@@ -966,12 +1075,10 @@ CREATE TABLE `sys_user_role` (
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
 
-
-
-
 -- ----------------------------------------------------------------------------
--- 第二部分：初始化数据（管理员、菜单、字典、参数、内置审查模板）
+-- 第二部分：初始化数据（菜单 / 字典 / 参数 / 角色 / 管理员 / 内置审查模板）
 -- ----------------------------------------------------------------------------
+
 
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
 /*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
@@ -986,7 +1093,7 @@ CREATE TABLE `sys_user_role` (
 
 LOCK TABLES `sys_user` WRITE;
 /*!40000 ALTER TABLE `sys_user` DISABLE KEYS */;
-INSERT INTO `sys_user` (`user_id`, `dept_id`, `user_name`, `nick_name`, `user_type`, `email`, `phonenumber`, `sex`, `avatar`, `password`, `status`, `del_flag`, `login_ip`, `login_date`, `pwd_update_date`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (1,100,'admin','系统管理员','00','','','2','','$2a$10$7JB720yubVSZvUI0rEqK/.VqGOZTH.ulu33dHOiBE8ByOhJIrdAu2','0','0','127.0.0.1','2026-08-05 13:09:53','2026-07-30 17:15:00','admin','2026-07-30 17:15:00','',NULL,'初始管理员');
+INSERT INTO `sys_user` (`user_id`, `dept_id`, `user_name`, `nick_name`, `user_type`, `email`, `phonenumber`, `sex`, `avatar`, `password`, `status`, `del_flag`, `login_ip`, `login_date`, `pwd_update_date`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (1,100,'admin','系统管理员','00','','','2','','$2a$10$7JB720yubVSZvUI0rEqK/.VqGOZTH.ulu33dHOiBE8ByOhJIrdAu2','0','0','127.0.0.1','2026-08-10 16:12:25','2026-07-30 17:15:00','admin','2026-07-30 17:15:00','',NULL,'初始管理员');
 /*!40000 ALTER TABLE `sys_user` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -1007,6 +1114,7 @@ LOCK TABLES `sys_role_menu` WRITE;
 INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,4);
 INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,5);
 INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,6);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,7);
 INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,120);
 INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,121);
 INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,124);
@@ -1017,6 +1125,11 @@ INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,128);
 INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,129);
 INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,130);
 INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,131);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,132);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,133);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,134);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,135);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,136);
 INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,1116);
 INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,1117);
 INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,1118);
@@ -1053,6 +1166,12 @@ INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,1160);
 INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,1161);
 INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,1162);
 INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,1163);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,1170);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,1171);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,1172);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,1173);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,1174);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,1175);
 /*!40000 ALTER TABLE `sys_role_menu` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -1064,12 +1183,13 @@ UNLOCK TABLES;
 
 LOCK TABLES `sys_menu` WRITE;
 /*!40000 ALTER TABLE `sys_menu` DISABLE KEYS */;
-INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (1,'系统管理',0,5,'system',NULL,'','',1,0,'M','0','0','','system','admin','2026-07-30 17:15:00','admin','2026-08-03 10:42:32','系统管理目录');
-INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (2,'系统监控',0,6,'monitor',NULL,'','',1,0,'M','0','0','','monitor','admin','2026-07-30 17:15:00','admin','2026-08-03 10:42:32','系统监控目录');
-INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (3,'审查中心',0,1,'review',NULL,'','',1,0,'M','0','0','','code','admin','2026-08-01 07:29:41','admin','2026-08-03 10:42:32','审查中心：问题台账、审查任务、审查记录');
-INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (4,'策略配置',0,3,'model-service',NULL,'','',1,0,'M','0','0','','server','admin','2026-08-01 10:36:03','admin','2026-08-03 10:42:32','策略配置：审查模板、大模型配置、审查引擎');
-INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (5,'通知管理',0,4,'notify',NULL,'','',1,0,'M','0','0','','message','admin','2026-08-03 05:24:41','admin','2026-08-03 10:42:32','通知管理一级目录（渠道与投递记录）');
-INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (6,'项目接入',0,2,'project-access',NULL,'','',1,0,'M','0','0','','tree','admin','2026-08-03 10:42:32','admin','2026-08-03 10:42:32','项目接入一级目录（业务系统/凭据/代码项目）');
+INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (1,'系统管理',0,6,'system',NULL,'','',1,0,'M','0','0','','system','admin','2026-07-30 17:15:00','admin','2026-08-10 09:28:50','系统管理目录');
+INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (2,'系统监控',0,7,'monitor',NULL,'','',1,0,'M','0','0','','monitor','admin','2026-07-30 17:15:00','admin','2026-08-10 09:28:50','系统监控目录');
+INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (3,'审查中心',0,1,'review',NULL,'','',1,0,'M','0','0','','code','admin','2026-08-01 07:29:41','admin','2026-08-10 09:28:50','审查中心：问题台账、审查任务、审查记录');
+INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (4,'策略配置',0,4,'model-service',NULL,'','',1,0,'M','0','0','','server','admin','2026-08-01 10:36:03','admin','2026-08-10 09:28:50','策略配置：审查模板、大模型配置、审查引擎');
+INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (5,'通知管理',0,5,'notify',NULL,'','',1,0,'M','0','0','','message','admin','2026-08-03 05:24:41','admin','2026-08-10 09:28:50','通知管理一级目录（渠道与投递记录）');
+INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (6,'项目接入',0,3,'project-access',NULL,'','',1,0,'M','0','0','','tree','admin','2026-08-03 10:42:32','admin','2026-08-10 09:28:50','项目接入一级目录（业务系统/凭据/代码项目）');
+INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (7,'数据洞察',0,2,'insight',NULL,'','',1,0,'M','0','0','','chart','admin','2026-08-10 09:28:50','admin','2026-08-10 09:28:50','数据洞察：总览看板、项目分析、报告中心');
 INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (100,'用户管理',1,1,'user','system/user/index','','',1,0,'C','0','0','system:user:list','user','admin','2026-07-30 17:15:00','',NULL,'用户管理菜单');
 INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (101,'角色管理',1,2,'role','system/role/index','','',1,0,'C','0','0','system:role:list','peoples','admin','2026-07-30 17:15:00','',NULL,'角色管理菜单');
 INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (102,'菜单管理',1,3,'menu','system/menu/index','','',1,0,'C','0','0','system:menu:list','tree-table','admin','2026-07-30 17:15:00','',NULL,'菜单管理菜单');
@@ -1097,6 +1217,11 @@ INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`
 INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (129,'通知渠道',5,1,'channel','notify/channel/index','','',1,0,'C','0','0','review:notify:list','channel','admin','2026-08-03 05:24:41','admin','2026-08-03 06:30:19','钉钉/企微/飞书群机器人渠道');
 INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (130,'投递记录',5,2,'delivery','notify/delivery/index','','ReviewDeliveryRecord',1,0,'C','0','0','review:delivery:list','log','admin','2026-08-03 05:24:41','admin','2026-08-03 10:51:29','审查结果投递记录（含 GitHub 评论回写）');
 INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (131,'问题台账',3,1,'issue','review/issue/index','','ReviewIssue',1,0,'C','0','0','review:issue:list','bug','admin','2026-08-03 08:08:26','admin','2026-08-03 10:42:32','审查问题确认与关闭');
+INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (132,'总览看板',7,1,'overview','insight/overview/index','','InsightOverview',1,0,'C','0','0','insight:overview:view','dashboard','admin','2026-08-10 09:28:50','',NULL,'平台治理健康度总览');
+INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (133,'项目分析',7,2,'project','insight/project/index','','InsightProject',1,0,'C','0','0','insight:project:view','list','admin','2026-08-10 09:28:50','',NULL,'项目指标矩阵与趋势下钻');
+INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (134,'报告中心',7,4,'report','insight/report/placeholder','','InsightReport',1,0,'C','0','0','insight:overview:view','documentation','admin','2026-08-10 09:28:50','admin','2026-08-10 09:28:50','三期占位：周/月快照与导出');
+INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (135,'成员分析',7,3,'member','insight/member/index','','InsightMember',1,0,'C','0','0','insight:team:view','peoples','admin','2026-08-10 09:28:50','',NULL,'本人自查 + 授权团队聚合（非绩效评价输入）');
+INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (136,'运行概览',2,7,'runtime','monitor/runtime/index','','ReviewRuntimeOverview',1,0,'C','0','0','review:runtime:view','dashboard','admin','2026-08-10 09:28:50','',NULL,'审查调度/资源预算/投递队列运行态与告警处置');
 INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (500,'操作日志',108,1,'operlog','monitor/operlog/index','','',1,0,'C','0','0','monitor:operlog:list','form','admin','2026-07-30 17:15:00','',NULL,'操作日志菜单');
 INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (501,'登录日志',108,2,'logininfor','monitor/logininfor/index','','',1,0,'C','0','0','monitor:logininfor:list','logininfor','admin','2026-07-30 17:15:00','',NULL,'登录日志菜单');
 INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (1000,'用户查询',100,1,'','','','',1,0,'F','0','0','system:user:query','#','admin','2026-07-30 17:15:00','',NULL,'');
@@ -1201,6 +1326,12 @@ INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`
 INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (1161,'问题查询',131,2,'#','','','',1,0,'F','0','0','review:issue:query','#','admin','2026-08-03 08:08:26','',NULL,'');
 INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (1162,'问题确认',131,3,'#','','','',1,0,'F','0','0','review:issue:confirm','#','admin','2026-08-03 08:08:26','',NULL,'');
 INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (1163,'问题关闭',131,4,'#','','','',1,0,'F','0','0','review:issue:close','#','admin','2026-08-03 08:08:26','',NULL,'覆盖关闭/忽略/误报');
+INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (1170,'总览查看',132,1,'#','','','',1,0,'F','0','0','insight:overview:view','#','admin','2026-08-10 09:28:50','',NULL,'');
+INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (1171,'项目查看',133,1,'#','','','',1,0,'F','0','0','insight:project:view','#','admin','2026-08-10 09:28:50','',NULL,'');
+INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (1172,'团队查看',135,1,'#','','','',1,0,'F','0','0','insight:team:view','#','admin','2026-08-10 09:28:50','',NULL,'');
+INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (1173,'运行概览查看',136,1,'#','','','',1,0,'F','0','0','review:runtime:view','#','admin','2026-08-10 09:28:50','',NULL,'');
+INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (1174,'任务终止',125,3,'#','','','',1,0,'F','0','0','review:task:cancel','#','admin','2026-08-10 09:28:50','',NULL,'将任务置为已取消并触发围栏');
+INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (1175,'任务处置',125,4,'#','','','',1,0,'F','0','0','review:task:handle','#','admin','2026-08-10 09:28:50','',NULL,'积压处置与投递标记人工已处理');
 /*!40000 ALTER TABLE `sys_menu` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -1233,7 +1364,7 @@ INSERT INTO `sys_dict_type` (`dict_id`, `dict_name`, `dict_type`, `status`, `cre
 INSERT INTO `sys_dict_type` (`dict_id`, `dict_name`, `dict_type`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (114,'审查问题归属','review_issue_origin','0','admin','2026-08-03 08:08:26','',NULL,'NEW / EXISTING');
 INSERT INTO `sys_dict_type` (`dict_id`, `dict_name`, `dict_type`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (115,'审查投递触发来源','review_delivery_trigger_source','0','admin','2026-08-03 09:15:27','',NULL,'投递记录最近一次尝试的触发来源');
 INSERT INTO `sys_dict_type` (`dict_id`, `dict_name`, `dict_type`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (116,'Git 平台','review_git_provider','0','admin','2026-08-03 13:30:52','',NULL,'代码审查支持的 Git 托管平台');
-INSERT INTO `sys_dict_type` (`dict_id`, `dict_name`, `dict_type`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (117,'审查事件来源','review_event_source','0','admin','2026-08-07 10:30:00','',NULL,'审查任务触发事件来源（合并请求/推送）');
+INSERT INTO `sys_dict_type` (`dict_id`, `dict_name`, `dict_type`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (117,'审查事件来源','review_event_source','0','admin','2026-08-07 02:28:41','',NULL,'审查任务触发事件来源（合并请求/推送）');
 /*!40000 ALTER TABLE `sys_dict_type` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -1309,7 +1440,7 @@ INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value
 INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (138,9,'结果格式异常','RESULT_FORMAT_INVALID','review_task_failure_type','','danger','N','0','admin','2026-08-01 14:34:12','',NULL,'模型返回 JSON 解析或校验失败');
 INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (139,10,'API 限流','RATE_LIMIT','review_task_failure_type','','warning','N','0','admin','2026-08-01 15:31:12','',NULL,'GitHub API 触发限流，稍后重试');
 INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (140,1,'已投递','SUCCESS','review_delivery_status','','success','N','0','admin','2026-08-03 03:16:45','',NULL,'');
-INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (141,2,'投递失败','FAILED','review_delivery_status','','danger','N','0','admin','2026-08-03 03:16:45','',NULL,'');
+INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (141,2,'自动重试中','FAILED','review_delivery_status','','danger','N','0','admin','2026-08-03 03:16:45','admin','2026-08-10 09:28:50','最近一次投递失败，系统将按下次处理时间自动重试');
 INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (142,1,'钉钉机器人','DINGTALK_ROBOT','review_notify_channel_type','','primary','N','0','admin','2026-08-03 05:24:41','',NULL,'');
 INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (143,2,'企微机器人','WECOM_ROBOT','review_notify_channel_type','','success','N','0','admin','2026-08-03 05:24:41','',NULL,'');
 INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (144,3,'飞书机器人','FEISHU_BOT','review_notify_channel_type','','warning','N','0','admin','2026-08-03 05:24:41','',NULL,'');
@@ -1322,13 +1453,9 @@ INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value
 INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (151,3,'已关闭','CLOSED','review_issue_status','','success','N','0','admin','2026-08-03 08:08:26','',NULL,'');
 INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (152,4,'已忽略','IGNORED','review_issue_status','','info','N','0','admin','2026-08-03 08:08:26','',NULL,'');
 INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (153,5,'误报','FALSE_POSITIVE','review_issue_status','','danger','N','0','admin','2026-08-03 08:08:26','',NULL,'');
-INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (154,6,'待复核','RECHECKING','review_issue_status','','primary','N','0','admin','2026-08-03 08:08:26','admin','2026-08-05 06:49:55','');
+INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (154,6,'疑似修复','RECHECKING','review_issue_status','','primary','N','0','admin','2026-08-03 08:08:26','admin','2026-08-05 06:49:55','');
 INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (155,1,'人工','manual','review_issue_close_source','','primary','Y','0','admin','2026-08-03 08:08:26','',NULL,'');
 INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (156,2,'自动复核','auto_recheck','review_issue_close_source','','info','N','0','admin','2026-08-03 08:08:26','admin','2026-08-05 06:49:55','');
-INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (169,3,'随 PR 合并关闭','pr_merged','review_issue_close_source','','success','N','0','admin','2026-08-06 00:00:00','',NULL,'');
-INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (170,4,'随 PR 关闭','pr_closed','review_issue_close_source','','info','N','0','admin','2026-08-06 00:00:00','',NULL,'');
-INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (171,1,'合并请求','PR','review_event_source','','primary','Y','0','admin','2026-08-07 10:30:00','',NULL,'');
-INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (172,2,'推送','PUSH','review_event_source','','success','N','0','admin','2026-08-07 10:30:00','',NULL,'');
 INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (157,1,'新增','NEW','review_issue_origin','','success','Y','0','admin','2026-08-03 08:08:26','',NULL,'');
 INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (158,2,'存量','EXISTING','review_issue_origin','','info','N','0','admin','2026-08-03 08:08:26','',NULL,'');
 INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (159,1,'任务回写','TASK_SUCCESS','review_delivery_trigger_source','','primary','N','0','admin','2026-08-03 09:15:27','',NULL,'');
@@ -1341,6 +1468,23 @@ INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value
 INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (166,5,'GitLab 总结评论','GITLAB_MR_SUMMARY_COMMENT','review_delivery_channel','','primary','N','0','admin','2026-08-03 13:30:52','',NULL,'');
 INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (167,6,'Gitee 总结评论','GITEE_PR_SUMMARY_COMMENT','review_delivery_channel','','success','N','0','admin','2026-08-03 13:30:52','',NULL,'');
 INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (168,7,'Gitea 总结评论','GITEA_PR_SUMMARY_COMMENT','review_delivery_channel','','warning','N','0','admin','2026-08-03 13:30:52','',NULL,'');
+INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (169,3,'随 PR 合并关闭','pr_merged','review_issue_close_source','','success','N','0','admin','2026-08-06 05:47:20','',NULL,'');
+INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (170,4,'随 PR 关闭','pr_closed','review_issue_close_source','','info','N','0','admin','2026-08-06 05:47:20','',NULL,'');
+INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (171,1,'合并请求','PR','review_event_source','','primary','Y','0','admin','2026-08-07 02:28:41','',NULL,'');
+INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (172,2,'推送','PUSH','review_event_source','','success','N','0','admin','2026-08-07 02:28:41','',NULL,'');
+INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (173,6,'待重试','RETRYING','review_task_status','','warning','N','0','admin','2026-08-10 09:28:50','',NULL,'依赖暂不可用或执行中断，系统将自动重试');
+INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (174,7,'已被替代','SUPERSEDED','review_task_status','','info','N','0','admin','2026-08-10 09:28:50','',NULL,'同一变更已有更新版本，本任务仅保留历史');
+INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (175,11,'依赖暂不可用','DEPENDENCY_UNAVAILABLE','review_task_failure_type','','warning','N','0','admin','2026-08-10 09:28:50','',NULL,'网络或临时依赖故障，可自动重试');
+INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (176,12,'执行租约过期','LEASE_EXPIRED','review_task_failure_type','','warning','N','0','admin','2026-08-10 09:28:50','',NULL,'执行节点中断或失联，由恢复扫描接管');
+INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (177,13,'执行节点停机','WORKER_SHUTDOWN','review_task_failure_type','','info','N','0','admin','2026-08-10 09:28:50','',NULL,'节点停机释放租约，由其他节点接管');
+INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (178,3,'待投递','PENDING','review_delivery_status','','primary','N','0','admin','2026-08-10 09:28:50','',NULL,'已持久化投递意图，等待工作节点领取');
+INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (179,4,'待人工处置','MANUAL','review_delivery_status','','warning','N','0','admin','2026-08-10 09:28:50','',NULL,'配置错误或达到自动重试上限');
+INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (180,5,'已跳过','SKIPPED','review_delivery_status','','info','N','0','admin','2026-08-10 09:28:50','',NULL,'被更新结论替代或由投递围栏抑制');
+INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (181,8,'待修复通知配置','IM_NOTIFICATION','review_delivery_channel','','warning','N','0','admin','2026-08-10 09:28:50','',NULL,'通知配置不可解析时的人工处置占位渠道');
+INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (182,9,'GitHub 行内评论','GITHUB_PR_INLINE_COMMENT','review_delivery_channel','','primary','N','0','admin','2026-08-10 09:28:50','',NULL,'PR 行内评论投递');
+INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (183,10,'GitLab 行内评论','GITLAB_MR_INLINE_COMMENT','review_delivery_channel','','primary','N','0','admin','2026-08-10 09:28:50','',NULL,'MR 行内评论投递');
+INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (184,11,'Gitee 行内评论','GITEE_PR_INLINE_COMMENT','review_delivery_channel','','primary','N','0','admin','2026-08-10 09:28:50','',NULL,'PR 行内评论投递');
+INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (185,12,'Gitea 行内评论','GITEA_PR_INLINE_COMMENT','review_delivery_channel','','primary','N','0','admin','2026-08-10 09:28:50','',NULL,'PR 行内评论投递');
 /*!40000 ALTER TABLE `sys_dict_data` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -1358,16 +1502,46 @@ INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_valu
 INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (100,'代码审查-GitHub推荐长期分支','review.github.longLivedBranches','dev,develop,main,int,uat','Y','admin','2026-08-01 08:47:10','',NULL,'按顺序推荐实际存在的 PR 目标分支');
 INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (101,'代码审查-GitHub机器人分支前缀','review.github.robotBranchPrefixes','dependabot/,renovate/,github-actions/','Y','admin','2026-08-01 08:47:10','',NULL,'后续 PR 事件过滤使用，普通项目无需配置');
 INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (102,'代码审查-GitHub默认PR事件','review.github.prEvents','opened,reopened,synchronize','Y','admin','2026-08-01 08:47:10','',NULL,'MVP 统一启用的 Pull Request 触发事件');
-INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (103,'审查后台 UI 基址','review.ui.base-url','','Y','admin','2026-08-03 05:24:41','',NULL,'IM 消息「详情」链接前缀，如 https://acr.example.com；空则省略详情链');
+INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (103,'审查后台 UI 基址','review.ui.base-url','http://localhost/','Y','admin','2026-08-03 05:24:41','admin','2026-08-05 08:47:15','IM 消息「详情」链接前缀，如 https://acr.example.com；空则省略详情链');
 INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (104,'代码审查-GitLab默认MR事件','review.gitlab.mrEvents','opened,reopened,synchronize','Y','admin','2026-08-03 13:30:52','',NULL,'统一启用的 Merge Request 触发事件');
 INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (105,'代码审查-Gitee默认PR事件','review.gitee.prEvents','opened,reopened,synchronize','Y','admin','2026-08-03 13:30:52','',NULL,'统一启用的 Pull Request 触发事件');
 INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (106,'代码审查-Gitea默认PR事件','review.gitea.prEvents','opened,reopened,synchronize','Y','admin','2026-08-03 13:30:52','',NULL,'统一启用的 Pull Request 触发事件');
 INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (107,'问题台账-转待复核未命中轮数阈值','review.issue.recheck.missedRoundsThreshold','1','Y','admin','2026-08-05 06:49:55','',NULL,'连续未命中 N 轮后自动转待复核；关闭仍须人工确认');
 INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (108,'审查协议-单轮问题清单上限','review.protocol.maxIssues','20','Y','admin','2026-08-05 06:49:55','',NULL,'协议 v1.2 解析截断上限；超出记截断标记');
-INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (109,'代码审查-GitHub默认Push事件','review.github.pushEvents','push','Y','admin','2026-08-07 10:30:00','',NULL,'推送审查启用的 Push 触发事件');
-INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (110,'代码审查-GitLab默认Push事件','review.gitlab.pushEvents','Push Hook','Y','admin','2026-08-07 10:30:00','',NULL,'推送审查启用的 Push 触发事件');
-INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (111,'代码审查-Gitee默认Push事件','review.gitee.pushEvents','Push Hook','Y','admin','2026-08-07 10:30:00','',NULL,'推送审查启用的 Push 触发事件');
-INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (112,'代码审查-Gitea默认Push事件','review.gitea.pushEvents','push','Y','admin','2026-08-07 10:30:00','',NULL,'推送审查启用的 Push 触发事件');
+INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (109,'代码审查-GitHub默认Push事件','review.github.pushEvents','push','Y','admin','2026-08-07 02:28:41','',NULL,'推送审查启用的 Push 触发事件');
+INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (110,'代码审查-GitLab默认Push事件','review.gitlab.pushEvents','Push Hook','Y','admin','2026-08-07 02:28:41','',NULL,'推送审查启用的 Push 触发事件');
+INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (111,'代码审查-Gitee默认Push事件','review.gitee.pushEvents','Push Hook','Y','admin','2026-08-07 02:28:41','',NULL,'推送审查启用的 Push 触发事件');
+INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (112,'代码审查-Gitea默认Push事件','review.gitea.pushEvents','push','Y','admin','2026-08-07 02:28:41','',NULL,'推送审查启用的 Push 触发事件');
+INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (113,'审查调度-恢复扫描周期(秒)','review.task.dispatch.scanIntervalSeconds','10','Y','admin','2026-08-10 09:28:50','',NULL,'数据库恢复扫描周期，建议 5-15 秒');
+INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (114,'审查调度-单次扫描任务数','review.task.dispatch.batchSize','64','Y','admin','2026-08-10 09:28:50','',NULL,'单次按项目公平派发的任务上限');
+INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (115,'审查调度-执行租约时长(秒)','review.task.lease.seconds','900','Y','admin','2026-08-10 09:28:50','',NULL,'必须覆盖最长单阶段截止时间，由心跳持续续租');
+INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (116,'审查调度-心跳周期(秒)','review.task.heartbeat.seconds','30','Y','admin','2026-08-10 09:28:50','',NULL,'建议不超过租约时长三分之一');
+INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (117,'审查调度-自动重试上限','review.task.retry.maxAttempts','3','Y','admin','2026-08-10 09:28:50','',NULL,'达到上限后转已失败并等待人工处置');
+INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (118,'审查调度-重试退避基数(秒)','review.task.retry.baseDelaySeconds','30','Y','admin','2026-08-10 09:28:50','',NULL,'指数退避的初始等待时间');
+INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (119,'审查调度-重试最大等待(秒)','review.task.retry.maxDelaySeconds','900','Y','admin','2026-08-10 09:28:50','',NULL,'指数退避的等待上限');
+INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (120,'投递调度-恢复扫描周期(秒)','review.delivery.dispatch.scanIntervalSeconds','10','Y','admin','2026-08-10 09:28:50','',NULL,'数据库投递恢复扫描周期');
+INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (121,'投递调度-单次扫描记录数','review.delivery.dispatch.batchSize','32','Y','admin','2026-08-10 09:28:50','',NULL,'单次领取的到期投递记录上限');
+INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (122,'投递调度-执行租约时长(秒)','review.delivery.lease.seconds','120','Y','admin','2026-08-10 09:28:50','',NULL,'须覆盖单次评论或机器人请求截止时间');
+INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (123,'投递调度-自动尝试上限','review.delivery.retry.maxAttempts','5','Y','admin','2026-08-10 09:28:50','',NULL,'达到上限后转待人工处置');
+INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (124,'投递调度-重试退避基数(秒)','review.delivery.retry.baseDelaySeconds','30','Y','admin','2026-08-10 09:28:50','',NULL,'指数退避的初始等待时间');
+INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (125,'投递调度-重试最大等待(秒)','review.delivery.retry.maxDelaySeconds','1800','Y','admin','2026-08-10 09:28:50','',NULL,'指数退避的等待上限');
+INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (126,'数据洞察-指标口径版本','insight.metrics.dict.version','m12-v1','Y','admin','2026-08-10 09:28:50','',NULL,'看板指标字典口径版本号');
+INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (127,'审查调度-专用执行池线程数','review.task.executor.poolSize','4','Y','admin','2026-08-10 09:28:50','',NULL,'审查任务专用有界执行池线程数，启动时生效，不与通用异步池共池');
+INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (128,'审查调度-专用执行池队列容量','review.task.executor.queueCapacity','64','Y','admin','2026-08-10 09:28:50','',NULL,'审查任务专用有界队列容量；满时延迟 next_run_at，禁止 CallerRuns');
+INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (129,'审查调度-单项目并发上限','review.task.project.maxConcurrency','2','Y','admin','2026-08-10 09:28:50','',NULL,'同一项目同时进入执行池的任务数上限，配合公平轮询避免单仓库霸占');
+INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (130,'审查预算-工作区数量上限','review.task.budget.workspace.maxCount','4','Y','admin','2026-08-10 09:28:50','',NULL,'同时存活的 Git 工作区数量上限，须在准备工作区前获取');
+INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (131,'审查预算-工作区磁盘上限(MB)','review.task.budget.workspace.maxDiskMb','10240','Y','admin','2026-08-10 09:28:50','',NULL,'工作区根目录磁盘占用上限（MB），超限时任务回队待重试');
+INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (132,'审查预算-OCR并发上限','review.task.budget.ocr.maxConcurrency','2','Y','admin','2026-08-10 09:28:50','',NULL,'OCR 外部进程全局并发上限；抢不到名额回 RETRYING，不置 FAILED');
+INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (133,'审查预算-LLM并发上限','review.task.budget.llm.maxConcurrency','4','Y','admin','2026-08-10 09:28:50','',NULL,'大模型调用全局并发上限；超限时排队退避，不越限调用');
+INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (134,'投递调度-专用执行池线程数','review.delivery.executor.poolSize','2','Y','admin','2026-08-10 09:28:50','',NULL,'投递专用执行池线程数，与审查主池隔离，启动时生效');
+INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (135,'投递调度-专用执行池队列容量','review.delivery.executor.queueCapacity','64','Y','admin','2026-08-10 09:28:50','',NULL,'投递专用有界队列容量，满时释放租约并由扫描恢复');
+INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (136,'运行告警-超龄PENDING分钟数','review.runtime.alert.pendingAgeMinutes','30','Y','admin','2026-08-10 09:28:50','',NULL,'待执行任务创建超过该分钟数则告警');
+INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (137,'运行告警-待投递超龄分钟数','review.runtime.alert.deliveryPendingAgeMinutes','20','Y','admin','2026-08-10 09:28:50','',NULL,'待投递记录创建超过该分钟数则告警');
+INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (138,'运行告警-预算持续饱和分钟数','review.runtime.alert.budgetSaturatedMinutes','10','Y','admin','2026-08-10 09:28:50','',NULL,'工作区/OCR/LLM 任一预算持续打满超过该分钟数则告警');
+INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (139,'运行告警-失败率窗口分钟数','review.runtime.alert.failureRateWindowMinutes','60','Y','admin','2026-08-10 09:28:50','',NULL,'计算终态失败率的时间窗口');
+INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (140,'运行告警-失败率阈值百分比','review.runtime.alert.failureRatePercent','40','Y','admin','2026-08-10 09:28:50','',NULL,'窗口内 FAILED/(SUCCESS+FAILED+CANCELLED) 超过该百分比则告警');
+INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (141,'运行告警-判定周期(秒)','review.runtime.alert.scanIntervalSeconds','30','Y','admin','2026-08-10 09:28:50','',NULL,'内置告警规则周期判定间隔');
+INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (142,'优雅停机-排空等待秒数','review.runtime.drain.timeoutSeconds','60','Y','admin','2026-08-10 09:28:50','',NULL,'停机时等待租约内任务完成的最长时间；超时后将 lease_until 置过期由恢复扫描接管');
 /*!40000 ALTER TABLE `sys_config` ENABLE KEYS */;
 UNLOCK TABLES;
 

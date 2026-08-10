@@ -1,0 +1,253 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.acr.review.mapper.ReviewStatsSourceMapper">
+
+    <select id="selectActiveProjectIds" resultType="long">
+        SELECT project_id FROM review_project ORDER BY project_id
+    </select>
+
+    <select id="selectTaskAggByDay" resultType="map">
+        SELECT DATE(finished_time) AS stat_date,
+               COUNT(1) AS task_total,
+               SUM(CASE WHEN task_status = 'SUCCESS' THEN 1 ELSE 0 END) AS task_success,
+               SUM(CASE WHEN task_status = 'FAILED' THEN 1 ELSE 0 END) AS task_failed,
+               SUM(CASE WHEN event_source = 'PUSH' THEN 1 ELSE 0 END) AS task_push
+        FROM review_task
+        WHERE project_id = #{projectId}
+          AND task_status IN ('SUCCESS', 'FAILED')
+          AND finished_time IS NOT NULL
+          AND DATE(finished_time) &gt;= #{beginDate}
+          AND DATE(finished_time) &lt;= #{endDate}
+        GROUP BY DATE(finished_time)
+    </select>
+
+    <select id="selectSuccessDurations" resultType="long">
+        SELECT duration_ms
+        FROM review_task
+        WHERE project_id = #{projectId}
+          AND task_status = 'SUCCESS'
+          AND duration_ms IS NOT NULL
+          AND finished_time IS NOT NULL
+          AND DATE(finished_time) = #{statDate}
+        ORDER BY duration_ms ASC
+    </select>
+
+    <select id="selectIssueNewAggByDay" resultType="map">
+        SELECT DATE(create_time) AS stat_date,
+               COUNT(1) AS issue_new,
+               SUM(CASE WHEN severity = 'CRITICAL' THEN 1 ELSE 0 END) AS issue_critical,
+               SUM(CASE WHEN severity = 'HIGH' THEN 1 ELSE 0 END) AS issue_high,
+               SUM(CASE WHEN severity = 'MEDIUM' THEN 1 ELSE 0 END) AS issue_medium,
+               SUM(CASE WHEN severity = 'LOW' THEN 1 ELSE 0 END) AS issue_low
+        FROM review_issue
+        WHERE project_id = #{projectId}
+          AND origin = 'NEW'
+          AND create_time IS NOT NULL
+          AND DATE(create_time) &gt;= #{beginDate}
+          AND DATE(create_time) &lt;= #{endDate}
+        GROUP BY DATE(create_time)
+    </select>
+
+    <select id="selectIssueClosedAggByDay" resultType="map">
+        SELECT DATE(closed_time) AS stat_date,
+               SUM(CASE WHEN status = 'CLOSED' THEN 1 ELSE 0 END) AS issue_closed,
+               SUM(CASE WHEN status = 'FALSE_POSITIVE' THEN 1 ELSE 0 END) AS issue_false_positive
+        FROM review_issue
+        WHERE project_id = #{projectId}
+          AND closed_time IS NOT NULL
+          AND status IN ('CLOSED', 'FALSE_POSITIVE')
+          AND DATE(closed_time) &gt;= #{beginDate}
+          AND DATE(closed_time) &lt;= #{endDate}
+        GROUP BY DATE(closed_time)
+    </select>
+
+    <select id="selectIssueConfirmedAggByDay" resultType="map">
+        SELECT DATE(a.create_time) AS stat_date,
+               COUNT(1) AS issue_confirmed
+        FROM review_issue_action a
+        INNER JOIN review_issue i ON i.issue_id = a.issue_id
+        WHERE i.project_id = #{projectId}
+          AND a.action_type = 'CONFIRM'
+          AND DATE(a.create_time) &gt;= #{beginDate}
+          AND DATE(a.create_time) &lt;= #{endDate}
+        GROUP BY DATE(a.create_time)
+    </select>
+
+    <select id="selectDeliveryAggByDay" resultType="map">
+        SELECT DATE(COALESCE(last_attempt_time, create_time)) AS stat_date,
+               COUNT(1) AS delivery_total,
+               SUM(CASE WHEN delivery_status = 'SUCCESS' THEN 1 ELSE 0 END) AS delivery_success
+        FROM review_delivery_record
+        WHERE project_id = #{projectId}
+          AND delivery_status IN ('SUCCESS', 'FAILED', 'MANUAL', 'SKIPPED')
+          AND DATE(COALESCE(last_attempt_time, create_time)) &gt;= #{beginDate}
+          AND DATE(COALESCE(last_attempt_time, create_time)) &lt;= #{endDate}
+        GROUP BY DATE(COALESCE(last_attempt_time, create_time))
+    </select>
+
+    <select id="selectEventAggByDay" resultType="map">
+        SELECT DATE(COALESCE(process_time, receive_time)) AS stat_date,
+               SUM(CASE WHEN process_status = 'ACCEPTED' THEN 1 ELSE 0 END) AS event_accepted,
+               SUM(CASE WHEN process_status = 'IGNORED' THEN 1 ELSE 0 END) AS event_ignored
+        FROM review_webhook_event
+        WHERE project_id = #{projectId}
+          AND process_status IN ('ACCEPTED', 'IGNORED')
+          AND DATE(COALESCE(process_time, receive_time)) &gt;= #{beginDate}
+          AND DATE(COALESCE(process_time, receive_time)) &lt;= #{endDate}
+        GROUP BY DATE(COALESCE(process_time, receive_time))
+    </select>
+
+    <select id="selectTaskCoveredAggByDay" resultType="map">
+        SELECT DATE(t.finished_time) AS stat_date,
+               COUNT(DISTINCT t.task_id) AS task_covered
+        FROM review_task t
+        INNER JOIN review_delivery_record d ON d.task_id = t.task_id AND d.delivery_status = 'SUCCESS'
+        WHERE t.project_id = #{projectId}
+          AND t.task_status = 'SUCCESS'
+          AND t.finished_time IS NOT NULL
+          AND DATE(t.finished_time) &gt;= #{beginDate}
+          AND DATE(t.finished_time) &lt;= #{endDate}
+        GROUP BY DATE(t.finished_time)
+    </select>
+
+    <select id="countOpenFocusIssues" parameterType="com.acr.review.domain.ReviewProject" resultType="int">
+        SELECT COUNT(1)
+        FROM review_issue i
+        INNER JOIN review_project p ON p.project_id = i.project_id
+        INNER JOIN sys_business_system bs ON bs.system_id = p.business_system_id
+        INNER JOIN sys_dept d ON d.dept_id = p.dept_id
+        INNER JOIN sys_user owner ON owner.user_id = p.owner_user_id
+        WHERE i.severity IN ('CRITICAL', 'HIGH')
+          AND i.status IN ('AWAITING_CONFIRM', 'AWAITING_FIX', 'RECHECKING')
+        <if test="params.businessSystemId != null">
+            AND p.business_system_id = #{params.businessSystemId}
+        </if>
+        <if test="projectId != null">
+            AND i.project_id = #{projectId}
+        </if>
+        <if test="params.projectIds != null and params.projectIds.size() &gt; 0">
+            AND i.project_id IN
+            <foreach collection="params.projectIds" item="pid" open="(" separator="," close=")">
+                #{pid}
+            </foreach>
+        </if>
+        ${params.dataScope}
+    </select>
+
+    <select id="selectCategoryDistribution" parameterType="com.acr.review.domain.ReviewProject" resultType="map">
+        SELECT COALESCE(NULLIF(TRIM(i.category), ''), '未分类') AS category,
+               COUNT(1) AS cnt
+        FROM review_issue i
+        INNER JOIN review_project p ON p.project_id = i.project_id
+        INNER JOIN sys_business_system bs ON bs.system_id = p.business_system_id
+        INNER JOIN sys_dept d ON d.dept_id = p.dept_id
+        INNER JOIN sys_user owner ON owner.user_id = p.owner_user_id
+        WHERE i.origin = 'NEW'
+          AND i.create_time IS NOT NULL
+          AND DATE(i.create_time) &gt;= #{params.beginDate}
+          AND DATE(i.create_time) &lt;= #{params.endDate}
+        <if test="params.businessSystemId != null">
+            AND p.business_system_id = #{params.businessSystemId}
+        </if>
+        <if test="projectId != null">
+            AND i.project_id = #{projectId}
+        </if>
+        ${params.dataScope}
+        GROUP BY COALESCE(NULLIF(TRIM(i.category), ''), '未分类')
+        ORDER BY cnt DESC
+        LIMIT 20
+    </select>
+
+    <select id="selectDeliveryChannelHealth" parameterType="com.acr.review.domain.ReviewProject" resultType="map">
+        SELECT dr.channel AS channel,
+               COUNT(1) AS delivery_total,
+               SUM(CASE WHEN dr.delivery_status = 'SUCCESS' THEN 1 ELSE 0 END) AS delivery_success
+        FROM review_delivery_record dr
+        INNER JOIN review_project p ON p.project_id = dr.project_id
+        INNER JOIN sys_business_system bs ON bs.system_id = p.business_system_id
+        INNER JOIN sys_dept d ON d.dept_id = p.dept_id
+        INNER JOIN sys_user owner ON owner.user_id = p.owner_user_id
+        WHERE dr.delivery_status IN ('SUCCESS', 'FAILED', 'MANUAL', 'SKIPPED')
+          AND DATE(COALESCE(dr.last_attempt_time, dr.create_time)) &gt;= #{params.beginDate}
+          AND DATE(COALESCE(dr.last_attempt_time, dr.create_time)) &lt;= #{params.endDate}
+        <if test="params.businessSystemId != null">
+            AND p.business_system_id = #{params.businessSystemId}
+        </if>
+        <if test="projectId != null">
+            AND dr.project_id = #{projectId}
+        </if>
+        ${params.dataScope}
+        GROUP BY dr.channel
+        ORDER BY delivery_total DESC
+    </select>
+
+    <select id="selectProjectLastReviewTime" resultType="java.util.Date">
+        SELECT MAX(finished_time)
+        FROM review_task
+        WHERE project_id = #{projectId}
+          AND task_status IN ('SUCCESS', 'FAILED')
+    </select>
+
+    <!-- pr_author 与提交身份弱匹配：大小写敏感字符串相等 -->
+    <select id="selectTasksReviewedByAuthorDay" resultType="map">
+        SELECT DATE(finished_time) AS stat_date,
+               pr_author AS author_key,
+               COUNT(1) AS tasks_reviewed
+        FROM review_task
+        WHERE project_id = #{projectId}
+          AND pr_author IS NOT NULL AND pr_author != ''
+          AND task_status IN ('SUCCESS', 'FAILED')
+          AND finished_time IS NOT NULL
+          AND DATE(finished_time) &gt;= #{beginDate}
+          AND DATE(finished_time) &lt;= #{endDate}
+        GROUP BY DATE(finished_time), pr_author
+    </select>
+
+    <select id="selectIssuesNewByAuthorDay" resultType="map">
+        SELECT DATE(i.create_time) AS stat_date,
+               t.pr_author AS author_key,
+               COUNT(1) AS issues_new
+        FROM review_issue i
+        INNER JOIN review_task t ON t.task_id = i.first_task_id
+        WHERE i.project_id = #{projectId}
+          AND i.origin = 'NEW'
+          AND t.pr_author IS NOT NULL AND t.pr_author != ''
+          AND i.create_time IS NOT NULL
+          AND DATE(i.create_time) &gt;= #{beginDate}
+          AND DATE(i.create_time) &lt;= #{endDate}
+        GROUP BY DATE(i.create_time), t.pr_author
+    </select>
+
+    <select id="selectIssuesOpenByAuthorAsOf" resultType="map">
+        SELECT t.pr_author AS author_key,
+               COUNT(1) AS issues_open
+        FROM review_issue i
+        INNER JOIN review_task t ON t.task_id = i.last_task_id
+        WHERE i.project_id = #{projectId}
+          AND t.pr_author IS NOT NULL AND t.pr_author != ''
+          AND DATE(i.create_time) &lt;= #{asOfDate}
+          AND (
+            i.status IN ('AWAITING_CONFIRM', 'AWAITING_FIX', 'RECHECKING')
+            OR (i.closed_time IS NOT NULL AND DATE(i.closed_time) &gt; #{asOfDate})
+          )
+        GROUP BY t.pr_author
+    </select>
+
+    <select id="selectOpenIssuesByAuthorKeys" resultType="map">
+        SELECT i.title AS title,
+               i.severity AS severity,
+               t.pr_author AS author_key,
+               COUNT(1) AS cnt
+        FROM review_issue i
+        INNER JOIN review_task t ON t.task_id = i.last_task_id
+        WHERE i.status IN ('AWAITING_CONFIRM', 'AWAITING_FIX', 'RECHECKING')
+          AND t.pr_author IN
+          <foreach collection="authorKeys" item="k" open="(" separator="," close=")">
+              #{k}
+          </foreach>
+        GROUP BY i.title, i.severity, t.pr_author
+        ORDER BY cnt DESC
+        LIMIT #{limit}
+    </select>
+</mapper>

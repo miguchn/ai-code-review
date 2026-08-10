@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.acr.review.mapper.ReviewStatsDailyMapper">
+
+    <resultMap id="ReviewStatsDailyResult" type="com.acr.review.insight.ReviewStatsDaily">
+        <id property="id" column="id" />
+        <result property="projectId" column="project_id" />
+        <result property="statDate" column="stat_date" />
+        <result property="taskTotal" column="task_total" />
+        <result property="taskSuccess" column="task_success" />
+        <result property="taskFailed" column="task_failed" />
+        <result property="taskPush" column="task_push" />
+        <result property="taskCovered" column="task_covered" />
+        <result property="durationP95Ms" column="duration_p95_ms" />
+        <result property="issueNew" column="issue_new" />
+        <result property="issueCritical" column="issue_critical" />
+        <result property="issueHigh" column="issue_high" />
+        <result property="issueMedium" column="issue_medium" />
+        <result property="issueLow" column="issue_low" />
+        <result property="issueClosed" column="issue_closed" />
+        <result property="issueConfirmed" column="issue_confirmed" />
+        <result property="issueFalsePositive" column="issue_false_positive" />
+        <result property="deliveryTotal" column="delivery_total" />
+        <result property="deliverySuccess" column="delivery_success" />
+        <result property="eventAccepted" column="event_accepted" />
+        <result property="eventIgnored" column="event_ignored" />
+        <result property="createTime" column="create_time" />
+        <result property="updateTime" column="update_time" />
+    </resultMap>
+
+    <insert id="upsert" parameterType="com.acr.review.insight.ReviewStatsDaily">
+        INSERT INTO review_stats_daily (
+            project_id, stat_date,
+            task_total, task_success, task_failed, task_push, task_covered, duration_p95_ms,
+            issue_new, issue_critical, issue_high, issue_medium, issue_low,
+            issue_closed, issue_confirmed, issue_false_positive,
+            delivery_total, delivery_success, event_accepted, event_ignored,
+            create_time, update_time
+        ) VALUES (
+            #{projectId}, #{statDate},
+            #{taskTotal}, #{taskSuccess}, #{taskFailed}, #{taskPush}, #{taskCovered}, #{durationP95Ms},
+            #{issueNew}, #{issueCritical}, #{issueHigh}, #{issueMedium}, #{issueLow},
+            #{issueClosed}, #{issueConfirmed}, #{issueFalsePositive},
+            #{deliveryTotal}, #{deliverySuccess}, #{eventAccepted}, #{eventIgnored},
+            SYSDATE(), SYSDATE()
+        )
+        ON DUPLICATE KEY UPDATE
+            task_total = VALUES(task_total),
+            task_success = VALUES(task_success),
+            task_failed = VALUES(task_failed),
+            task_push = VALUES(task_push),
+            task_covered = VALUES(task_covered),
+            duration_p95_ms = VALUES(duration_p95_ms),
+            issue_new = VALUES(issue_new),
+            issue_critical = VALUES(issue_critical),
+            issue_high = VALUES(issue_high),
+            issue_medium = VALUES(issue_medium),
+            issue_low = VALUES(issue_low),
+            issue_closed = VALUES(issue_closed),
+            issue_confirmed = VALUES(issue_confirmed),
+            issue_false_positive = VALUES(issue_false_positive),
+            delivery_total = VALUES(delivery_total),
+            delivery_success = VALUES(delivery_success),
+            event_accepted = VALUES(event_accepted),
+            event_ignored = VALUES(event_ignored),
+            update_time = SYSDATE()
+    </insert>
+
+    <select id="selectByRange" resultMap="ReviewStatsDailyResult">
+        SELECT *
+        FROM review_stats_daily
+        WHERE stat_date &gt;= #{beginDate}
+          AND stat_date &lt;= #{endDate}
+        <if test="projectIds != null and projectIds.size() &gt; 0">
+            AND project_id IN
+            <foreach collection="projectIds" item="pid" open="(" separator="," close=")">
+                #{pid}
+            </foreach>
+        </if>
+        ORDER BY stat_date ASC, project_id ASC
+    </select>
+
+    <select id="selectScopedRange" parameterType="com.acr.review.insight.ReviewStatsDaily"
+            resultMap="ReviewStatsDailyResult">
+        SELECT s.*
+        FROM review_stats_daily s
+        INNER JOIN review_project p ON p.project_id = s.project_id
+        INNER JOIN sys_business_system bs ON bs.system_id = p.business_system_id
+        INNER JOIN sys_dept d ON d.dept_id = p.dept_id
+        INNER JOIN sys_user owner ON owner.user_id = p.owner_user_id
+        WHERE s.stat_date &gt;= #{params.beginDate}
+          AND s.stat_date &lt;= #{params.endDate}
+        <if test="projectId != null">
+            AND s.project_id = #{projectId}
+        </if>
+        <if test="params.businessSystemId != null">
+            AND p.business_system_id = #{params.businessSystemId}
+        </if>
+        <if test="params.projectIds != null and params.projectIds.size() &gt; 0">
+            AND s.project_id IN
+            <foreach collection="params.projectIds" item="pid" open="(" separator="," close=")">
+                #{pid}
+            </foreach>
+        </if>
+        ${params.dataScope}
+        ORDER BY s.stat_date ASC, s.project_id ASC
+    </select>
+
+    <select id="selectEarliestStatDate" resultType="java.util.Date">
+        SELECT MIN(stat_date)
+        FROM review_stats_daily
+        <where>
+            <if test="projectIds != null and projectIds.size() &gt; 0">
+                project_id IN
+                <foreach collection="projectIds" item="pid" open="(" separator="," close=")">
+                    #{pid}
+                </foreach>
+            </if>
+        </where>
+    </select>
+</mapper>

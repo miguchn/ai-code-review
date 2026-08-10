@@ -23,6 +23,7 @@ import com.acr.review.git.GitPushEvent;
 import com.acr.review.git.GitRepositoryCoordinates;
 import com.acr.review.git.GitWebhookAdapter;
 import com.acr.review.git.WebhookRequestHeaders;
+import com.acr.review.insight.ReviewCommitFactIngestService;
 import com.acr.review.mapper.ReviewProjectMapper;
 import com.acr.review.mapper.ReviewWebhookEventMapper;
 import com.acr.review.scope.GlobPattern;
@@ -50,6 +51,7 @@ public class ReviewWebhookServiceImpl implements IReviewWebhookService
     private final ISysConfigService configService;
     private final IReviewTaskCreateService taskCreateService;
     private final IReviewIssueService issueService;
+    private final ReviewCommitFactIngestService commitFactIngestService;
     private final int maxPayloadBytes;
 
     public ReviewWebhookServiceImpl(ReviewWebhookEventMapper eventMapper,
@@ -59,6 +61,7 @@ public class ReviewWebhookServiceImpl implements IReviewWebhookService
                                     ISysConfigService configService,
                                     IReviewTaskCreateService taskCreateService,
                                     IReviewIssueService issueService,
+                                    ReviewCommitFactIngestService commitFactIngestService,
                                     @Value("${review.webhook.max-payload-bytes:262144}") int maxPayloadBytes)
     {
         this.eventMapper = eventMapper;
@@ -68,6 +71,7 @@ public class ReviewWebhookServiceImpl implements IReviewWebhookService
         this.configService = configService;
         this.taskCreateService = taskCreateService;
         this.issueService = issueService;
+        this.commitFactIngestService = commitFactIngestService;
         this.maxPayloadBytes = maxPayloadBytes;
     }
 
@@ -298,6 +302,16 @@ public class ReviewWebhookServiceImpl implements IReviewWebhookService
         }
 
         Long taskId = taskCreateService.createTaskFromPushEvent(project, event, pushEvent);
+        try
+        {
+            commitFactIngestService.ingestFromPush(project.getProjectId(), event.getEventId(), pushEvent);
+        }
+        catch (RuntimeException ex)
+        {
+            // 抽取侧已吞异常；此处再兜底，确保不影响受理主链路
+            log.warn("推送提交事实抽取异常已忽略。projectId={}, eventId={}, reason={}",
+                project.getProjectId(), event.getEventId(), ex.getMessage());
+        }
         String message = "已受理推送 " + pushEvent.branch() + "，生成审查任务 #" + taskId;
         projectMapper.updateLastWebhook(project.getProjectId(), message);
         return WebhookHandleResult.ok(message);

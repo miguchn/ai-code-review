@@ -1,5 +1,7 @@
 package com.acr.review.git;
 
+import java.util.List;
+
 /** 平台无关的推送事件业务事实。平台事件头、签名与载荷差异不进此对象。 */
 public record GitPushEvent(
     String deliveryId,
@@ -13,6 +15,11 @@ public record GitPushEvent(
     Integer commitCount,
     String headCommitMessage,
     boolean created,
-    boolean deleted)
+    boolean deleted,
+    List<GitPushCommit> commits)
 {
+    public GitPushEvent
+    {
+        commits = commits == null ? List.of() : List.copyOf(commits);
+    }
 }

@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.acr.review.mapper.ReviewCommitFactMapper">
+
+    <resultMap id="ReviewCommitFactResult" type="com.acr.review.insight.ReviewCommitFact">
+        <id property="id" column="id" />
+        <result property="projectId" column="project_id" />
+        <result property="commitSha" column="commit_sha" />
+        <result property="commitTime" column="commit_time" />
+        <result property="authorName" column="author_name" />
+        <result property="authorEmail" column="author_email" />
+        <result property="messageFirstLine" column="message_first_line" />
+        <result property="sourceEventId" column="source_event_id" />
+        <result property="createTime" column="create_time" />
+    </resultMap>
+
+    <insert id="insertIgnore" parameterType="com.acr.review.insight.ReviewCommitFact">
+        INSERT IGNORE INTO review_commit_fact (
+            project_id, commit_sha, commit_time, author_name, author_email,
+            message_first_line, source_event_id, create_time
+        ) VALUES (
+            #{projectId}, #{commitSha}, #{commitTime}, #{authorName}, #{authorEmail},
+            #{messageFirstLine}, #{sourceEventId}, SYSDATE()
+        )
+    </insert>
+
+    <insert id="insertIgnoreBatch">
+        INSERT IGNORE INTO review_commit_fact (
+            project_id, commit_sha, commit_time, author_name, author_email,
+            message_first_line, source_event_id, create_time
+        ) VALUES
+        <foreach collection="list" item="item" separator=",">
+            (#{item.projectId}, #{item.commitSha}, #{item.commitTime}, #{item.authorName}, #{item.authorEmail},
+             #{item.messageFirstLine}, #{item.sourceEventId}, SYSDATE())
+        </foreach>
+    </insert>
+
+    <select id="selectCommitCountByAuthorDay" resultType="map">
+        SELECT DATE(commit_time) AS stat_date,
+               CASE
+                 WHEN author_email IS NOT NULL AND author_email != '' THEN LOWER(TRIM(author_email))
+                 ELSE TRIM(author_name)
+               END AS author_key,
+               MAX(author_name) AS author_name,
+               COUNT(1) AS commit_count
+        FROM review_commit_fact
+        WHERE project_id = #{projectId}
+          AND commit_time IS NOT NULL
+          AND DATE(commit_time) &gt;= #{beginDate}
+          AND DATE(commit_time) &lt;= #{endDate}
+          AND (
+            (author_email IS NOT NULL AND author_email != '')
+            OR (author_name IS NOT NULL AND author_name != '')
+          )
+        GROUP BY DATE(commit_time),
+                 CASE
+                   WHEN author_email IS NOT NULL AND author_email != '' THEN LOWER(TRIM(author_email))
+                   ELSE TRIM(author_name)
+                 END
+    </select>
+
+    <select id="selectProjectCommitTrend" resultType="map">
+        SELECT DATE(commit_time) AS stat_date,
+               COUNT(1) AS commit_count
+        FROM review_commit_fact
+        WHERE project_id = #{projectId}
+          AND commit_time IS NOT NULL
+          AND DATE(commit_time) &gt;= #{beginDate}
+          AND DATE(commit_time) &lt;= #{endDate}
+        GROUP BY DATE(commit_time)
+        ORDER BY stat_date ASC
+    </select>
+
+    <select id="selectCandidateIdentities" resultMap="ReviewCommitFactResult">
+        SELECT author_email, author_name, MAX(commit_time) AS commit_time, MAX(id) AS id,
+               MAX(project_id) AS project_id, MAX(commit_sha) AS commit_sha,
+               MAX(message_first_line) AS message_first_line, MAX(source_event_id) AS source_event_id,
+               MAX(create_time) AS create_time
+        FROM review_commit_fact
+        <where>
+            <choose>
+                <when test="email != null and email != '' and userName != null and userName != ''">
+                    (
+                      LOWER(author_email) = LOWER(#{email})
+                      OR author_name LIKE CONCAT('%', #{userName}, '%')
+                      OR author_email LIKE CONCAT('%', #{userName}, '%')
+                    )
+                </when>
+                <when test="email != null and email != ''">
+                    LOWER(author_email) = LOWER(#{email})
+                </when>
+                <when test="userName != null and userName != ''">
+                    (
+                      author_name LIKE CONCAT('%', #{userName}, '%')
+                      OR author_email LIKE CONCAT('%', #{userName}, '%')
+                    )
+                </when>
+                <otherwise>
+                    1 = 0
+                </otherwise>
+            </choose>
+        </where>
+        GROUP BY author_email, author_name
+        ORDER BY commit_time DESC
+        LIMIT #{limit}
+    </select>
+
+    <select id="selectCommitTrendByAuthorKeys" resultType="map">
+        SELECT DATE(commit_time) AS stat_date,
+               CASE
+                 WHEN author_email IS NOT NULL AND author_email != '' THEN LOWER(TRIM(author_email))
+                 ELSE TRIM(author_name)
+               END AS author_key,
+               COUNT(1) AS commit_count
+        FROM review_commit_fact
+        WHERE commit_time IS NOT NULL
+          AND DATE(commit_time) &gt;= #{beginDate}
+          AND DATE(commit_time) &lt;= #{endDate}
+        <if test="authorKeys != null and authorKeys.size() &gt; 0">
+            AND (
+              CASE
+                WHEN author_email IS NOT NULL AND author_email != '' THEN LOWER(TRIM(author_email))
+                ELSE TRIM(author_name)
+              END
+            ) IN
+            <foreach collection="authorKeys" item="k" open="(" separator="," close=")">
+                #{k}
+            </foreach>
+        </if>
+        <if test="projectIds != null and projectIds.size() &gt; 0">
+            AND project_id IN
+            <foreach collection="projectIds" item="pid" open="(" separator="," close=")">
+                #{pid}
+            </foreach>
+        </if>
+        GROUP BY DATE(commit_time),
+                 CASE
+                   WHEN author_email IS NOT NULL AND author_email != '' THEN LOWER(TRIM(author_email))
+                   ELSE TRIM(author_name)
+                 END
+        ORDER BY stat_date ASC
+    </select>
+</mapper>
