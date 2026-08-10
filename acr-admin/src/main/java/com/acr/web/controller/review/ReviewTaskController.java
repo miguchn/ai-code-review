@@ -51,4 +51,13 @@ public class ReviewTaskController extends BaseController
         taskService.retryTask(taskId);
         return success("已提交执行");
     }
+
+    @PreAuthorize("@ss.hasPermi('review:task:cancel')")
+    @Log(title = "审查任务终止", businessType = BusinessType.UPDATE)
+    @PostMapping("/{taskId}/cancel")
+    public AjaxResult cancel(@PathVariable Long taskId)
+    {
+        taskService.cancelTask(taskId);
+        return success("已终止");
+    }
 }

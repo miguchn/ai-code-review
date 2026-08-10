@@ -7,6 +7,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import org.junit.jupiter.api.Test;
 import com.acr.review.git.GitAccessContext;
+import com.acr.review.git.GitCommandRunner;
 import com.acr.review.domain.ReviewPipelineConstants;
 import com.acr.review.git.GitPullRequestWorkspaceRequest;
 import com.acr.review.git.GitPullRequestWorkspaceResult;
@@ -16,7 +17,8 @@ class GitHubPullRequestWorkspacePreparerTest
 {
     private static final GitAccessContext ACCESS = GitAccessContext.of("token", "https://github.com");
 
-    private final GitHubPullRequestWorkspacePreparer preparer = new GitHubPullRequestWorkspacePreparer(30);
+    private final GitHubPullRequestWorkspacePreparer preparer = new GitHubPullRequestWorkspacePreparer(
+        org.mockito.Mockito.mock(GitCommandRunner.class), 30);
 
     @Test
     void buildsFullFetchArgsWithoutDepth()

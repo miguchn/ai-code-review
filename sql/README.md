@@ -6,7 +6,7 @@
 
 ### 新装环境：一次性初始化（推荐）
 
-执行 `init-full.sql` 一条命令完成全部初始化（库、41 张表结构、菜单/字典/参数/内置审查模板等初始数据），等效于按序号执行完 `01`–`30` 全部增量脚本后的最终状态：
+执行 `init-full.sql` 一条命令完成全部初始化（库、41 张表结构、菜单/字典/参数/内置审查模板等初始数据），等效于按序号执行完 `01`–`36` 全部增量脚本后的最终状态：
 
 ```bash
 mysql --default-character-set=utf8mb4 -u root -p < sql/init-full.sql
@@ -59,10 +59,18 @@ mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/NN_xxx.sql
 30. `30_delivery_content_snapshot.sql`：投递正文快照（`review_delivery_record` 增 `content_snapshot` mediumtext 可空列，历史不回填；须 utf8mb4）。
 31. `31_issue_lifecycle_m8.sql`：M8 问题生命周期（`review_issue` 增 `family_key`/`missed_streak`/`last_seen_head_sha`/`last_missed_run_id`/`recheck_task_id`/`recheck_run_id`/`recheck_commit_sha` 七列与 `idx_issue_pr_family` 索引；RECHECKING 字典改「待复核」并去预留备注、auto_recheck 去预留备注；新增转复核阈值与协议清单上限两个参数；幂等；须 utf8mb4）。
 32. `32_issue_pr_close_source.sql`：M8.1 PR 关闭/合并联动关闭来源字典（`review_issue_close_source` 增 `pr_merged` / `pr_closed`；幂等；须 utf8mb4）。
+33. `33_push_review_m10.sql`：M10 推送审查（项目推送开关/分支、任务事件来源、问题参考分支、四平台 Push 参数与字典；须 utf8mb4）。
+34. `34_review_task_scheduling_recovery.sql`：企业级架构风险修复 S2（任务变更键、数据库调度、租约/epoch fencing、重试恢复参数与字典；升级前须停止旧实例；须 utf8mb4）。
+35. `35_review_delivery_recovery.sql`：企业级架构风险修复 S3（持久化投递意图、租约领取、自动退避、人工处置与统一补发状态机；存量失败记录不自动补发；须 utf8mb4）。
+36. `36_inline_comments_m11.sql`：M11 行内评论（`review_delivery_record.issue_id`、项目 `inline_comment_enabled`/`inline_severities`、四平台行内渠道字典；须 utf8mb4）。
+37. `37_data_insights_m12.sql`：M12 数据洞察一期（`review_stats_daily` 聚合表、数据洞察菜单与 `insight:*:view` 权限、指标口径版本参数；须 utf8mb4）。
+38. `38_data_insights_m12_2.sql`：M12 数据洞察二期（`review_commit_fact` / `review_member_stats_daily` / `review_insight_identity_claim`、成员分析菜单与 `insight:team:view`；须 utf8mb4）。
+39. `39_review_resource_budget.sql`：企业级架构风险修复 S5（有界审查/投递执行池、项目并发、Git/工作区/OCR/LLM 预算参数；须 utf8mb4）。
+40. `40_review_runtime_ops.sql`：企业级架构风险修复 S6（运行告警阈值、优雅停机参数、运行概览菜单与 `review:runtime:view`/`review:task:cancel`/`review:task:handle` 权限；须 utf8mb4）。
 
 ## init-full.sql 维护规则
 
-- `init-full.sql` 是增量脚本执行完成后的最终状态快照（2026-08-05 生成，基线 `main 0213c64`，含 01–30 全部增量）。
+- `init-full.sql` 是增量脚本执行完成后的最终状态快照（2026-08-10 同步，含 01–40 增量中的参数/菜单种子；完整表结构快照仍建议按下方步骤在本地库重新生成以覆盖 37/38 表）。
 - **新增编号增量脚本后必须同步重新生成**，否则新装环境会缺失该脚本的变更。生成方式（在已执行全部增量脚本的本地库上）：
 
 ```bash

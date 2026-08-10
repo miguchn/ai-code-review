@@ -20,6 +20,12 @@ public class OkHttpUtils
 
     public static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
 
+    /** 派生客户端共享 Dispatcher、连接池和线程池，仅按调用覆盖超时。 */
+    private static final OkHttpClient BASE_CLIENT = new OkHttpClient.Builder()
+        .followRedirects(false)
+        .followSslRedirects(false)
+        .build();
+
     /**
      * 发送 POST JSON 请求（带自定义 Headers）
      */
@@ -45,12 +51,7 @@ public class OkHttpUtils
         long start = System.currentTimeMillis();
         try
         {
-            OkHttpClient client = new OkHttpClient.Builder()
-                .connectTimeout(timeoutMs, TimeUnit.MILLISECONDS)
-                .readTimeout(timeoutMs, TimeUnit.MILLISECONDS)
-                .followRedirects(false)
-                .followSslRedirects(false)
-                .build();
+            OkHttpClient client = clientForTimeout(timeoutMs);
 
             Request.Builder builder = new Request.Builder()
                 .url(url)
@@ -79,10 +80,7 @@ public class OkHttpUtils
      */
     public static String postJson(String url, Map<String, String> headers, String jsonBody, int timeoutMs) throws IOException
     {
-        OkHttpClient client = new OkHttpClient.Builder()
-                .connectTimeout(timeoutMs, TimeUnit.MILLISECONDS)
-                .readTimeout(timeoutMs, TimeUnit.MILLISECONDS)
-                .build();
+        OkHttpClient client = clientForTimeout(timeoutMs);
 
         Request.Builder builder = new Request.Builder()
                 .url(url)
@@ -104,5 +102,16 @@ public class OkHttpUtils
             }
             return null;
         }
+    }
+
+    private static OkHttpClient clientForTimeout(int timeoutMs)
+    {
+        int effectiveTimeoutMs = Math.max(1, timeoutMs);
+        return BASE_CLIENT.newBuilder()
+            .connectTimeout(effectiveTimeoutMs, TimeUnit.MILLISECONDS)
+            .readTimeout(effectiveTimeoutMs, TimeUnit.MILLISECONDS)
+            .writeTimeout(effectiveTimeoutMs, TimeUnit.MILLISECONDS)
+            .callTimeout(effectiveTimeoutMs, TimeUnit.MILLISECONDS)
+            .build();
     }
 }

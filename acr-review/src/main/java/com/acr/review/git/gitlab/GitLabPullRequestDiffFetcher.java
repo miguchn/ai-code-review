@@ -107,7 +107,9 @@ public class GitLabPullRequestDiffFetcher implements GitPullRequestDiffFetcher
                 return GitPullRequestDiffResult.fail(
                     ReviewPipelineConstants.FAILURE_WORKSPACE_PREPARE, "未找到对应提交范围，请确认 base/head SHA");
             }
-            return GitPullRequestDiffResult.fail(ReviewPipelineConstants.FAILURE_WORKSPACE_PREPARE,
+            return GitPullRequestDiffResult.fail(status >= 500
+                ? ReviewPipelineConstants.FAILURE_DEPENDENCY_UNAVAILABLE
+                : ReviewPipelineConstants.FAILURE_WORKSPACE_PREPARE,
                 "获取 MR Diff 失败，GitLab 返回状态：" + status);
         }
         catch (InterruptedIOException ex)
@@ -117,7 +119,7 @@ public class GitLabPullRequestDiffFetcher implements GitPullRequestDiffFetcher
         }
         catch (IOException ex)
         {
-            return GitPullRequestDiffResult.fail(ReviewPipelineConstants.FAILURE_WORKSPACE_PREPARE,
+            return GitPullRequestDiffResult.fail(ReviewPipelineConstants.FAILURE_DEPENDENCY_UNAVAILABLE,
                 "无法连接 GitLab 获取 Diff，请检查网络");
         }
     }

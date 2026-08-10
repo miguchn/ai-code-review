@@ -11,6 +11,11 @@ public interface LlmCallService
     LlmCallResult chat(Long modelConfigId, String prompt);
 
     /**
+     * 使用指定模型配置发起对话，并将业务任务剩余预算作为调用级硬超时。
+     */
+    LlmCallResult chat(Long modelConfigId, String prompt, int timeoutMs);
+
+    /**
      * 使用默认启用模型发起对话。
      */
     LlmCallResult chatWithDefault(String prompt);

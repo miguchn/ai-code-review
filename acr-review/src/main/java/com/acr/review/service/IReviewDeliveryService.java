@@ -11,33 +11,24 @@ import com.acr.review.domain.ReviewTaskRun;
 /** 审查结果外部投递（GitHub PR 总结评论 + IM 群机器人）。 */
 public interface IReviewDeliveryService
 {
-    /**
-     * 审查成功后投递 GitHub 总结评论。失败只记投递记录，不抛出到调用方影响任务状态。
-     *
-     * @param reconcile 本轮对账结果；首投递传入；重试/重渲染传 null 时从台账派生待复核标题
-     */
+    /** 审查成功后登记总结评论投递意图；外部调用由投递工作节点异步执行。 */
     void deliverAfterSuccess(ReviewTask task, ReviewTaskRun run, ReviewRoundReconcileResult reconcile);
 
-    /**
-     * 审查结束后投递 IM（SUCCESS 摘要 / FAILED 简讯）。失败只记投递记录，不影响任务状态。
-     *
-     * @param reconcile 本轮对账结果；首投递传入；补发传 null 时从台账派生待复核标题
-     */
+    /** 审查结束后登记 IM 投递意图；外部调用由投递工作节点异步执行。 */
     void deliverNotifyAfterTerminal(ReviewTask task, ReviewTaskRun run, ReviewRoundReconcileResult reconcile);
 
-    /**
-     * 人工重试投递：以 taskId 定位项目/PR，按该 PR 最近一次 SUCCESS 任务结论渲染（GitHub）。
-     */
+    /** 人工重试：按 PR 最近成功结论刷新同一投递意图，不直接调用外部平台。 */
     void retryDelivery(Long taskId);
 
-    /**
-     * 按投递记录重试：GitHub 行走 PR 最近 SUCCESS；IM 行用原 task 结论重渲染。
-     */
+    /** 按投递记录补发：复用自动投递状态机、尝试次数和幂等键。 */
     void retryDeliveryById(Long deliveryId);
+
+    /** 标记人工已处理：MANUAL → SKIPPED，不再自动投递。 */
+    void markManualHandled(Long deliveryId);
 
     /**
      * 按项目+PR 用最近 SUCCESS 结论重渲染总结评论（含问题处置态）。
-     * 返回同步结果（status + 失败原因 + deliveryId），不抛出评论失败。
+     * 返回排队结果（status + deliveryId），不在问题处置事务中调用外部平台。
      */
     ReviewCommentSyncResult rerenderSummaryComment(Long projectId, Integer prNumber);
 
@@ -46,6 +37,12 @@ public interface IReviewDeliveryService
 
     /** 按任务查询最近一条 IM 投递记录（无则 null）。 */
     ReviewDeliveryRecord selectLatestImDelivery(Long taskId);
+
+    /** 按问题 ID 反查行内评论投递记录（无则 null）。 */
+    ReviewDeliveryRecord selectInlineDeliveryByIssueId(Long issueId);
+
+    /** 任务下全部行内投递记录（任务/记录详情展示）。 */
+    List<ReviewDeliveryRecord> selectInlineDeliveriesByTaskId(Long taskId);
 
     ReviewDeliveryRecord selectDeliveryById(Long deliveryId);
 
@@ -59,4 +56,7 @@ public interface IReviewDeliveryService
 
     /** 与投递列表同口径计数。 */
     int countDeliveryList(ReviewDeliveryRecord query);
+
+    /** 调度器已取得数据库租约后执行单条投递；仅供平台内部工作节点调用。 */
+    void executeClaimedDelivery(Long deliveryId, String leaseOwner);
 }

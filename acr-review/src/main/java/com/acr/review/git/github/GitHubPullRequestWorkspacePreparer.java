@@ -4,13 +4,13 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.Base64;
-import java.util.List;
-import java.util.concurrent.TimeUnit;
+import java.util.HashMap;
+import java.util.Map;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import com.acr.review.domain.ReviewPipelineConstants;
+import com.acr.review.git.GitCommandRunner;
 import com.acr.review.git.GitPullRequestWorkspacePreparer;
 import com.acr.review.git.GitPullRequestWorkspaceRequest;
 import com.acr.review.git.GitPullRequestWorkspaceResult;
@@ -27,10 +27,12 @@ public class GitHubPullRequestWorkspacePreparer implements GitPullRequestWorkspa
         "(ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}");
 
     private final int prepareTimeoutSeconds;
+    private final GitCommandRunner gitCommandRunner;
 
-    public GitHubPullRequestWorkspacePreparer(
+    public GitHubPullRequestWorkspacePreparer(GitCommandRunner gitCommandRunner,
         @Value("${review.github.workspace-prepare-timeout-seconds:180}") int prepareTimeoutSeconds)
     {
+        this.gitCommandRunner = gitCommandRunner;
         this.prepareTimeoutSeconds = Math.max(30, prepareTimeoutSeconds);
     }
 
@@ -146,39 +148,29 @@ public class GitHubPullRequestWorkspacePreparer implements GitPullRequestWorkspa
     private void runGit(Path workspace, String token, String... args)
         throws IOException, InterruptedException, WorkspacePrepareException
     {
-        List<String> command = new ArrayList<>();
-        command.add("git");
-        command.add("-C");
-        command.add(workspace.toString());
-        for (String arg : args)
-        {
-            command.add(arg);
-        }
-
-        ProcessBuilder builder = new ProcessBuilder(command);
-        builder.redirectErrorStream(true);
-        builder.environment().put("GIT_TERMINAL_PROMPT", "0");
+        Map<String, String> environment = new HashMap<>();
         if (token != null && !token.isBlank())
         {
             // 通过环境变量注入 git 配置，避免 PAT 出现在进程命令行参数中（ps 可见）。
             // GitHub git smart HTTP 接受 Basic(x-access-token:PAT)，不接受 REST 常用的 Bearer。
-            builder.environment().put("GIT_CONFIG_COUNT", "1");
-            builder.environment().put("GIT_CONFIG_KEY_0", "http.extraHeader");
-            builder.environment().put("GIT_CONFIG_VALUE_0", buildAuthorizationExtraHeader(token));
+            environment.put("GIT_CONFIG_COUNT", "1");
+            environment.put("GIT_CONFIG_KEY_0", "http.extraHeader");
+            environment.put("GIT_CONFIG_VALUE_0", buildAuthorizationExtraHeader(token));
         }
-        Process process = builder.start();
-        boolean finished = process.waitFor(prepareTimeoutSeconds, TimeUnit.SECONDS);
-        String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
-        if (!finished)
+        GitCommandRunner.GitCommandResult result = gitCommandRunner.execute(
+            workspace, environment, prepareTimeoutSeconds, args);
+        if (result.timedOut())
         {
-            process.destroyForcibly();
             throw new WorkspacePrepareException(ReviewPipelineConstants.FAILURE_TIMEOUT,
                 "准备审查工作区超时（" + prepareTimeoutSeconds + " 秒）");
         }
-        if (process.exitValue() != 0)
+        if (!result.successful())
         {
+            String output = result.output() == null ? "" : result.output().trim();
             String detail = output.isBlank() ? "git 命令执行失败" : output.lines().findFirst().orElse(output);
-            throw new WorkspacePrepareException(ReviewPipelineConstants.FAILURE_WORKSPACE_PREPARE,
+            throw new WorkspacePrepareException(result.transientDependencyFailure()
+                ? ReviewPipelineConstants.FAILURE_DEPENDENCY_UNAVAILABLE
+                : ReviewPipelineConstants.FAILURE_WORKSPACE_PREPARE,
                 "git " + String.join(" ", args) + " 失败: " + detail);
         }
     }

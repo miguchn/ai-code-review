@@ -52,6 +52,7 @@ public class ReviewSummaryContentFactory
         ReviewSummaryContent.Builder builder = ReviewSummaryContent.builder()
             .taskStatus(task == null ? null : task.getTaskStatus())
             .taskId(task == null ? null : task.getTaskId())
+            .runId(run == null ? null : run.getRunId())
             .conclusion(conclusion)
             .conclusionLabel(ReviewCommentBodyRenderer.conclusionLabel(conclusion))
             .totalScore(firstNonNull(

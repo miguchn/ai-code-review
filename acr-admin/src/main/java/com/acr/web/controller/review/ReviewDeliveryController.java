@@ -51,13 +51,29 @@ public class ReviewDeliveryController extends BaseController
         return success(deliveryService.selectLatestImDelivery(taskId));
     }
 
+    /** 任务详情：该任务全部行内评论投递记录。 */
+    @PreAuthorize("@ss.hasAnyPermi('review:record:query,review:task:query')")
+    @GetMapping("/task/{taskId}/inline")
+    public AjaxResult inlineByTask(@PathVariable Long taskId)
+    {
+        return success(deliveryService.selectInlineDeliveriesByTaskId(taskId));
+    }
+
+    /** 问题详情：按 issueId 反查行内评论投递状态。 */
+    @PreAuthorize("@ss.hasAnyPermi('review:issue:query,review:record:query,review:task:query')")
+    @GetMapping("/issue/{issueId}/inline")
+    public AjaxResult inlineByIssue(@PathVariable Long issueId)
+    {
+        return success(deliveryService.selectInlineDeliveryByIssueId(issueId));
+    }
+
     @PreAuthorize("@ss.hasPermi('review:delivery:retry')")
     @Log(title = "审查投递", businessType = BusinessType.UPDATE)
     @PostMapping("/{taskId}/retry")
     public AjaxResult retry(@PathVariable Long taskId)
     {
         deliveryService.retryDelivery(taskId);
-        return success("投递重试已完成");
+        return success("已进入投递队列");
     }
 
     @PreAuthorize("@ss.hasPermi('review:delivery:retry')")
@@ -66,7 +82,16 @@ public class ReviewDeliveryController extends BaseController
     public AjaxResult retryByRecord(@PathVariable Long deliveryId)
     {
         deliveryService.retryDeliveryById(deliveryId);
-        return success("投递补发已完成");
+        return success("已进入投递队列");
+    }
+
+    @PreAuthorize("@ss.hasPermi('review:task:handle')")
+    @Log(title = "投递标记人工已处理", businessType = BusinessType.UPDATE)
+    @PostMapping("/record/{deliveryId}/mark-handled")
+    public AjaxResult markHandled(@PathVariable Long deliveryId)
+    {
+        deliveryService.markManualHandled(deliveryId);
+        return success("已标记人工处理");
     }
 
     /** 查看实际发出的正文快照（复用列表权限 + 部门数据范围）。 */

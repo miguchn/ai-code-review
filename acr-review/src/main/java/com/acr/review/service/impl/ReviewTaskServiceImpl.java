@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 import com.acr.common.annotation.DataScope;
 import com.acr.common.exception.ServiceException;
 import com.acr.review.domain.ReviewDeliveryRecord;
+import com.acr.review.domain.ReviewPipelineConstants;
 import com.acr.review.domain.ReviewProject;
 import com.acr.review.domain.ReviewTask;
 import com.acr.review.domain.ReviewTaskDetail;
@@ -126,6 +127,55 @@ public class ReviewTaskServiceImpl implements IReviewTaskService
         ReviewTask task = selectReviewTaskById(taskId);
         checkTaskDataScope(task);
         executionService.retryTask(taskId);
+    }
+
+    @Override
+    public void cancelTask(Long taskId)
+    {
+        ReviewTask task = selectReviewTaskById(taskId);
+        checkTaskDataScope(task);
+        String status = task.getTaskStatus();
+        if (ReviewPipelineConstants.TASK_SUCCESS.equals(status)
+            || ReviewPipelineConstants.TASK_FAILED.equals(status)
+            || ReviewPipelineConstants.TASK_CANCELLED.equals(status)
+            || ReviewPipelineConstants.TASK_SUPERSEDED.equals(status))
+        {
+            throw new ServiceException("当前状态不可终止：" + statusLabel(status));
+        }
+        String operator;
+        try
+        {
+            operator = com.acr.common.utils.SecurityUtils.getUsername();
+        }
+        catch (RuntimeException ex)
+        {
+            operator = "system";
+        }
+        if (taskMapper.cancelTask(taskId, operator) != 1)
+        {
+            throw new ServiceException("终止失败，任务可能已被其他节点领取或状态已变更");
+        }
+    }
+
+    private static String statusLabel(String status)
+    {
+        if (ReviewPipelineConstants.TASK_SUCCESS.equals(status))
+        {
+            return "已成功";
+        }
+        if (ReviewPipelineConstants.TASK_FAILED.equals(status))
+        {
+            return "已失败";
+        }
+        if (ReviewPipelineConstants.TASK_CANCELLED.equals(status))
+        {
+            return "已取消";
+        }
+        if (ReviewPipelineConstants.TASK_SUPERSEDED.equals(status))
+        {
+            return "已被替代";
+        }
+        return status == null ? "未知" : status;
     }
 
     /** 详情与重试不走列表的数据范围切面，按任务所属项目部门单独校验。 */

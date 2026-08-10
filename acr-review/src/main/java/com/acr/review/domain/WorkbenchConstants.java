@@ -17,7 +17,7 @@ public final class WorkbenchConstants
     public static final String TITLE_ISSUE_RECHECKING = "疑似修复问题";
     public static final String TITLE_HIGH_RISK_CONCLUSION = "高风险结论";
     public static final String TITLE_TASK_FAILED = "失败任务";
-    public static final String TITLE_DELIVERY_FAILED = "投递失败";
+    public static final String TITLE_DELIVERY_FAILED = "待处理投递";
 
     public static final String SUBTITLE_ORIGIN_NEW = "本次变更";
     public static final String SUBTITLE_ORIGIN_EXISTING = "存量代码";

@@ -14,9 +14,11 @@ public final class ReviewPipelineConstants
 
     public static final String TASK_PENDING = "PENDING";
     public static final String TASK_RUNNING = "RUNNING";
+    public static final String TASK_RETRYING = "RETRYING";
     public static final String TASK_SUCCESS = "SUCCESS";
     public static final String TASK_FAILED = "FAILED";
     public static final String TASK_CANCELLED = "CANCELLED";
+    public static final String TASK_SUPERSEDED = "SUPERSEDED";
 
     public static final String RUN_RUNNING = "RUNNING";
     public static final String RUN_SUCCESS = "SUCCESS";
@@ -46,10 +48,10 @@ public final class ReviewPipelineConstants
     public static final String FAILURE_RESULT_FORMAT = "RESULT_FORMAT_INVALID";
     public static final String FAILURE_CONCURRENCY = "CONCURRENCY_LIMIT";
     public static final String FAILURE_RATE_LIMIT = "RATE_LIMIT";
+    public static final String FAILURE_DEPENDENCY_UNAVAILABLE = "DEPENDENCY_UNAVAILABLE";
+    public static final String FAILURE_LEASE_EXPIRED = "LEASE_EXPIRED";
+    public static final String FAILURE_WORKER_SHUTDOWN = "WORKER_SHUTDOWN";
     public static final String FAILURE_UNKNOWN = "UNKNOWN";
-
-    /** RUNNING 任务回收阈值（分钟）：超过后视为上次执行已中断，允许重新领取。 */
-    public static final int STALE_RUNNING_TIMEOUT_MINUTES = 30;
 
     public static final int MAX_RESULT_JSON_CHARS = 512_000;
     public static final int MAX_DIFF_CHARS = 400_000;

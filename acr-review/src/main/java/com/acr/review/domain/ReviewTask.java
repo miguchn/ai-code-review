@@ -27,6 +27,23 @@ public class ReviewTask extends BaseEntity
     private Integer changedFiles;
     private String triggerType;
     private String taskStatus;
+    /** 同一逻辑变更的稳定键：PR#编号 / PUSH#分支。 */
+    private String changeKey;
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    private Date nextRunAt;
+    private String leaseOwner;
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    private Date leaseUntil;
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    private Date heartbeatAt;
+    private Long executionEpoch;
+    private Integer retryCount;
+    private String lastErrorCode;
+    private Long supersededBy;
+    /** 更新 RETRYING 时由 SQL 使用数据库时钟计算 next_run_at，不持久化。 */
+    private Integer retryDelaySeconds;
+    /** RUNNING 更新/心跳续租时使用，仅传递时长，不持久化。 */
+    private Integer leaseDurationSeconds;
     private String reviewConclusion;
     private String currentStep;
     private String failureStep;
@@ -260,6 +277,116 @@ public class ReviewTask extends BaseEntity
     public void setTaskStatus(String taskStatus)
     {
         this.taskStatus = taskStatus;
+    }
+
+    public String getChangeKey()
+    {
+        return changeKey;
+    }
+
+    public void setChangeKey(String changeKey)
+    {
+        this.changeKey = changeKey;
+    }
+
+    public Date getNextRunAt()
+    {
+        return nextRunAt;
+    }
+
+    public void setNextRunAt(Date nextRunAt)
+    {
+        this.nextRunAt = nextRunAt;
+    }
+
+    public String getLeaseOwner()
+    {
+        return leaseOwner;
+    }
+
+    public void setLeaseOwner(String leaseOwner)
+    {
+        this.leaseOwner = leaseOwner;
+    }
+
+    public Date getLeaseUntil()
+    {
+        return leaseUntil;
+    }
+
+    public void setLeaseUntil(Date leaseUntil)
+    {
+        this.leaseUntil = leaseUntil;
+    }
+
+    public Date getHeartbeatAt()
+    {
+        return heartbeatAt;
+    }
+
+    public void setHeartbeatAt(Date heartbeatAt)
+    {
+        this.heartbeatAt = heartbeatAt;
+    }
+
+    public Long getExecutionEpoch()
+    {
+        return executionEpoch;
+    }
+
+    public void setExecutionEpoch(Long executionEpoch)
+    {
+        this.executionEpoch = executionEpoch;
+    }
+
+    public Integer getRetryCount()
+    {
+        return retryCount;
+    }
+
+    public void setRetryCount(Integer retryCount)
+    {
+        this.retryCount = retryCount;
+    }
+
+    public String getLastErrorCode()
+    {
+        return lastErrorCode;
+    }
+
+    public void setLastErrorCode(String lastErrorCode)
+    {
+        this.lastErrorCode = lastErrorCode;
+    }
+
+    public Long getSupersededBy()
+    {
+        return supersededBy;
+    }
+
+    public void setSupersededBy(Long supersededBy)
+    {
+        this.supersededBy = supersededBy;
+    }
+
+    public Integer getRetryDelaySeconds()
+    {
+        return retryDelaySeconds;
+    }
+
+    public void setRetryDelaySeconds(Integer retryDelaySeconds)
+    {
+        this.retryDelaySeconds = retryDelaySeconds;
+    }
+
+    public Integer getLeaseDurationSeconds()
+    {
+        return leaseDurationSeconds;
+    }
+
+    public void setLeaseDurationSeconds(Integer leaseDurationSeconds)
+    {
+        this.leaseDurationSeconds = leaseDurationSeconds;
     }
 
     public String getReviewConclusion()

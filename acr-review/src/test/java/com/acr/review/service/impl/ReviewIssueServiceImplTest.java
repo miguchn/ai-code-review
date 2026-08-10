@@ -82,6 +82,22 @@ class ReviewIssueServiceImplTest
     }
 
     @Test
+    void staleHeadSkipsLedgerReconcile()
+    {
+        ReviewTask task = successLlmTask(1L, 10L, 8, "oldhead");
+        task.setChangeKey("PR#8");
+        ReviewTaskRun run = runWithIssues(100L, top("SEC", "a.java", "leak", 1));
+        when(taskMapper.countNewerTasksByChangeKey(10L, "PR#8", 1L)).thenReturn(1);
+
+        ReviewRoundReconcileResult result = service.reconcileAfterSuccess(task, run);
+
+        assertTrue(result.getNewlyMaterialized().isEmpty());
+        verify(issueMapper, never()).selectByProjectAndPr(anyLong(), org.mockito.ArgumentMatchers.anyInt(), any());
+        verify(issueMapper, never()).insertIssue(any());
+        verify(issueMapper, never()).updateIssueSnapshot(any());
+    }
+
+    @Test
     void reconcileInsertsNewIssues()
     {
         ReviewTask task = successLlmTask(1L, 10L, 8, "aaa1111");

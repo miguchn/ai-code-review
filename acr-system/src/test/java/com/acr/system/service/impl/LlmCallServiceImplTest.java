@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.concurrent.TimeUnit;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import org.junit.jupiter.api.AfterEach;
@@ -131,5 +132,32 @@ class LlmCallServiceImplTest
 
         assertTrue(result.isSuccess());
         assertEquals("/stored/chat/completions", server.takeRequest().getPath());
+    }
+
+    @Test
+    void chatHonorsTaskLevelCallDeadline()
+    {
+        SysAiModelConfig stored = new SysAiModelConfig();
+        stored.setApiUrl(server.url("/v1/chat/completions").toString());
+        stored.setApiKey("v1:stored");
+        stored.setModel("demo-model");
+        stored.setTimeout(5_000);
+        stored.setMaxTokens(32);
+        stored.setEnabled("1");
+        when(aiModelConfigMapper.selectSysAiModelConfigById(9L)).thenReturn(stored);
+        when(apiKeyCryptoService.isEncrypted("v1:stored")).thenReturn(true);
+        when(apiKeyCryptoService.decrypt("v1:stored")).thenReturn("sk-real");
+        server.enqueue(new MockResponse()
+            .setResponseCode(200)
+            .setBody("{\"choices\":[{\"message\":{\"content\":\"OK\"}}]}")
+            .setBodyDelay(2, TimeUnit.SECONDS));
+
+        long started = System.nanoTime();
+        LlmCallResult result = llmCallService.chat(9L, "review", 200);
+        long durationMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
+
+        assertTrue(!result.isSuccess());
+        assertEquals(LlmCallErrorType.TIMEOUT, result.getErrorType());
+        assertTrue(durationMs < 1_500, "调用级 deadline 应限制总时长，实际 " + durationMs + "ms");
     }
 }

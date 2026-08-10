@@ -1,15 +1,12 @@
 package com.acr.review.git.gitee;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.TimeUnit;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import com.acr.review.domain.ReviewPipelineConstants;
+import com.acr.review.git.GitCommandRunner;
 import com.acr.review.git.GitProviderCodes;
 import com.acr.review.git.GitPullRequestWorkspacePreparer;
 import com.acr.review.git.GitPullRequestWorkspaceRequest;
@@ -26,10 +23,12 @@ public class GiteePullRequestWorkspacePreparer implements GitPullRequestWorkspac
     private static final java.util.regex.Pattern TOKEN_PATTERN = java.util.regex.Pattern.compile("[A-Za-z0-9_]{16,}");
 
     private final int prepareTimeoutSeconds;
+    private final GitCommandRunner gitCommandRunner;
 
-    public GiteePullRequestWorkspacePreparer(
+    public GiteePullRequestWorkspacePreparer(GitCommandRunner gitCommandRunner,
         @Value("${review.gitee.workspace-prepare-timeout-seconds:180}") int prepareTimeoutSeconds)
     {
+        this.gitCommandRunner = gitCommandRunner;
         this.prepareTimeoutSeconds = Math.max(30, prepareTimeoutSeconds);
     }
 
@@ -137,31 +136,20 @@ public class GiteePullRequestWorkspacePreparer implements GitPullRequestWorkspac
     private void runGit(Path workspace, String token, String... args)
         throws IOException, InterruptedException, WorkspacePrepareException
     {
-        List<String> command = new ArrayList<>();
-        command.add("git");
-        command.add("-C");
-        command.add(workspace.toString());
-        for (String arg : args)
+        GitCommandRunner.GitCommandResult result = gitCommandRunner.execute(
+            workspace, null, prepareTimeoutSeconds, args);
+        if (result.timedOut())
         {
-            command.add(arg);
-        }
-
-        ProcessBuilder builder = new ProcessBuilder(command);
-        builder.redirectErrorStream(true);
-        builder.environment().put("GIT_TERMINAL_PROMPT", "0");
-        Process process = builder.start();
-        boolean finished = process.waitFor(prepareTimeoutSeconds, TimeUnit.SECONDS);
-        String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
-        if (!finished)
-        {
-            process.destroyForcibly();
             throw new WorkspacePrepareException(ReviewPipelineConstants.FAILURE_TIMEOUT,
                 "准备审查工作区超时（" + prepareTimeoutSeconds + " 秒）");
         }
-        if (process.exitValue() != 0)
+        if (!result.successful())
         {
+            String output = result.output() == null ? "" : result.output().trim();
             String detail = output.isBlank() ? "git 命令执行失败" : output.lines().findFirst().orElse(output);
-            throw new WorkspacePrepareException(ReviewPipelineConstants.FAILURE_WORKSPACE_PREPARE,
+            throw new WorkspacePrepareException(result.transientDependencyFailure()
+                ? ReviewPipelineConstants.FAILURE_DEPENDENCY_UNAVAILABLE
+                : ReviewPipelineConstants.FAILURE_WORKSPACE_PREPARE,
                 "git " + String.join(" ", args) + " 失败: " + detail);
         }
     }

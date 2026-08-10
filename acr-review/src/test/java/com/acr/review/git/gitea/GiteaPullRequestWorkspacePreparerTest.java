@@ -6,13 +6,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 import com.acr.review.domain.ReviewPipelineConstants;
 import com.acr.review.git.GitAccessContext;
+import com.acr.review.git.GitCommandRunner;
 import com.acr.review.git.GitPullRequestWorkspaceRequest;
 import com.acr.review.git.GitPullRequestWorkspaceResult;
 import com.acr.review.git.GitRepositoryCoordinates;
 
 class GiteaPullRequestWorkspacePreparerTest
 {
-    private final GiteaPullRequestWorkspacePreparer preparer = new GiteaPullRequestWorkspacePreparer(30);
+    private final GiteaPullRequestWorkspacePreparer preparer = new GiteaPullRequestWorkspacePreparer(
+        org.mockito.Mockito.mock(GitCommandRunner.class), 30);
 
     @Test
     void buildsFullFetchArgsWithoutDepth()

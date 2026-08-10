@@ -8,13 +8,15 @@ import java.util.Base64;
 import org.junit.jupiter.api.Test;
 import com.acr.review.domain.ReviewPipelineConstants;
 import com.acr.review.git.GitAccessContext;
+import com.acr.review.git.GitCommandRunner;
 import com.acr.review.git.GitPullRequestWorkspaceRequest;
 import com.acr.review.git.GitPullRequestWorkspaceResult;
 import com.acr.review.git.GitRepositoryCoordinates;
 
 class GitLabPullRequestWorkspacePreparerTest
 {
-    private final GitLabPullRequestWorkspacePreparer preparer = new GitLabPullRequestWorkspacePreparer(30);
+    private final GitLabPullRequestWorkspacePreparer preparer = new GitLabPullRequestWorkspacePreparer(
+        org.mockito.Mockito.mock(GitCommandRunner.class), 30);
 
     @Test
     void buildsFullFetchArgsWithoutDepth()

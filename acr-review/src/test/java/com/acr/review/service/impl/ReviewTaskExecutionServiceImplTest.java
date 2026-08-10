@@ -6,12 +6,12 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import java.util.Date;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.ApplicationEventPublisher;
@@ -28,7 +28,9 @@ import com.acr.review.engine.OcrModelConfigMapper;
 import com.acr.review.engine.ReviewEngineResultMapper;
 import com.acr.review.engine.ReviewEngineWorkspaceManager;
 import com.acr.review.engine.config.ReviewEngineProperties;
+import com.acr.review.delivery.ReviewDeliveryIntentService;
 import com.acr.review.git.GitAdapterRegistry;
+import com.acr.review.git.GitCommandRunner;
 import com.acr.review.git.GitPullRequestDiffFetcher;
 import com.acr.review.git.GitPullRequestDiffResult;
 import com.acr.review.git.GitPullRequestMetadataFetcher;
@@ -38,13 +40,17 @@ import com.acr.review.mapper.ReviewProjectMapper;
 import com.acr.review.mapper.ReviewTaskMapper;
 import com.acr.review.mapper.ReviewTaskRunMapper;
 import com.acr.review.service.IGitCredentialService;
-import com.acr.review.service.IReviewDeliveryService;
 import com.acr.review.service.IReviewIssueService;
 import com.acr.review.service.IReviewTemplateService;
 import com.acr.review.service.ReviewConclusionResolver;
 import com.acr.review.service.ReviewPromptComposer;
 import com.acr.review.service.ReviewPromptRenderer;
 import com.acr.review.scope.UnifiedDiffParser;
+import com.acr.review.scheduling.ReviewResourceBudgetService;
+import com.acr.review.scheduling.ReviewTaskLeaseManager;
+import com.acr.review.scheduling.ReviewTaskRetryPolicy;
+import com.acr.review.scheduling.ReviewTaskRuntimeSettings;
+import com.acr.review.scheduling.ReviewTaskWorkerIdentity;
 import com.acr.review.service.ReviewScoreResultParser;
 import com.acr.system.domain.SysAiModelConfig;
 import com.acr.system.service.ISysAiModelConfigService;
@@ -69,8 +75,16 @@ class ReviewTaskExecutionServiceImplTest
     private final GitPullRequestMetadataFetcher metadataFetcher = mock(GitPullRequestMetadataFetcher.class);
     private final OpenCodeReviewCliAdapter reviewEngine = mock(OpenCodeReviewCliAdapter.class);
     private final ReviewEngineWorkspaceManager workspaceManager = mock(ReviewEngineWorkspaceManager.class);
-    private final IReviewDeliveryService deliveryService = mock(IReviewDeliveryService.class);
     private final IReviewIssueService issueService = mock(IReviewIssueService.class);
+    private final ReviewDeliveryIntentService deliveryIntentService = mock(ReviewDeliveryIntentService.class);
+    private final ReviewTaskCompletionService completionService = new ReviewTaskCompletionService(
+        taskMapper, runMapper, issueService, deliveryIntentService);
+    private final GitCommandRunner gitCommandRunner = mock(GitCommandRunner.class);
+    private final ReviewTaskRuntimeSettings runtimeSettings = mock(ReviewTaskRuntimeSettings.class);
+    private final ReviewTaskRetryPolicy retryPolicy = new ReviewTaskRetryPolicy(runtimeSettings);
+    private final ReviewTaskWorkerIdentity workerIdentity = mock(ReviewTaskWorkerIdentity.class);
+    private final ReviewTaskLeaseManager leaseManager = mock(ReviewTaskLeaseManager.class);
+    private final ReviewResourceBudgetService budgetService = mock(ReviewResourceBudgetService.class);
     private ReviewTaskExecutionServiceImpl service;
 
     @BeforeEach
@@ -78,6 +92,15 @@ class ReviewTaskExecutionServiceImplTest
     {
         ReviewEngineProperties properties = new ReviewEngineProperties();
         properties.setMaxConcurrency(2);
+        when(runtimeSettings.leaseSeconds()).thenReturn(900);
+        when(runtimeSettings.maxRetries()).thenReturn(3);
+        when(runtimeSettings.retryDelaySeconds(anyInt())).thenReturn(30);
+        when(runtimeSettings.budgetBackoffSeconds()).thenReturn(30);
+        when(workerIdentity.owner()).thenReturn("worker-test");
+        when(taskMapper.updateTaskExecution(any())).thenReturn(1);
+        when(taskMapper.updateTaskSnapshot(any())).thenReturn(1);
+        when(budgetService.tryAcquireOcrExecution()).thenReturn(mock(com.acr.review.scheduling.ReviewBudgetLease.class));
+        when(budgetService.tryAcquireLlmCall()).thenReturn(mock(com.acr.review.scheduling.ReviewBudgetLease.class));
         wireGithubAdapters();
         service = new ReviewTaskExecutionServiceImpl(
             taskMapper, runMapper, projectMapper, credentialMapper,
@@ -98,8 +121,13 @@ class ReviewTaskExecutionServiceImplTest
             llmCallService,
             eventPublisher,
             new ReviewTaskSnapshotServiceImpl(templateService, modelConfigService, properties),
-            deliveryService,
-            issueService,
+            completionService,
+            gitCommandRunner,
+            runtimeSettings,
+            retryPolicy,
+            workerIdentity,
+            leaseManager,
+            budgetService,
             120);
     }
 
@@ -119,9 +147,28 @@ class ReviewTaskExecutionServiceImplTest
     @Test
     void skipsWhenClaimFails()
     {
-        when(taskMapper.claimTask(eq(9L), any(), any(Date.class), anyInt())).thenReturn(0);
+        when(taskMapper.claimTask(eq(9L), any(), any(), anyInt())).thenReturn(0);
         service.executeTask(9L);
         verify(runMapper, never()).insertReviewTaskRun(any());
+    }
+
+    @Test
+    void stopsOldEpochBeforeBusinessExecutionWhenFencedUpdateIsRejected()
+    {
+        ReviewTask task = new ReviewTask();
+        task.setTaskId(10L);
+        task.setProjectId(2L);
+        task.setSnapshotReviewMode(ReviewPipelineConstants.REVIEW_MODE_LLM_DIRECT);
+        task.setExecutionEpoch(5L);
+        task.setLeaseOwner("worker-test");
+        when(taskMapper.claimTask(eq(10L), any(), any(), anyInt())).thenReturn(1);
+        when(taskMapper.selectReviewTaskById(10L)).thenReturn(task);
+        when(taskMapper.updateTaskExecution(any())).thenReturn(0);
+
+        service.executeTask(10L);
+
+        verify(projectMapper, never()).selectReviewProjectById(any());
+        verify(deliveryIntentService, never()).enqueueAfterSuccess(any(), any());
     }
 
     @Test
@@ -133,7 +180,7 @@ class ReviewTaskExecutionServiceImplTest
         task.setProjectId(2L);
         task.setBaseSha("abc1234");
         task.setHeadSha("def5678");
-        when(taskMapper.claimTask(eq(11L), any(), any(Date.class), anyInt())).thenReturn(1);
+        when(taskMapper.claimTask(eq(11L), any(), any(), anyInt())).thenReturn(1);
         when(taskMapper.selectReviewTaskById(11L)).thenReturn(task);
         when(runMapper.selectMaxAttemptNo(11L)).thenReturn(null);
         org.mockito.Mockito.doThrow(new org.springframework.dao.DataIntegrityViolationException("Column 'snapshot_review_mode' cannot be null"))
@@ -146,7 +193,7 @@ class ReviewTaskExecutionServiceImplTest
         ReviewTask saved = captor.getValue();
         org.junit.jupiter.api.Assertions.assertEquals(ReviewPipelineConstants.TASK_FAILED, saved.getTaskStatus());
         org.junit.jupiter.api.Assertions.assertEquals(ReviewPipelineConstants.FAILURE_UNKNOWN, saved.getFailureType());
-        verify(deliveryService, never()).deliverAfterSuccess(any(), any(), any());
+        verify(deliveryIntentService, never()).enqueueAfterSuccess(any(), any());
     }
 
     @Test
@@ -158,7 +205,7 @@ class ReviewTaskExecutionServiceImplTest
         task.setBaseSha("abc1234");
         task.setHeadSha("def5678");
         task.setSnapshotReviewMode("OCR_PR_DIFF");
-        when(taskMapper.claimTask(eq(12L), any(), any(Date.class), anyInt())).thenReturn(1);
+        when(taskMapper.claimTask(eq(12L), any(), any(), anyInt())).thenReturn(1);
         when(taskMapper.selectReviewTaskById(12L)).thenReturn(task);
         when(runMapper.selectMaxAttemptNo(12L)).thenReturn(null);
         when(projectMapper.selectReviewProjectById(2L)).thenReturn(null);
@@ -189,7 +236,7 @@ class ReviewTaskExecutionServiceImplTest
         task.setProjectId(2L);
         task.setBaseSha("abc1234");
         task.setHeadSha("def5678");
-        when(taskMapper.claimTask(eq(13L), any(), any(Date.class), anyInt())).thenReturn(1);
+        when(taskMapper.claimTask(eq(13L), any(), any(), anyInt())).thenReturn(1);
         when(taskMapper.selectReviewTaskById(13L)).thenReturn(task);
         when(runMapper.selectMaxAttemptNo(13L)).thenReturn(null);
 
@@ -240,7 +287,7 @@ class ReviewTaskExecutionServiceImplTest
         task.setProjectId(2L);
         task.setBaseSha("abc1234");
         task.setHeadSha("def5678");
-        when(taskMapper.claimTask(eq(14L), any(), any(Date.class), anyInt())).thenReturn(1);
+        when(taskMapper.claimTask(eq(14L), any(), any(), anyInt())).thenReturn(1);
         when(taskMapper.selectReviewTaskById(14L)).thenReturn(task);
         when(runMapper.selectMaxAttemptNo(14L)).thenReturn(null);
 
@@ -275,20 +322,19 @@ class ReviewTaskExecutionServiceImplTest
         ReviewTask task = new ReviewTask();
         task.setTaskId(6L);
         task.setTaskStatus(ReviewPipelineConstants.TASK_RUNNING);
-        task.setStartedTime(new Date());
         when(taskMapper.selectReviewTaskById(6L)).thenReturn(task);
         ServiceException ex = assertThrows(ServiceException.class, () -> service.retryTask(6L));
         assertTrue(ex.getMessage().contains("执行中"));
     }
 
     @Test
-    void retryAllowsStaleRunningTask()
+    void retryAllowsDatabaseExpiredRunningTask()
     {
         ReviewTask task = new ReviewTask();
         task.setTaskId(7L);
         task.setTaskStatus(ReviewPipelineConstants.TASK_RUNNING);
-        task.setStartedTime(new Date(System.currentTimeMillis() - 60L * 60_000L));
         when(taskMapper.selectReviewTaskById(7L)).thenReturn(task);
+        when(taskMapper.requeueExpiredTask(7L)).thenReturn(1);
         service.retryTask(7L);
         verify(eventPublisher).publishEvent(any());
     }
@@ -305,6 +351,30 @@ class ReviewTaskExecutionServiceImplTest
     }
 
     @Test
+    void transientModelTimeoutMovesTaskToRetryingWithoutTerminalNotification()
+    {
+        ReviewTask task = llmTask(20L);
+        task.setRetryCount(0);
+        stubLlmPathPrerequisites(task);
+        when(diffFetcher.fetchDiff(any(), any(), eq("abc1234"), eq("def5678")))
+            .thenReturn(GitPullRequestDiffResult.ok(
+                "diff --git a/A.java b/A.java\n--- a/A.java\n+++ b/A.java\n@@ -1 +1 @@\n-old\n+new\n"));
+        when(llmCallService.chat(eq(3L), any(), anyInt()))
+            .thenReturn(com.acr.common.ai.LlmCallResult.failure(
+                com.acr.common.enums.LlmCallErrorType.TIMEOUT, "模型调用超时", 120_000L, null));
+
+        service.executeTask(20L);
+
+        org.mockito.ArgumentCaptor<ReviewTask> captor = org.mockito.ArgumentCaptor.forClass(ReviewTask.class);
+        verify(taskMapper, org.mockito.Mockito.atLeastOnce()).updateTaskExecution(captor.capture());
+        ReviewTask saved = captor.getAllValues().get(captor.getAllValues().size() - 1);
+        assertEquals(ReviewPipelineConstants.TASK_RETRYING, saved.getTaskStatus());
+        assertEquals(ReviewPipelineConstants.FAILURE_TIMEOUT, saved.getLastErrorCode());
+        assertEquals(1, saved.getRetryCount());
+        verify(deliveryIntentService, never()).enqueueTerminalNotification(any(), any(), anyString());
+    }
+
+    @Test
     void llmPathAppliesScopeDecisionAndExpansion()
     {
         // 锁文件排除、依赖清单扩展拉取失败降级保留 L0、配置文件扩展成功追加全文
@@ -316,7 +386,7 @@ class ReviewTaskExecutionServiceImplTest
             .thenReturn(com.acr.review.git.GitFileContentResult.fail("IO"));
         when(fileContentFetcher.fetchFileContent(any(), any(), eq("src/main/resources/application.yml"), eq("def5678")))
             .thenReturn(com.acr.review.git.GitFileContentResult.ok("server:\n  port: 8080\ntimeout: 30\n"));
-        when(llmCallService.chat(eq(3L), any()))
+        when(llmCallService.chat(eq(3L), any(), anyInt()))
             .thenReturn(com.acr.common.ai.LlmCallResult.failure(
                 com.acr.common.enums.LlmCallErrorType.UNKNOWN, "stop-here", 5L, null));
 
@@ -338,7 +408,7 @@ class ReviewTaskExecutionServiceImplTest
         assertTrue(snapshot.contains("package-lock.json") && snapshot.contains("DEFAULT_EXCLUDE"));
         assertTrue(snapshot.contains("FULL"), "yml 应记 FULL: " + snapshot);
         assertTrue(snapshot.contains("DEGRADED"), "pom 应记 DEGRADED: " + snapshot);
-        verify(llmCallService).chat(eq(3L), any());
+        verify(llmCallService).chat(eq(3L), any(), eq(120_000));
     }
 
     @Test
@@ -359,7 +429,7 @@ class ReviewTaskExecutionServiceImplTest
             .thenReturn(com.acr.review.git.GitFileContentResult.fail("IO"));
         when(fileContentFetcher.fetchFileContent(any(), any(), eq("src/main/resources/application.yml"), eq("def5678")))
             .thenReturn(com.acr.review.git.GitFileContentResult.ok("server:\n  port: 8080\n"));
-        when(llmCallService.chat(eq(3L), any()))
+        when(llmCallService.chat(eq(3L), any(), anyInt()))
             .thenReturn(com.acr.common.ai.LlmCallResult.failure(
                 com.acr.common.enums.LlmCallErrorType.UNKNOWN, "stop-here", 5L, null));
 
@@ -406,7 +476,7 @@ class ReviewTaskExecutionServiceImplTest
 
         service.executeTask(22L);
 
-        verify(llmCallService, never()).chat(any(), any());
+        verify(llmCallService, never()).chat(any(), any(), anyInt());
         org.mockito.ArgumentCaptor<ReviewTask> taskCaptor = org.mockito.ArgumentCaptor.forClass(ReviewTask.class);
         verify(taskMapper, org.mockito.Mockito.atLeastOnce()).updateTaskExecution(taskCaptor.capture());
         ReviewTask finished = taskCaptor.getAllValues().get(taskCaptor.getAllValues().size() - 1);
@@ -420,7 +490,7 @@ class ReviewTaskExecutionServiceImplTest
         assertTrue(run.getResultSummary().contains("无有效审查范围"));
         org.junit.jupiter.api.Assertions.assertNotNull(run.getScopeDecisionJson());
         assertTrue(run.getScopeDecisionJson().contains("package-lock.json"));
-        verify(deliveryService).deliverAfterSuccess(any(ReviewTask.class), any(ReviewTaskRun.class), any());
+        verify(deliveryIntentService).enqueueAfterSuccess(any(ReviewTask.class), any(ReviewTaskRun.class));
     }
 
     @Test
@@ -446,14 +516,19 @@ class ReviewTaskExecutionServiceImplTest
             llmCallService,
             eventPublisher,
             new ReviewTaskSnapshotServiceImpl(templateService, modelConfigService, engineProperties()),
-            deliveryService,
-            issueService,
+            completionService,
+            gitCommandRunner,
+            runtimeSettings,
+            retryPolicy,
+            workerIdentity,
+            leaseManager,
+            budgetService,
             120);
         ReviewTask task = llmTask(23L);
         stubLlmPathPrerequisites(task);
         when(diffFetcher.fetchDiff(any(), any(), eq("abc1234"), eq("def5678")))
             .thenReturn(GitPullRequestDiffResult.ok(scopeTestDiff()));
-        when(llmCallService.chat(eq(3L), any()))
+        when(llmCallService.chat(eq(3L), any(), anyInt()))
             .thenReturn(com.acr.common.ai.LlmCallResult.failure(
                 com.acr.common.enums.LlmCallErrorType.UNKNOWN, "stop-here", 5L, null));
 
@@ -464,7 +539,7 @@ class ReviewTaskExecutionServiceImplTest
         ReviewTaskRun run = runCaptor.getAllValues().get(runCaptor.getAllValues().size() - 1);
         assertTrue(run.getRenderedPrompt().contains("package-lock"), "降级后应保留全量 Diff");
         assertTrue(run.getScopeDecisionJson().contains("DECISION_FAILED"));
-        verify(llmCallService).chat(eq(3L), any());
+        verify(llmCallService).chat(eq(3L), any(), eq(120_000));
     }
 
     private com.acr.review.scope.ReviewScopeDecisionService throwingDecisionService()
@@ -492,7 +567,7 @@ class ReviewTaskExecutionServiceImplTest
             .thenReturn(com.acr.review.git.GitFileContentResult.fail("IO"));
         when(fileContentFetcher.fetchFileContent(any(), any(), eq("src/main/resources/application.yml"), eq("def5678")))
             .thenReturn(com.acr.review.git.GitFileContentResult.ok("server:\n  port: 8080\ntimeout: 30\n"));
-        when(llmCallService.chat(eq(3L), any()))
+        when(llmCallService.chat(eq(3L), any(), anyInt()))
             .thenReturn(com.acr.common.ai.LlmCallResult.success(8L, originModelResponse(), null));
 
         service.executeTask(24L);
@@ -535,7 +610,7 @@ class ReviewTaskExecutionServiceImplTest
             .thenReturn(com.acr.review.git.GitFileContentResult.fail("IO"));
         when(fileContentFetcher.fetchFileContent(any(), any(), eq("src/main/resources/application.yml"), eq("def5678")))
             .thenReturn(com.acr.review.git.GitFileContentResult.ok("server:\n  port: 8080\ntimeout: 30\n"));
-        when(llmCallService.chat(eq(3L), any()))
+        when(llmCallService.chat(eq(3L), any(), anyInt()))
             .thenReturn(com.acr.common.ai.LlmCallResult.success(8L, originModelResponse(), null));
 
         service.executeTask(25L);
@@ -641,7 +716,7 @@ class ReviewTaskExecutionServiceImplTest
             org.mockito.ArgumentCaptor.forClass(ReviewTaskRun.class);
         verify(issueService).reconcileAfterSuccess(any(ReviewTask.class), reconcileRun.capture());
         assertTrue(reconcileRun.getValue().getTopIssuesJson().contains("SQL 注入"));
-        verify(deliveryService).deliverAfterSuccess(any(ReviewTask.class), any(ReviewTaskRun.class), any());
+        verify(deliveryIntentService).enqueueAfterSuccess(any(ReviewTask.class), any(ReviewTaskRun.class));
     }
 
     @Test
@@ -759,6 +834,49 @@ class ReviewTaskExecutionServiceImplTest
         assertTrue(sawEmptySummary, "应落推送无代码变更摘要");
     }
 
+    @Test
+    void ocrBudgetExhaustionReturnsRetryingBeforeWorkspacePrepare() throws Exception
+    {
+        ReviewTask task = ocrTask(40L);
+        task.setRetryCount(99);
+        stubOcrPathPrerequisites(task);
+        when(budgetService.tryAcquireOcrExecution()).thenReturn(null);
+
+        service.executeTask(40L);
+
+        verify(workspaceManager, never()).createIsolatedWorkspace();
+        verify(workspacePreparer, never()).prepare(any());
+        org.mockito.ArgumentCaptor<ReviewTask> taskCaptor = org.mockito.ArgumentCaptor.forClass(ReviewTask.class);
+        verify(taskMapper, org.mockito.Mockito.atLeastOnce()).updateTaskExecution(taskCaptor.capture());
+        ReviewTask finished = taskCaptor.getAllValues().get(taskCaptor.getAllValues().size() - 1);
+        assertEquals(ReviewPipelineConstants.TASK_RETRYING, finished.getTaskStatus());
+        assertEquals(ReviewPipelineConstants.FAILURE_CONCURRENCY, finished.getFailureType());
+        assertEquals(99, finished.getRetryCount());
+        assertEquals(30, finished.getRetryDelaySeconds());
+        verify(deliveryIntentService, never()).enqueueTerminalNotification(any(), any(), any());
+    }
+
+    @Test
+    void llmBudgetExhaustionReturnsRetryingWithoutCallingModel()
+    {
+        ReviewTask task = llmTask(41L);
+        task.setRetryCount(5);
+        stubLlmPathPrerequisites(task);
+        when(diffFetcher.fetchDiff(any(), any(), eq("abc1234"), eq("def5678")))
+            .thenReturn(GitPullRequestDiffResult.ok(scopeTestDiff()));
+        when(budgetService.tryAcquireLlmCall()).thenReturn(null);
+
+        service.executeTask(41L);
+
+        verify(llmCallService, never()).chat(any(), any(), anyInt());
+        org.mockito.ArgumentCaptor<ReviewTask> taskCaptor = org.mockito.ArgumentCaptor.forClass(ReviewTask.class);
+        verify(taskMapper, org.mockito.Mockito.atLeastOnce()).updateTaskExecution(taskCaptor.capture());
+        ReviewTask finished = taskCaptor.getAllValues().get(taskCaptor.getAllValues().size() - 1);
+        assertEquals(ReviewPipelineConstants.TASK_RETRYING, finished.getTaskStatus());
+        assertEquals(ReviewPipelineConstants.FAILURE_CONCURRENCY, finished.getFailureType());
+        assertEquals(5, finished.getRetryCount());
+    }
+
     /** OCR 快照任务（项目排除两条：docs/** 与 *.generated.java；其余快照列留空走平台默认）。 */
     private ReviewTask ocrTask(long taskId)
     {
@@ -777,7 +895,7 @@ class ReviewTaskExecutionServiceImplTest
 
     private void stubOcrPathPrerequisites(ReviewTask task)
     {
-        when(taskMapper.claimTask(eq(task.getTaskId()), any(), any(Date.class), anyInt())).thenReturn(1);
+        when(taskMapper.claimTask(eq(task.getTaskId()), any(), any(), anyInt())).thenReturn(1);
         when(taskMapper.selectReviewTaskById(task.getTaskId())).thenReturn(task);
         when(runMapper.selectMaxAttemptNo(task.getTaskId())).thenReturn(null);
         ReviewProject project = githubProject();
@@ -839,7 +957,7 @@ class ReviewTaskExecutionServiceImplTest
 
     private void stubLlmPathPrerequisites(ReviewTask task)
     {
-        when(taskMapper.claimTask(eq(task.getTaskId()), any(), any(Date.class), anyInt())).thenReturn(1);
+        when(taskMapper.claimTask(eq(task.getTaskId()), any(), any(), anyInt())).thenReturn(1);
         when(taskMapper.selectReviewTaskById(task.getTaskId())).thenReturn(task);
         when(runMapper.selectMaxAttemptNo(task.getTaskId())).thenReturn(null);
         ReviewProject project = githubProject();
@@ -904,6 +1022,7 @@ class ReviewTaskExecutionServiceImplTest
         task.setTaskId(5L);
         task.setTaskStatus(ReviewPipelineConstants.TASK_FAILED);
         when(taskMapper.selectReviewTaskById(5L)).thenReturn(task);
+        when(taskMapper.requeueFailedTask(5L)).thenReturn(1);
         service.retryTask(5L);
         verify(eventPublisher).publishEvent(any());
     }
