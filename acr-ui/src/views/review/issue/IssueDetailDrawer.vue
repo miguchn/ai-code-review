@@ -62,7 +62,7 @@
             </el-descriptions-item>
             <el-descriptions-item label="发起人">{{ emptyDash(detailIssue.prAuthor) }}</el-descriptions-item>
             <el-descriptions-item label="分支">{{ branchLabel }}</el-descriptions-item>
-            <el-descriptions-item label="最近提交"><code>{{ shortSha(detailIssue.headSha || detailIssue.lastSeenHeadSha) }}</code></el-descriptions-item>
+            <el-descriptions-item label="最近命中提交"><code>{{ shortSha(detailIssue.headSha || detailIssue.lastSeenHeadSha) }}</code></el-descriptions-item>
             <el-descriptions-item label="发现时间">{{ formatDateTime(detailIssue.createTime) }}</el-descriptions-item>
             <el-descriptions-item label="阶段进入">{{ formatDateTime(detailIssue.stageEnteredTime) }}</el-descriptions-item>
             <el-descriptions-item v-if="detailIssue.closedTime" label="关闭时间">
@@ -104,12 +104,12 @@
           <div class="detail-block-title">关联审查记录</div>
           <div class="review-record-links">
             <div v-if="detailFirstTask" class="source-task">
-              <span class="record-link-label">首次发现</span>
+              <span class="record-link-label">{{ sameMatchedTask ? '首次且最近命中' : '首次发现' }}</span>
               <el-button link type="primary" @click="goTask(detailFirstTask)">审查记录 #{{ detailFirstTask.taskId }}</el-button>
               <span class="source-task-time">{{ formatDateTime(detailFirstTask.finishedTime) }}</span>
             </div>
-            <div v-if="detailLastTask" class="source-task">
-              <span class="record-link-label">最近审查</span>
+            <div v-if="detailLastTask && !sameMatchedTask" class="source-task">
+              <span class="record-link-label">最近命中</span>
               <el-button link type="primary" @click="goTask(detailLastTask)">审查记录 #{{ detailLastTask.taskId }}</el-button>
               <span class="source-task-time">{{ formatDateTime(detailLastTask.finishedTime) }}</span>
             </div>
@@ -120,9 +120,9 @@
           <div class="detail-block-title">复核证据</div>
           <div class="recheck-evidence">
             <div class="recheck-row">
-              <span class="recheck-label">未命中轮次</span>
+              <span class="recheck-label">待复核依据</span>
               <el-button v-if="detailIssue.recheckTaskId" link type="primary" @click="goRecheckTask">
-                任务 #{{ detailIssue.recheckTaskId }}
+                审查记录 #{{ detailIssue.recheckTaskId }}
               </el-button>
               <span v-else class="empty-tip">—</span>
             </div>
@@ -360,6 +360,10 @@ const showDetailActions = computed(() => {
 })
 
 const canOpenDeliveryList = computed(() => auth.hasPermi('review:delivery:list'))
+const sameMatchedTask = computed(() => {
+  return detailFirstTask.value?.taskId != null
+    && detailFirstTask.value.taskId === detailLastTask.value?.taskId
+})
 
 const lifecycleNodes = computed(() => buildLifecycleNodes(detailIssue.value, detailActions.value, formatDateTime))
 const detailMergeRequestUrl = computed(() => buildMergeRequestUrl(detailLastTask.value || detailIssue.value || {}))
@@ -486,20 +490,29 @@ function loadDetail(issueId) {
 }
 
 function loadRelatedIssues(issue) {
-  if (!issue?.prNumber || !issue?.filePath) {
+  if (issue?.projectId == null || issue?.prNumber == null || !issue?.filePath) {
     relatedIssues.value = []
     return
   }
+  const refBranch = isPushIssue(issue)
+    ? (issue.targetBranch || issue.refBranch || issue.sourceBranch)
+    : undefined
   listIssue({
     pageNum: 1,
-    pageSize: 10,
+    pageSize: 50,
+    projectId: issue.projectId,
     prNumber: issue.prNumber,
+    branchKeyword: refBranch || undefined,
     keyword: issue.filePath,
     severity: issue.severity || undefined,
     activeFlag: 'Y'
   }).then(response => {
     relatedIssues.value = (response.rows || [])
-      .filter(row => row.issueId !== issue.issueId)
+      .filter(row => row.issueId !== issue.issueId
+        && Number(row.projectId) === Number(issue.projectId)
+        && Number(row.prNumber) === Number(issue.prNumber)
+        && row.filePath === issue.filePath
+        && (!refBranch || (row.targetBranch || row.refBranch || row.sourceBranch) === refBranch))
       .slice(0, 3)
   }).catch(() => {
     relatedIssues.value = []
@@ -519,7 +532,7 @@ function openRelated(issueId) {
 function goTask(task) {
   const taskId = task?.taskId
   if (!taskId) return
-  proxy.$router.push('/review/record-detail/index/' + taskId)
+  router.push('/review/record-detail/index/' + taskId).then(() => handleBeforeClose())
 }
 
 function openMergeRequest() {
@@ -531,11 +544,11 @@ function openMergeRequest() {
 function goRecheckTask() {
   const taskId = detailIssue.value?.recheckTaskId
   if (!taskId) return
-  proxy.$router.push('/review/record-detail/index/' + taskId)
+  router.push('/review/record-detail/index/' + taskId).then(() => handleBeforeClose())
 }
 
 function goDeliveryList() {
-  router.push('/notify/delivery')
+  router.push('/notify/delivery').then(() => handleBeforeClose())
 }
 
 function reloadDetailAndList() {

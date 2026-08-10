@@ -19,9 +19,6 @@
           <el-option v-for="dict in review_event_source" :key="dict.value" :label="dict.label" :value="dict.value" />
         </el-select>
       </el-form-item>
-      <el-form-item label="合并请求编号" prop="prNumber">
-        <el-input v-model="queryParams.prNumber" placeholder="请输入合并请求编号" clearable style="width: 140px" @keyup.enter="handleQuery" />
-      </el-form-item>
       <el-form-item label="任务状态" prop="taskStatus">
         <el-select v-model="queryParams.taskStatus" clearable placeholder="请选择状态" style="width: 130px" @change="onStatusChange">
           <el-option v-for="dict in review_task_status" :key="dict.value" :label="dict.label" :value="dict.value" />
@@ -33,13 +30,21 @@
           <el-radio-button :value="false">全部任务</el-radio-button>
         </el-radio-group>
       </el-form-item>
-      <el-form-item label="创建时间">
-        <el-date-picker v-model="dateRange" type="daterange" range-separator="-" start-placeholder="开始日期"
-          end-placeholder="结束日期" value-format="YYYY-MM-DD" style="width: 240px" />
-      </el-form-item>
+      <template v-if="showAdvancedSearch">
+        <el-form-item label="合并请求编号" prop="prNumber">
+          <el-input v-model="queryParams.prNumber" placeholder="请输入合并请求编号" clearable style="width: 140px" @keyup.enter="handleQuery" />
+        </el-form-item>
+        <el-form-item label="创建时间">
+          <el-date-picker v-model="dateRange" type="daterange" range-separator="-" start-placeholder="开始日期"
+            end-placeholder="结束日期" value-format="YYYY-MM-DD" style="width: 240px" />
+        </el-form-item>
+      </template>
       <el-form-item>
         <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
         <el-button icon="Refresh" @click="resetQuery">重置</el-button>
+        <el-button link type="primary" @click="showAdvancedSearch = !showAdvancedSearch">
+          {{ showAdvancedSearch ? '收起筛选' : '更多筛选' }}
+        </el-button>
       </el-form-item>
     </el-form>
 
@@ -54,7 +59,7 @@
           <dict-tag :options="review_event_source" :value="scope.row.eventSource || 'PR'" />
         </template>
       </el-table-column>
-      <el-table-column label="合并请求" min-width="200">
+      <el-table-column label="变更来源" min-width="200">
         <template #default="scope">
           <div v-if="isPushTask(scope.row)" class="pr-cell">
             <el-tag size="small" type="success">{{ formatPushRefDisplay(scope.row) }}</el-tag>
@@ -87,7 +92,9 @@
       </el-table-column>
       <el-table-column label="失败原因" min-width="160">
         <template #default="scope">
-          <span v-if="scope.row.failureMessage" class="failure-message" :title="scope.row.failureMessage">{{ scope.row.failureMessage }}</span>
+          <span v-if="scope.row.taskStatus === 'FAILED'" class="failure-message" :title="readableFailureMessage(scope.row.failureMessage)">
+            {{ readableFailureMessage(scope.row.failureMessage) }}
+          </span>
           <span v-else class="empty-tip">—</span>
         </template>
       </el-table-column>
@@ -121,7 +128,7 @@
 import { listReviewTask, retryReviewTask } from '@/api/review/task'
 import { listReviewProject } from '@/api/review/project'
 import auth from '@/plugins/auth'
-import { emptyDash, formatDateTime, isPushTask, formatPushRefDisplay } from '@/utils/reviewDisplay'
+import { emptyDash, formatDateTime, isPushTask, formatPushRefDisplay, readableFailureMessage } from '@/utils/reviewDisplay'
 
 const route = useRoute()
 const { proxy } = getCurrentInstance()
@@ -133,6 +140,7 @@ const taskList = ref([])
 const projectOptions = ref([])
 const loading = ref(true)
 const showSearch = ref(true)
+const showAdvancedSearch = ref(false)
 const total = ref(0)
 const dateRange = ref([])
 const pollTimer = ref(null)

@@ -381,8 +381,17 @@ public class WorkbenchServiceImpl implements IWorkbenchService
     static String buildRecentTitle(ReviewTask task)
     {
         String project = StringUtils.isNotEmpty(task.getProjectName()) ? task.getProjectName() : "未命名项目";
-        String pr = task.getPrNumber() == null ? "合并请求 —" : "合并请求 #" + task.getPrNumber();
-        return project + " · " + pr + " · " + taskStatusOrConclusionLabel(task);
+        String changeSource;
+        if (ReviewPipelineConstants.EVENT_SOURCE_PUSH.equals(task.getEventSource()))
+        {
+            String branch = StringUtils.isNotEmpty(task.getTargetBranch()) ? task.getTargetBranch() : "未知分支";
+            changeSource = "推送 " + branch;
+        }
+        else
+        {
+            changeSource = task.getPrNumber() == null ? "合并请求 —" : "合并请求 #" + task.getPrNumber();
+        }
+        return project + " · " + changeSource + " · " + taskStatusOrConclusionLabel(task);
     }
 
     static String taskStatusOrConclusionLabel(ReviewTask task)

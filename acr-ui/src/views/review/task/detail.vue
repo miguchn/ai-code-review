@@ -56,7 +56,9 @@
               <dict-tag v-if="detailTask.failureType" :options="review_task_failure_type" :value="detailTask.failureType" />
               <span v-else>—</span>
             </el-descriptions-item>
-            <el-descriptions-item label="失败原因" :span="2">{{ emptyDash(detailTask.failureMessage) }}</el-descriptions-item>
+            <el-descriptions-item label="失败原因" :span="2">
+              {{ detailTask.taskStatus === 'FAILED' ? readableFailureMessage(detailTask.failureMessage) : emptyDash(detailTask.failureMessage) }}
+            </el-descriptions-item>
           </el-descriptions>
         </section>
 
@@ -64,6 +66,7 @@
           :delivery="detailDelivery"
           :task-id="detailTask.taskId"
           :task-status="detailTask.taskStatus"
+          :event-source="detailTask.eventSource"
           @retried="loadDetail"
         />
 
@@ -102,7 +105,9 @@
             </el-table-column>
             <el-table-column label="失败原因" min-width="180">
               <template #default="scope">
-                <span v-if="scope.row.failureMessage" class="failure-message">{{ scope.row.failureMessage }}</span>
+                <span v-if="scope.row.runStatus === 'FAILED'" class="failure-message">
+                  {{ readableFailureMessage(scope.row.failureMessage) }}
+                </span>
                 <span v-else class="empty-tip">—</span>
               </template>
             </el-table-column>
@@ -122,7 +127,7 @@ import ScopeDecisionView from '@/views/review/components/ScopeDecisionView.vue'
 import {
   emptyDash, formatDuration, formatCodeChange, normalizeMode,
   shortSha, engineOrModelLabel, templateLabel, formatDateTime,
-  isPushTask, formatPushRefDisplay
+  isPushTask, formatPushRefDisplay, readableFailureMessage
 } from '@/utils/reviewDisplay'
 
 const { proxy } = getCurrentInstance()

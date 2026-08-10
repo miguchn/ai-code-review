@@ -1,7 +1,7 @@
 <template>
   <section class="delivery-block detail-section">
     <div class="delivery-head">
-      <h4>总结评论投递</h4>
+      <h4>{{ isPush ? '代码平台评论' : '总结评论投递' }}</h4>
       <el-button
         v-if="canRetry"
         type="warning"
@@ -12,11 +12,15 @@
         @click="onRetry"
       >{{ retryLabel }}</el-button>
     </div>
-    <p class="section-hint">与审查结论独立：投递失败不影响任务成功状态。同一合并请求仅维护一条 ACR 总结评论。</p>
-    <p v-if="!delivery" class="section-hint">
+    <p v-if="isPush" class="section-hint">
+      推送审查没有可挂载的合并请求评论；审查结果通过通知和问题台账交付。
+    </p>
+    <p v-else class="section-hint">与审查结论独立：投递失败不影响任务成功状态。同一合并请求仅维护一条 ACR 总结评论。</p>
+    <p v-if="isPush" class="section-hint">本任务无需投递代码平台评论。</p>
+    <p v-else-if="!delivery" class="section-hint">
       {{ isMissingOnSuccess ? '尚未投递总结评论，可点击右上角「补投递」。' : '本任务未投递总结评论。' }}
     </p>
-    <el-descriptions v-else :column="2" border>
+    <el-descriptions v-else-if="delivery" :column="2" border>
       <el-descriptions-item label="投递状态">
         <el-tag v-if="delivery.deliveryStatus === 'SUCCESS'" type="success" size="small">已投递</el-tag>
         <el-tag v-else-if="delivery.deliveryStatus === 'FAILED'" type="danger" size="small">投递失败</el-tag>
@@ -47,18 +51,21 @@ const props = defineProps({
   delivery: { type: Object, default: null },
   taskId: { type: [Number, String], default: null },
   /** 当前详情任务状态：SUCCESS 且无投递记录时可补投递 */
-  taskStatus: { type: String, default: '' }
+  taskStatus: { type: String, default: '' },
+  eventSource: { type: String, default: '' }
 })
 
 const emit = defineEmits(['retried'])
 const { proxy } = getCurrentInstance()
 const retrying = ref(false)
 
+const isPush = computed(() => props.eventSource === 'PUSH')
 const isFailed = computed(() => props.delivery?.deliveryStatus === 'FAILED')
-const isMissingOnSuccess = computed(() => !props.delivery && props.taskStatus === 'SUCCESS')
+const isMissingOnSuccess = computed(() => !isPush.value && !props.delivery && props.taskStatus === 'SUCCESS')
 
 const canRetry = computed(() => {
-  return props.taskId != null
+  return !isPush.value
+    && props.taskId != null
     && auth.hasPermi('review:delivery:retry')
     && (isFailed.value || isMissingOnSuccess.value)
 })

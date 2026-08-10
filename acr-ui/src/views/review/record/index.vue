@@ -11,24 +11,29 @@
           <el-option v-for="dict in review_event_source" :key="dict.value" :label="dict.label" :value="dict.value" />
         </el-select>
       </el-form-item>
-      <el-form-item label="合并请求编号" prop="prNumber">
-        <el-input v-model="queryParams.prNumber" placeholder="请输入编号" clearable style="width: 140px" @keyup.enter="handleQuery" />
-      </el-form-item>
-      <el-form-item label="发起人" prop="prAuthor">
-        <el-input v-model="queryParams.prAuthor" placeholder="Git 账号" clearable style="width: 150px" @keyup.enter="handleQuery" />
-      </el-form-item>
       <el-form-item label="审查结论" prop="reviewConclusion">
         <el-select v-model="queryParams.reviewConclusion" clearable placeholder="请选择结论" style="width: 140px">
           <el-option v-for="item in conclusionOptions" :key="item.value" :label="item.label" :value="item.value" />
         </el-select>
       </el-form-item>
-      <el-form-item label="完成时间">
-        <el-date-picker v-model="dateRange" type="daterange" range-separator="-" start-placeholder="开始日期"
-          end-placeholder="结束日期" value-format="YYYY-MM-DD" style="width: 240px" />
-      </el-form-item>
+      <template v-if="showAdvancedSearch">
+        <el-form-item label="合并请求编号" prop="prNumber">
+          <el-input v-model="queryParams.prNumber" placeholder="请输入编号" clearable style="width: 140px" @keyup.enter="handleQuery" />
+        </el-form-item>
+        <el-form-item label="发起人" prop="prAuthor">
+          <el-input v-model="queryParams.prAuthor" placeholder="Git 账号" clearable style="width: 150px" @keyup.enter="handleQuery" />
+        </el-form-item>
+        <el-form-item label="完成时间">
+          <el-date-picker v-model="dateRange" type="daterange" range-separator="-" start-placeholder="开始日期"
+            end-placeholder="结束日期" value-format="YYYY-MM-DD" style="width: 240px" />
+        </el-form-item>
+      </template>
       <el-form-item>
         <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
         <el-button icon="Refresh" @click="resetQuery">重置</el-button>
+        <el-button link type="primary" @click="showAdvancedSearch = !showAdvancedSearch">
+          {{ showAdvancedSearch ? '收起筛选' : '更多筛选' }}
+        </el-button>
       </el-form-item>
     </el-form>
 
@@ -50,7 +55,7 @@
           <dict-tag :options="review_event_source" :value="scope.row.eventSource || 'PR'" />
         </template>
       </el-table-column>
-      <el-table-column label="合并请求" min-width="220">
+      <el-table-column label="变更来源" min-width="220">
         <template #default="scope">
           <template v-if="isPushTask(scope.row)">
             <div class="pr-cell">
@@ -107,7 +112,13 @@
       <el-table-column label="操作" width="220" fixed="right">
         <template #default="scope">
           <el-button link type="primary" v-hasPermi="['review:record:query']" @click="handleDetail(scope.row)">查看详情</el-button>
-          <el-button link type="primary" v-hasPermi="['review:record:query']" @click="handleViewIssues(scope.row)">查看问题</el-button>
+          <el-button
+            v-if="scope.row.taskStatus !== 'FAILED'"
+            link
+            type="primary"
+            v-hasPermi="['review:record:query']"
+            @click="handleViewIssues(scope.row)"
+          >查看问题</el-button>
           <el-button
             v-if="!isPushTask(scope.row)"
             link type="primary"
@@ -154,6 +165,7 @@ const recordList = ref([])
 const projectOptions = ref([])
 const loading = ref(true)
 const showSearch = ref(true)
+const showAdvancedSearch = ref(false)
 const total = ref(0)
 const dateRange = ref([])
 

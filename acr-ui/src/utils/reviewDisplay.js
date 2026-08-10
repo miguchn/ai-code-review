@@ -62,6 +62,15 @@ export function emptyDash(value) {
   return value
 }
 
+/** 失败原因展示：标点残片或空值不作为可读诊断信息。 */
+export function readableFailureMessage(value) {
+  const text = value == null ? '' : String(value).trim()
+  if (!text || /^[\[\]{}:,"']+$/.test(text)) {
+    return '未返回可读失败原因，请查看执行记录'
+  }
+  return text
+}
+
 /** 日期时间展示：空值统一「—」。 */
 export function formatDateTime(value) {
   return value ? parseTime(value) : '—'

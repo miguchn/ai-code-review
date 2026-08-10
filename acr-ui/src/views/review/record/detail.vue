@@ -54,6 +54,7 @@
           :delivery="detailDelivery"
           :task-id="detailTask.taskId"
           :task-status="detailTask.taskStatus"
+          :event-source="detailTask.eventSource"
           @retried="loadDetail"
         />
 
@@ -62,7 +63,7 @@
         <el-tabs v-model="activeTab" class="record-tabs">
           <el-tab-pane label="审查结果" name="result">
             <el-alert v-if="detailTask.taskStatus === 'FAILED'" class="mb12" type="error" :closable="false" show-icon
-              :title="'执行失败：' + (detailTask.failureMessage || '无详细原因')" />
+              :title="'执行失败：' + readableFailureMessage(detailTask.failureMessage)" />
             <div v-if="resultRun && detailTask.taskStatus === 'SUCCESS'" class="result-pane">
               <div class="score-panel">
                 <div class="score-total">
@@ -159,7 +160,7 @@
                 </div>
 
                 <div class="result-block">
-                  <div class="result-block-title">Commit Message</div>
+                  <div class="result-block-title">提交说明</div>
                   <pre class="commit-pre">{{ emptyDash(resultRun.commitMessages) }}</pre>
                 </div>
               </div>
@@ -203,7 +204,9 @@
               </el-table-column>
               <el-table-column label="失败原因" min-width="180">
                 <template #default="scope">
-                  <span v-if="scope.row.failureMessage" class="failure-message">{{ scope.row.failureMessage }}</span>
+                  <span v-if="scope.row.runStatus === 'FAILED'" class="failure-message">
+                    {{ readableFailureMessage(scope.row.failureMessage) }}
+                  </span>
                   <span v-else class="empty-tip">—</span>
                 </template>
               </el-table-column>
@@ -228,7 +231,7 @@ import {
   engineOrModelLabel, templateLabel, buildMergeRequestUrl, mergeRequestLabel,
   recordConclusionLabel, recordConclusionTagType,
   issueOriginLabel, issueOriginTagType, formatDateTime,
-  isPushTask, formatPushRefDisplay
+  isPushTask, formatPushRefDisplay, readableFailureMessage
 } from '@/utils/reviewDisplay'
 
 const { proxy } = getCurrentInstance()

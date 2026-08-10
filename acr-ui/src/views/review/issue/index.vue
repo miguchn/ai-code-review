@@ -232,18 +232,28 @@
                 type="primary"
                 @click="goRecord(scope.row.firstTaskId)"
               >首次 #{{ scope.row.firstTaskId }}</el-button>
-              <template v-if="showRoundArrow(scope.row)">
+              <template v-if="showLastMatchedTask(scope.row)">
                 <span class="round-arrow">→</span>
                 <el-button link type="primary" @click="goRecord(scope.row.lastTaskId)">
-                  最近 #{{ scope.row.lastTaskId }}
+                  最近命中 #{{ scope.row.lastTaskId }}
+                </el-button>
+              </template>
+              <template v-if="showRecheckTask(scope.row)">
+                <span v-if="scope.row.firstTaskId || scope.row.lastTaskId" class="round-arrow">→</span>
+                <el-button link type="primary" @click="goRecord(scope.row.recheckTaskId)">
+                  复核依据 #{{ scope.row.recheckTaskId }}
                 </el-button>
               </template>
             </template>
             <template v-else>
               <span v-if="scope.row.firstTaskId">首次 #{{ scope.row.firstTaskId }}</span>
-              <template v-if="showRoundArrow(scope.row)">
+              <template v-if="showLastMatchedTask(scope.row)">
                 <span class="round-arrow">→</span>
-                <span>最近 #{{ scope.row.lastTaskId }}</span>
+                <span>最近命中 #{{ scope.row.lastTaskId }}</span>
+              </template>
+              <template v-if="showRecheckTask(scope.row)">
+                <span v-if="scope.row.firstTaskId || scope.row.lastTaskId" class="round-arrow">→</span>
+                <span>复核依据 #{{ scope.row.recheckTaskId }}</span>
               </template>
             </template>
             <span v-if="scope.row.missedStreak > 0" class="round-miss">
@@ -417,11 +427,17 @@ function stageDurationText(row) {
 }
 
 function hasRoundTrail(row) {
-  return !!(row?.firstTaskId || row?.lastTaskId || (row?.missedStreak > 0))
+  return !!(row?.firstTaskId || row?.lastTaskId || row?.recheckTaskId || (row?.missedStreak > 0))
 }
 
-function showRoundArrow(row) {
+function showLastMatchedTask(row) {
   return row?.firstTaskId && row?.lastTaskId && row.firstTaskId !== row.lastTaskId
+}
+
+function showRecheckTask(row) {
+  return row?.recheckTaskId
+    && row.recheckTaskId !== row.firstTaskId
+    && row.recheckTaskId !== row.lastTaskId
 }
 
 function goRecord(taskId) {

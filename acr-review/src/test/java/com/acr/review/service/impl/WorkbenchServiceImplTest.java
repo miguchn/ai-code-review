@@ -285,6 +285,17 @@ class WorkbenchServiceImplTest
     }
 
     @Test
+    void buildRecentTitle_usesPushSourceInsteadOfPullRequestZero()
+    {
+        ReviewTask task = sampleTask();
+        task.setEventSource(ReviewPipelineConstants.EVENT_SOURCE_PUSH);
+        task.setPrNumber(0);
+        task.setTargetBranch("main");
+
+        assertEquals("demo-repo · 推送 main · 高风险", WorkbenchServiceImpl.buildRecentTitle(task));
+    }
+
+    @Test
     void deriveRecentConclusion_mapsTaskOutcome()
     {
         ReviewTask task = sampleTask();
