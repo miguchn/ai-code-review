@@ -6,7 +6,7 @@
 
 ### 新装环境：一次性初始化（推荐）
 
-执行 `init-full.sql` 一条命令完成全部初始化（库、41 张表结构、菜单/字典/参数/内置审查模板等初始数据），等效于按序号执行完 `01`–`36` 全部增量脚本后的最终状态：
+执行 `init-full.sql` 一条命令完成全部初始化（库、46 张表结构、菜单/字典/参数/定时任务/内置审查模板等初始数据），等效于按序号执行完 `01`–`43` 全部增量脚本后的最终状态：
 
 ```bash
 mysql --default-character-set=utf8mb4 -u root -p < sql/init-full.sql
@@ -67,12 +67,13 @@ mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/NN_xxx.sql
 38. `38_data_insights_m12_2.sql`：M12 数据洞察二期（`review_commit_fact` / `review_member_stats_daily` / `review_insight_identity_claim`、成员分析菜单与 `insight:team:view`；须 utf8mb4）。
 39. `39_review_resource_budget.sql`：企业级架构风险修复 S5（有界审查/投递执行池、项目并发、Git/工作区/OCR/LLM 预算参数；须 utf8mb4）。
 40. `40_review_runtime_ops.sql`：企业级架构风险修复 S6（运行告警阈值、优雅停机参数、运行概览菜单与 `review:runtime:view`/`review:task:cancel`/`review:task:handle` 权限；须 utf8mb4）。
-42. `42_identity_binding.sql`：M12 身份关联（`sys_user_identity`、claim 存量迁移、`insight:identity:manage`；须 utf8mb4）。序号 41 预留给并行分支。
+41. `41_sys_job_seed.sql`：基础定时任务种子（数据洞察聚合任务 `insightStatsJobTask.refreshRecent`/`fullRecalc` 幂等注册，用户无需手工创建；须 utf8mb4）。
+42. `42_identity_binding.sql`：M12 身份关联（`sys_user_identity`、claim 存量迁移、`insight:identity:manage`；须 utf8mb4）。
 43. `43_member_stats_lines.sql`：M12 补充成员增删行数（`review_member_stats_daily` 增 `additions_sum`/`deletions_sum`；须 utf8mb4）。
 
 ## init-full.sql 维护规则
 
-- `init-full.sql` 是增量脚本执行完成后的最终状态快照（2026-08-11 同步，含 01–40、42、43 增量中的结构/参数/菜单种子；完整表结构快照仍建议按下方步骤在本地库重新生成以覆盖 37/38/42/43 表）。
+- `init-full.sql` 是增量脚本执行完成后的最终状态快照（2026-08-11 同步，含 01–43 全部增量中的结构/参数/菜单/定时任务种子）。
 - **新增编号增量脚本后必须同步重新生成**，否则新装环境会缺失该脚本的变更。生成方式（在已执行全部增量脚本的本地库上）：
 
 ```bash
@@ -85,7 +86,7 @@ docker exec mysql8 mysqldump -uroot -proot --default-character-set=utf8mb4 --sin
 docker exec mysql8 mysqldump -uroot -proot --default-character-set=utf8mb4 --single-transaction \
   --skip-comments --no-create-info --complete-insert --extended-insert=FALSE \
   ai_code_review sys_user sys_user_role sys_role sys_role_menu sys_dept sys_menu \
-  sys_dict_type sys_dict_data sys_config review_template > /tmp/acr_seed.sql
+  sys_dict_type sys_dict_data sys_config sys_job review_template > /tmp/acr_seed.sql
 
 # 3. 按 init-full.sql 现有头部注释格式组装：文件头说明 + CREATE DATABASE/USE + 结构 + 数据；
 #    更新头部「生成日期」与「基线」提交号。

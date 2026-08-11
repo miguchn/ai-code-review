@@ -1,8 +1,7 @@
 -- ============================================================================
 -- AI Code Review 一次性初始化脚本（仅适用于全新环境）
 --
--- 本脚本是 sql/01_core_schema.sql … sql/40_review_runtime_ops.sql
--- 与 sql/42_identity_binding.sql、sql/43_member_stats_lines.sql
+-- 本脚本是 sql/01_core_schema.sql … sql/43_member_stats_lines.sql
 -- 全部执行完成后的最终状态（表结构 + 初始化数据），新环境一条命令即可完成初始化：
 --
 --   mysql --default-character-set=utf8mb4 -u root -p < sql/init-full.sql
@@ -11,20 +10,20 @@
 -- 1. 脚本含 DROP TABLE，可重复执行；重复执行会重建全部表结构与初始数据，
 --    已有业务数据的环境严禁使用。
 -- 2. 存量 / 升级环境请继续按序号执行编号增量脚本，不要使用本脚本（见 sql/README.md）。
--- 3. 仅包含表结构、菜单、字典、参数、内置审查模板等初始化数据；
+-- 3. 仅包含表结构、菜单、字典、参数、定时任务、内置审查模板等初始化数据；
 --    不含项目、凭据、任务、问题、投递等业务数据。
 -- 4. 初始管理员为 admin / admin123，首次登录后请立即修改密码。
 -- 5. 新增编号增量脚本后必须同步重新生成本脚本（生成方式见 sql/README.md）。
 --
 -- 生成日期：2026-08-11；基线：企业级架构风险修复 S6 + M11 行内评论 + M12 数据洞察
--- （已含 01-40、42 身份关联、43 成员增删行数增量）
+-- （已含 01-43 全部增量：含 41 定时任务种子、42 身份关联、43 成员增删行数）
 -- ============================================================================
 
 CREATE DATABASE IF NOT EXISTS `ai_code_review` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
 USE `ai_code_review`;
 
 -- ----------------------------------------------------------------------------
--- 第一部分：表结构最终态（01-40 增量合并后的最终状态）
+-- 第一部分：表结构最终态（01-43 增量合并后的最终状态）
 -- ----------------------------------------------------------------------------
 
 
@@ -236,8 +235,8 @@ CREATE TABLE `review_delivery_record` (
   `failure_message` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '失败原因（已脱敏）',
   `attempt_count` int NOT NULL DEFAULT '0' COMMENT '已完成投递尝试次数',
   `next_attempt_at` datetime DEFAULT NULL COMMENT '下次可投递时间(DB时钟)',
-  `last_error_code` varchar(64) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '最近稳定错误码',
-  `lease_owner` varchar(128) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '投递租约持有者',
+  `last_error_code` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '最近稳定错误码',
+  `lease_owner` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '投递租约持有者',
   `lease_until` datetime DEFAULT NULL COMMENT '投递租约到期时间(DB时钟)',
   `last_attempt_time` datetime DEFAULT NULL COMMENT '最近尝试时间',
   `trigger_source` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '触发来源(TASK_SUCCESS/ISSUE_DISPOSITION/MANUAL_RETRY)',
@@ -305,7 +304,7 @@ CREATE TABLE `review_issue` (
   `pr_number` int NOT NULL COMMENT 'PR编号',
   `ref_branch` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '' COMMENT '参考分支(PR线空串；PUSH线=推送分支)',
   `fingerprint` varchar(80) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '问题指纹(PR级去重)',
-  `family_key` varchar(80) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '族键 SHA-256(filePath+NUL+category)',
+  `family_key` varchar(80) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '族键 SHA-256(filePath+NUL+category)',
   `first_task_id` bigint NOT NULL COMMENT '首次发现任务ID',
   `first_run_id` bigint DEFAULT NULL COMMENT '首次发现执行记录ID',
   `last_task_id` bigint NOT NULL COMMENT '最近物化任务ID',
@@ -327,11 +326,11 @@ CREATE TABLE `review_issue` (
   `closed_by` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '终态操作者',
   `closed_time` datetime DEFAULT NULL COMMENT '终态时间',
   `missed_streak` int NOT NULL DEFAULT '0' COMMENT '连续未命中轮数',
-  `last_seen_head_sha` varchar(64) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '最近命中轮 head commit',
+  `last_seen_head_sha` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '最近命中轮 head commit',
   `last_missed_run_id` bigint DEFAULT NULL COMMENT '最近计未命中的 run（对账幂等键）',
   `recheck_task_id` bigint DEFAULT NULL COMMENT '触发待复核的任务ID',
   `recheck_run_id` bigint DEFAULT NULL COMMENT '触发待复核的 runID',
-  `recheck_commit_sha` varchar(64) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '未命中轮 head commit',
+  `recheck_commit_sha` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '未命中轮 head commit',
   `create_by` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT '',
   `create_time` datetime DEFAULT NULL,
   `update_by` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT '',
@@ -521,12 +520,12 @@ CREATE TABLE `review_task` (
   `task_status` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'PENDING' COMMENT '任务状态(PENDING/RUNNING/RETRYING/SUCCESS/FAILED/CANCELLED/SUPERSEDED)',
   `change_key` varchar(300) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL COMMENT '逻辑变更键(PR#编号/PUSH#分支)',
   `next_run_at` datetime DEFAULT NULL COMMENT '下次可执行时间(DB时钟)',
-  `lease_owner` varchar(128) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '执行租约持有者',
+  `lease_owner` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '执行租约持有者',
   `lease_until` datetime DEFAULT NULL COMMENT '执行租约到期时间(DB时钟)',
   `heartbeat_at` datetime DEFAULT NULL COMMENT '最近心跳时间(DB时钟)',
   `execution_epoch` bigint NOT NULL DEFAULT '0' COMMENT '执行代次(fencing token)',
   `retry_count` int NOT NULL DEFAULT '0' COMMENT '自动重试/恢复次数',
-  `last_error_code` varchar(64) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '最近稳定错误码',
+  `last_error_code` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '最近稳定错误码',
   `superseded_by` bigint DEFAULT NULL COMMENT '替代本任务的新任务ID',
   `review_conclusion` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '审查结论(PASS/WARN/BLOCK)',
   `current_step` varchar(40) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '当前/最近执行步骤',
@@ -1022,23 +1021,6 @@ CREATE TABLE `sys_role_menu` (
   PRIMARY KEY (`role_id`,`menu_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='角色和菜单关联表';
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `sys_user_identity`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!50503 SET character_set_client = utf8mb4 */;
-CREATE TABLE `sys_user_identity` (
-  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键',
-  `user_id` bigint NOT NULL COMMENT '平台用户ID',
-  `identity_type` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '身份类型(GIT_COMMIT/IM_WECOM/IM_DINGTALK/IM_FEISHU)',
-  `identifier` varchar(320) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '身份标识(GIT=提交邮箱或名称；IM=账号ID)',
-  `display_name` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '展示名',
-  `origin` varchar(10) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'SELF' COMMENT '关联来源(SELF/AUTO/ADMIN)',
-  `create_by` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT '',
-  `create_time` datetime DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_identity` (`identity_type`,`identifier`),
-  KEY `idx_identity_user` (`user_id`,`identity_type`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='用户身份关联';
-/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `sys_user`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
@@ -1065,6 +1047,23 @@ CREATE TABLE `sys_user` (
   `remark` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '备注',
   PRIMARY KEY (`user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='用户信息表';
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `sys_user_identity`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `sys_user_identity` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `user_id` bigint NOT NULL COMMENT '平台用户ID',
+  `identity_type` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '身份类型(GIT_COMMIT/IM_WECOM/IM_DINGTALK/IM_FEISHU)',
+  `identifier` varchar(320) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '身份标识(GIT=提交邮箱或名称；IM=账号ID)',
+  `display_name` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '展示名',
+  `origin` varchar(10) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'SELF' COMMENT '关联来源(SELF/AUTO/ADMIN)',
+  `create_by` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT '',
+  `create_time` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_identity` (`identity_type`,`identifier`),
+  KEY `idx_identity_user` (`user_id`,`identity_type`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='用户身份关联';
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `sys_user_post`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -1096,7 +1095,7 @@ CREATE TABLE `sys_user_role` (
 
 
 -- ----------------------------------------------------------------------------
--- 第二部分：初始化数据（菜单 / 字典 / 参数 / 角色 / 管理员 / 内置审查模板）
+-- 第二部分：初始化数据（菜单 / 字典 / 参数 / 角色 / 管理员 / 定时任务 / 内置审查模板）
 -- ----------------------------------------------------------------------------
 
 
@@ -1113,7 +1112,7 @@ CREATE TABLE `sys_user_role` (
 
 LOCK TABLES `sys_user` WRITE;
 /*!40000 ALTER TABLE `sys_user` DISABLE KEYS */;
-INSERT INTO `sys_user` (`user_id`, `dept_id`, `user_name`, `nick_name`, `user_type`, `email`, `phonenumber`, `sex`, `avatar`, `password`, `status`, `del_flag`, `login_ip`, `login_date`, `pwd_update_date`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (1,100,'admin','系统管理员','00','','','2','','$2a$10$7JB720yubVSZvUI0rEqK/.VqGOZTH.ulu33dHOiBE8ByOhJIrdAu2','0','0','127.0.0.1','2026-08-10 16:12:25','2026-07-30 17:15:00','admin','2026-07-30 17:15:00','',NULL,'初始管理员');
+INSERT INTO `sys_user` (`user_id`, `dept_id`, `user_name`, `nick_name`, `user_type`, `email`, `phonenumber`, `sex`, `avatar`, `password`, `status`, `del_flag`, `login_ip`, `login_date`, `pwd_update_date`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (1,100,'admin','系统管理员','00','','','2','','$2a$10$7JB720yubVSZvUI0rEqK/.VqGOZTH.ulu33dHOiBE8ByOhJIrdAu2','0','0','127.0.0.1','2026-08-11 14:51:09','2026-07-30 17:15:00','admin','2026-07-30 17:15:00','',NULL,'初始管理员');
 /*!40000 ALTER TABLE `sys_user` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -1353,7 +1352,7 @@ INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`
 INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (1173,'运行概览查看',136,1,'#','','','',1,0,'F','0','0','review:runtime:view','#','admin','2026-08-10 09:28:50','',NULL,'');
 INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (1174,'任务终止',125,3,'#','','','',1,0,'F','0','0','review:task:cancel','#','admin','2026-08-10 09:28:50','',NULL,'将任务置为已取消并触发围栏');
 INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (1175,'任务处置',125,4,'#','','','',1,0,'F','0','0','review:task:handle','#','admin','2026-08-10 09:28:50','',NULL,'积压处置与投递标记人工已处理');
-INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (1176,'成员身份管理',135,2,'#','','','',1,0,'F','0','0','insight:identity:manage','#','admin','2026-08-11 10:00:00','',NULL,'指派/改派/解除提交邮箱关联');
+INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (1176,'成员身份管理',135,2,'#','','','',1,0,'F','0','0','insight:identity:manage','#','admin','2026-08-11 05:34:07','',NULL,'指派/改派/解除提交邮箱关联');
 /*!40000 ALTER TABLE `sys_menu` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -1565,6 +1564,13 @@ INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_valu
 INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (141,'运行告警-判定周期(秒)','review.runtime.alert.scanIntervalSeconds','30','Y','admin','2026-08-10 09:28:50','',NULL,'内置告警规则周期判定间隔');
 INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (142,'优雅停机-排空等待秒数','review.runtime.drain.timeoutSeconds','60','Y','admin','2026-08-10 09:28:50','',NULL,'停机时等待租约内任务完成的最长时间；超时后将 lease_until 置过期由恢复扫描接管');
 /*!40000 ALTER TABLE `sys_config` ENABLE KEYS */;
+UNLOCK TABLES;
+
+LOCK TABLES `sys_job` WRITE;
+/*!40000 ALTER TABLE `sys_job` DISABLE KEYS */;
+INSERT INTO `sys_job` (`job_id`, `job_name`, `job_group`, `invoke_target`, `cron_expression`, `misfire_policy`, `concurrent`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (1,'数据洞察-近期聚合刷新','DEFAULT','insightStatsJobTask.refreshRecent','0 */10 * * * ?','3','1','0','admin','2026-08-11 01:58:01','',NULL,'每10分钟重算昨日+今日聚合');
+INSERT INTO `sys_job` (`job_id`, `job_name`, `job_group`, `invoke_target`, `cron_expression`, `misfire_policy`, `concurrent`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (2,'数据洞察-夜间全量重算','DEFAULT','insightStatsJobTask.fullRecalc','0 30 2 * * ?','3','1','0','admin','2026-08-11 01:58:01','',NULL,'每日凌晨重算近35天聚合');
+/*!40000 ALTER TABLE `sys_job` ENABLE KEYS */;
 UNLOCK TABLES;
 
 LOCK TABLES `review_template` WRITE;
