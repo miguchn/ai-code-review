@@ -56,6 +56,14 @@ public interface ReviewStatsSourceMapper
                                                              @Param("beginDate") Date beginDate,
                                                              @Param("endDate") Date endDate);
 
+    /**
+     * 成员增删行数：pr_author 弱匹配 author_key；仅 SUCCESS；
+     * SUM 忽略 NULL（各字段非空才计入）。
+     */
+    List<Map<String, Object>> selectLineStatsByAuthorDay(@Param("projectId") Long projectId,
+                                                         @Param("beginDate") Date beginDate,
+                                                         @Param("endDate") Date endDate);
+
     List<Map<String, Object>> selectIssuesNewByAuthorDay(@Param("projectId") Long projectId,
                                                          @Param("beginDate") Date beginDate,
                                                          @Param("endDate") Date endDate);

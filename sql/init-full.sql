@@ -2,6 +2,7 @@
 -- AI Code Review 一次性初始化脚本（仅适用于全新环境）
 --
 -- 本脚本是 sql/01_core_schema.sql … sql/40_review_runtime_ops.sql
+-- 与 sql/42_identity_binding.sql、sql/43_member_stats_lines.sql
 -- 全部执行完成后的最终状态（表结构 + 初始化数据），新环境一条命令即可完成初始化：
 --
 --   mysql --default-character-set=utf8mb4 -u root -p < sql/init-full.sql
@@ -15,8 +16,8 @@
 -- 4. 初始管理员为 admin / admin123，首次登录后请立即修改密码。
 -- 5. 新增编号增量脚本后必须同步重新生成本脚本（生成方式见 sql/README.md）。
 --
--- 生成日期：2026-08-10；基线：企业级架构风险修复 S6 + M11 行内评论 + M12 数据洞察
--- （已含 01-40 全部增量脚本）
+-- 生成日期：2026-08-11；基线：企业级架构风险修复 S6 + M11 行内评论 + M12 数据洞察
+-- （已含 01-40、42 身份关联、43 成员增删行数增量）
 -- ============================================================================
 
 CREATE DATABASE IF NOT EXISTS `ai_code_review` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
@@ -369,6 +370,8 @@ CREATE TABLE `review_member_stats_daily` (
   `stat_date` date NOT NULL COMMENT '统计日',
   `commit_count` int NOT NULL DEFAULT '0' COMMENT '提交数',
   `tasks_reviewed` int NOT NULL DEFAULT '0' COMMENT '被审任务数(pr_author弱匹配)',
+  `additions_sum` int NOT NULL DEFAULT '0' COMMENT '新增行数合计(SUCCESS且非空)',
+  `deletions_sum` int NOT NULL DEFAULT '0' COMMENT '删减行数合计(SUCCESS且非空)',
   `issues_new` int NOT NULL DEFAULT '0' COMMENT '关联任务新增问题数',
   `issues_open` int NOT NULL DEFAULT '0' COMMENT '关联任务未关闭问题数(当日快照)',
   `create_time` datetime DEFAULT NULL COMMENT '创建时间',
@@ -1019,6 +1022,23 @@ CREATE TABLE `sys_role_menu` (
   PRIMARY KEY (`role_id`,`menu_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='角色和菜单关联表';
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `sys_user_identity`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `sys_user_identity` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `user_id` bigint NOT NULL COMMENT '平台用户ID',
+  `identity_type` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '身份类型(GIT_COMMIT/IM_WECOM/IM_DINGTALK/IM_FEISHU)',
+  `identifier` varchar(320) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '身份标识(GIT=提交邮箱或名称；IM=账号ID)',
+  `display_name` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '展示名',
+  `origin` varchar(10) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'SELF' COMMENT '关联来源(SELF/AUTO/ADMIN)',
+  `create_by` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT '',
+  `create_time` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_identity` (`identity_type`,`identifier`),
+  KEY `idx_identity_user` (`user_id`,`identity_type`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='用户身份关联';
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `sys_user`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
@@ -1172,6 +1192,7 @@ INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,1172);
 INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,1173);
 INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,1174);
 INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,1175);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,1176);
 /*!40000 ALTER TABLE `sys_role_menu` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -1332,6 +1353,7 @@ INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`
 INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (1173,'运行概览查看',136,1,'#','','','',1,0,'F','0','0','review:runtime:view','#','admin','2026-08-10 09:28:50','',NULL,'');
 INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (1174,'任务终止',125,3,'#','','','',1,0,'F','0','0','review:task:cancel','#','admin','2026-08-10 09:28:50','',NULL,'将任务置为已取消并触发围栏');
 INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (1175,'任务处置',125,4,'#','','','',1,0,'F','0','0','review:task:handle','#','admin','2026-08-10 09:28:50','',NULL,'积压处置与投递标记人工已处理');
+INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (1176,'成员身份管理',135,2,'#','','','',1,0,'F','0','0','insight:identity:manage','#','admin','2026-08-11 10:00:00','',NULL,'指派/改派/解除提交邮箱关联');
 /*!40000 ALTER TABLE `sys_menu` ENABLE KEYS */;
 UNLOCK TABLES;
 

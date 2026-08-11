@@ -12,6 +12,8 @@ public class InsightMemberMineResponse
     private List<InsightIdentityCandidate> claimedIdentities = new ArrayList<>();
     private List<InsightCommitTrendPoint> commitTrend = new ArrayList<>();
     private Integer tasksReviewed;
+    private Integer additionsSum;
+    private Integer deletionsSum;
     private Integer issuesNew;
     private Integer issuesOpen;
     private List<InsightNamedCount> openIssueTitles = new ArrayList<>();
@@ -84,6 +86,26 @@ public class InsightMemberMineResponse
     public void setTasksReviewed(Integer tasksReviewed)
     {
         this.tasksReviewed = tasksReviewed;
+    }
+
+    public Integer getAdditionsSum()
+    {
+        return additionsSum;
+    }
+
+    public void setAdditionsSum(Integer additionsSum)
+    {
+        this.additionsSum = additionsSum;
+    }
+
+    public Integer getDeletionsSum()
+    {
+        return deletionsSum;
+    }
+
+    public void setDeletionsSum(Integer deletionsSum)
+    {
+        this.deletionsSum = deletionsSum;
     }
 
     public Integer getIssuesNew()

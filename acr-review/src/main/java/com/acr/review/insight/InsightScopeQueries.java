@@ -9,6 +9,8 @@ import com.acr.review.mapper.ReviewMemberStatsDailyMapper;
 import com.acr.review.mapper.ReviewProjectMapper;
 import com.acr.review.mapper.ReviewStatsDailyMapper;
 import com.acr.review.mapper.ReviewStatsSourceMapper;
+import com.acr.system.domain.SysUserIdentity;
+import com.acr.system.mapper.SysUserIdentityMapper;
 
 /** 带 DataScope 的只读查询（独立 Bean，避免同类自调用绕过 AOP）。 */
 @Component
@@ -18,16 +20,19 @@ public class InsightScopeQueries
     private final ReviewStatsSourceMapper sourceMapper;
     private final ReviewProjectMapper projectMapper;
     private final ReviewMemberStatsDailyMapper memberStatsMapper;
+    private final SysUserIdentityMapper userIdentityMapper;
 
     public InsightScopeQueries(ReviewStatsDailyMapper dailyMapper,
                                ReviewStatsSourceMapper sourceMapper,
                                ReviewProjectMapper projectMapper,
-                               ReviewMemberStatsDailyMapper memberStatsMapper)
+                               ReviewMemberStatsDailyMapper memberStatsMapper,
+                               SysUserIdentityMapper userIdentityMapper)
     {
         this.dailyMapper = dailyMapper;
         this.sourceMapper = sourceMapper;
         this.projectMapper = projectMapper;
         this.memberStatsMapper = memberStatsMapper;
+        this.userIdentityMapper = userIdentityMapper;
     }
 
     @DataScope(deptAlias = "d", userAlias = "owner", permission = InsightConstants.PERM_OVERVIEW_VIEW)
@@ -94,5 +99,11 @@ public class InsightScopeQueries
     public List<ReviewProject> selectProjectsTeam(ReviewProject query)
     {
         return projectMapper.selectReviewProjectList(query);
+    }
+
+    @DataScope(deptAlias = "d", userAlias = "u", permission = InsightConstants.PERM_IDENTITY_MANAGE)
+    public List<SysUserIdentity> selectIdentitiesManage(SysUserIdentity query)
+    {
+        return userIdentityMapper.selectScopedList(query);
     }
 }

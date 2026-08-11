@@ -106,6 +106,82 @@
         LIMIT #{limit}
     </select>
 
+    <sql id="authorKeyExpr">
+        CASE
+          WHEN author_email IS NOT NULL AND author_email != '' THEN LOWER(TRIM(author_email))
+          ELSE TRIM(author_name)
+        END
+    </sql>
+
+    <select id="selectMatchCandidateIdentities" resultType="map">
+        SELECT author_email,
+               author_name,
+               <include refid="authorKeyExpr" /> AS author_key,
+               MAX(commit_time) AS commit_time
+        FROM review_commit_fact
+        <where>
+            (
+              <if test="email != null and email != ''">
+                  LOWER(TRIM(author_email)) = LOWER(TRIM(#{email}))
+              </if>
+              <if test="email == null or email == ''">
+                  1 = 0
+              </if>
+            )
+            OR (
+              author_name IS NOT NULL AND author_name != ''
+              AND (
+                <if test="userName != null and userName != ''">
+                    TRIM(author_name) = TRIM(#{userName})
+                </if>
+                <if test="userName == null or userName == ''">
+                    1 = 0
+                </if>
+                <if test="nickName != null and nickName != ''">
+                    OR TRIM(author_name) = TRIM(#{nickName})
+                </if>
+              )
+            )
+        </where>
+        GROUP BY author_email, author_name, <include refid="authorKeyExpr" />
+        ORDER BY commit_time DESC
+        LIMIT #{limit}
+    </select>
+
+    <select id="selectLatestCommitSample" resultType="map">
+        SELECT f.author_email AS author_email,
+               f.author_name AS author_name,
+               CASE
+                 WHEN f.author_email IS NOT NULL AND f.author_email != '' THEN LOWER(TRIM(f.author_email))
+                 ELSE TRIM(f.author_name)
+               END AS author_key,
+               f.message_first_line AS message_first_line,
+               f.commit_time AS commit_time,
+               IFNULL(p.project_name, CONCAT(IFNULL(p.repository_owner, ''), '/', IFNULL(p.repository_name, ''))) AS project_name
+        FROM review_commit_fact f
+        LEFT JOIN review_project p ON p.project_id = f.project_id
+        WHERE (
+               CASE
+                 WHEN f.author_email IS NOT NULL AND f.author_email != '' THEN LOWER(TRIM(f.author_email))
+                 ELSE TRIM(f.author_name)
+               END
+              ) = #{authorKey}
+        ORDER BY f.commit_time DESC
+        LIMIT 1
+    </select>
+
+    <select id="selectDistinctAuthorKeys" resultType="string">
+        SELECT DISTINCT <include refid="authorKeyExpr" /> AS author_key
+        FROM review_commit_fact
+        WHERE (
+            (author_email IS NOT NULL AND author_email != '')
+            OR (author_name IS NOT NULL AND author_name != '')
+          )
+          AND (<include refid="authorKeyExpr" />) IS NOT NULL
+          AND (<include refid="authorKeyExpr" />) != ''
+        ORDER BY author_key ASC
+    </select>
+
     <select id="selectCommitTrendByAuthorKeys" resultType="map">
         SELECT DATE(commit_time) AS stat_date,
                CASE

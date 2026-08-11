@@ -67,10 +67,12 @@ mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/NN_xxx.sql
 38. `38_data_insights_m12_2.sql`：M12 数据洞察二期（`review_commit_fact` / `review_member_stats_daily` / `review_insight_identity_claim`、成员分析菜单与 `insight:team:view`；须 utf8mb4）。
 39. `39_review_resource_budget.sql`：企业级架构风险修复 S5（有界审查/投递执行池、项目并发、Git/工作区/OCR/LLM 预算参数；须 utf8mb4）。
 40. `40_review_runtime_ops.sql`：企业级架构风险修复 S6（运行告警阈值、优雅停机参数、运行概览菜单与 `review:runtime:view`/`review:task:cancel`/`review:task:handle` 权限；须 utf8mb4）。
+42. `42_identity_binding.sql`：M12 身份关联（`sys_user_identity`、claim 存量迁移、`insight:identity:manage`；须 utf8mb4）。序号 41 预留给并行分支。
+43. `43_member_stats_lines.sql`：M12 补充成员增删行数（`review_member_stats_daily` 增 `additions_sum`/`deletions_sum`；须 utf8mb4）。
 
 ## init-full.sql 维护规则
 
-- `init-full.sql` 是增量脚本执行完成后的最终状态快照（2026-08-10 同步，含 01–40 增量中的参数/菜单种子；完整表结构快照仍建议按下方步骤在本地库重新生成以覆盖 37/38 表）。
+- `init-full.sql` 是增量脚本执行完成后的最终状态快照（2026-08-11 同步，含 01–40、42、43 增量中的结构/参数/菜单种子；完整表结构快照仍建议按下方步骤在本地库重新生成以覆盖 37/38/42/43 表）。
 - **新增编号增量脚本后必须同步重新生成**，否则新装环境会缺失该脚本的变更。生成方式（在已执行全部增量脚本的本地库上）：
 
 ```bash

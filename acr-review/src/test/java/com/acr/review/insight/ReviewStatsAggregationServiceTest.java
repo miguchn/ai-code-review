@@ -97,6 +97,7 @@ class ReviewStatsAggregationServiceTest
         when(sourceMapper.selectSuccessDurations(eq(9L), any())).thenReturn(List.of(100L, 200L, 300L, 400L));
         when(commitFactMapper.selectCommitCountByAuthorDay(eq(9L), any(), any())).thenReturn(List.of());
         when(sourceMapper.selectTasksReviewedByAuthorDay(eq(9L), any(), any())).thenReturn(List.of());
+        when(sourceMapper.selectLineStatsByAuthorDay(eq(9L), any(), any())).thenReturn(List.of());
         when(sourceMapper.selectIssuesNewByAuthorDay(eq(9L), any(), any())).thenReturn(List.of());
         when(sourceMapper.selectIssuesOpenByAuthorAsOf(eq(9L), any())).thenReturn(List.of());
 
@@ -137,6 +138,9 @@ class ReviewStatsAggregationServiceTest
         // 弱匹配：pr_author 与 author_key 字符串相等（邮箱键）
         when(sourceMapper.selectTasksReviewedByAuthorDay(eq(9L), any(), any())).thenReturn(List.of(map(
             "stat_date", sqlDay, "author_key", "alice@example.com", "tasks_reviewed", 2)));
+        when(sourceMapper.selectLineStatsByAuthorDay(eq(9L), any(), any())).thenReturn(List.of(map(
+            "stat_date", sqlDay, "author_key", "alice@example.com",
+            "additions_sum", 120, "deletions_sum", 45)));
         when(sourceMapper.selectIssuesNewByAuthorDay(eq(9L), any(), any())).thenReturn(List.of(map(
             "stat_date", sqlDay, "author_key", "alice@example.com", "issues_new", 5)));
         when(sourceMapper.selectIssuesOpenByAuthorAsOf(eq(9L), any())).thenReturn(List.of(map(
@@ -151,8 +155,25 @@ class ReviewStatsAggregationServiceTest
         assertEquals("Alice", row.getAuthorName());
         assertEquals(3, row.getCommitCount());
         assertEquals(2, row.getTasksReviewed());
+        assertEquals(120, row.getAdditionsSum());
+        assertEquals(45, row.getDeletionsSum());
         assertEquals(5, row.getIssuesNew());
         assertEquals(4, row.getIssuesOpen());
+    }
+
+    @Test
+    void sumMemberTaskLines_skipsNullLinesAndNonSuccess()
+    {
+        // 口径：仅 SUCCESS；additions/deletions 各自非空才计入对应合计
+        int[] sums = ReviewStatsAggregationService.sumMemberTaskLines(List.of(
+            new ReviewStatsAggregationService.TaskLineSample("SUCCESS", 10, 3),
+            new ReviewStatsAggregationService.TaskLineSample("SUCCESS", null, 2),
+            new ReviewStatsAggregationService.TaskLineSample("SUCCESS", 7, null),
+            new ReviewStatsAggregationService.TaskLineSample("FAILED", 100, 50),
+            new ReviewStatsAggregationService.TaskLineSample("RUNNING", 8, 1),
+            new ReviewStatsAggregationService.TaskLineSample("SUCCESS", null, null)));
+        assertEquals(17, sums[0]);
+        assertEquals(5, sums[1]);
     }
 
     private static Map<String, Object> map(Object... kv)

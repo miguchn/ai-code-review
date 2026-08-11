@@ -11,6 +11,8 @@
         <result property="statDate" column="stat_date" />
         <result property="commitCount" column="commit_count" />
         <result property="tasksReviewed" column="tasks_reviewed" />
+        <result property="additionsSum" column="additions_sum" />
+        <result property="deletionsSum" column="deletions_sum" />
         <result property="issuesNew" column="issues_new" />
         <result property="issuesOpen" column="issues_open" />
         <result property="createTime" column="create_time" />
@@ -20,17 +22,19 @@
     <insert id="upsert" parameterType="com.acr.review.insight.ReviewMemberStatsDaily">
         INSERT INTO review_member_stats_daily (
             project_id, author_key, author_name, stat_date,
-            commit_count, tasks_reviewed, issues_new, issues_open,
+            commit_count, tasks_reviewed, additions_sum, deletions_sum, issues_new, issues_open,
             create_time, update_time
         ) VALUES (
             #{projectId}, #{authorKey}, #{authorName}, #{statDate},
-            #{commitCount}, #{tasksReviewed}, #{issuesNew}, #{issuesOpen},
+            #{commitCount}, #{tasksReviewed}, #{additionsSum}, #{deletionsSum}, #{issuesNew}, #{issuesOpen},
             SYSDATE(), SYSDATE()
         )
         ON DUPLICATE KEY UPDATE
             author_name = VALUES(author_name),
             commit_count = VALUES(commit_count),
             tasks_reviewed = VALUES(tasks_reviewed),
+            additions_sum = VALUES(additions_sum),
+            deletions_sum = VALUES(deletions_sum),
             issues_new = VALUES(issues_new),
             issues_open = VALUES(issues_open),
             update_time = SYSDATE()
@@ -67,6 +71,8 @@
                MAX(m.author_name) AS author_name,
                SUM(m.commit_count) AS commit_count,
                SUM(m.tasks_reviewed) AS tasks_reviewed,
+               SUM(m.additions_sum) AS additions_sum,
+               SUM(m.deletions_sum) AS deletions_sum,
                SUM(m.issues_new) AS issues_new,
                MAX(m.issues_open) AS issues_open
         FROM review_member_stats_daily m

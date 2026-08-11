@@ -15,6 +15,8 @@ public class ReviewMemberStatsDaily extends BaseEntity
     private Date statDate;
     private Integer commitCount;
     private Integer tasksReviewed;
+    private Integer additionsSum;
+    private Integer deletionsSum;
     private Integer issuesNew;
     private Integer issuesOpen;
 
@@ -86,6 +88,26 @@ public class ReviewMemberStatsDaily extends BaseEntity
     public void setTasksReviewed(Integer tasksReviewed)
     {
         this.tasksReviewed = tasksReviewed;
+    }
+
+    public Integer getAdditionsSum()
+    {
+        return additionsSum;
+    }
+
+    public void setAdditionsSum(Integer additionsSum)
+    {
+        this.additionsSum = additionsSum;
+    }
+
+    public Integer getDeletionsSum()
+    {
+        return deletionsSum;
+    }
+
+    public void setDeletionsSum(Integer deletionsSum)
+    {
+        this.deletionsSum = deletionsSum;
     }
 
     public Integer getIssuesNew()
