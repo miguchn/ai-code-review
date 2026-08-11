@@ -78,7 +78,7 @@
 <script setup name="InsightProject">
 import { getReviewProjectOptions } from '@/api/review/project'
 import { listInsightProjects } from '@/api/insight'
-import { formatRatio, loadInsightFilters, saveInsightFilters } from '../components/insightFilter'
+import { formatRatio, loadInsightFilters, saveInsightFilters, toIdParam } from '../components/insightFilter'
 
 const router = useRouter()
 
@@ -173,8 +173,8 @@ onMounted(async () => {
   if (remembered) {
     rangePreset.value = remembered.rangePreset ?? 7
     customRange.value = remembered.customRange || []
-    query.businessSystemId = remembered.businessSystemId
-    query.projectId = remembered.projectId
+    query.businessSystemId = toIdParam(remembered.businessSystemId)
+    query.projectId = toIdParam(remembered.projectId)
   }
   await loadOptions()
   await loadData()

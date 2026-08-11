@@ -22,6 +22,13 @@ export function saveInsightFilters(namespace, filters) {
   }
 }
 
+/** 本地缓存恢复的 ID 参数净化：只接受正数，非法值（含历史污染字符串）归一为 undefined */
+export function toIdParam(value) {
+  if (value === null || typeof value === 'undefined' || value === '') return undefined
+  const n = Number(value)
+  return Number.isFinite(n) && n > 0 ? n : undefined
+}
+
 export function formatRatio(value) {
   if (value == null || Number.isNaN(value)) return '--'
   return (Number(value) * 100).toFixed(1) + '%'

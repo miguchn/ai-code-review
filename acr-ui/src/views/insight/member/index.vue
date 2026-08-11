@@ -263,7 +263,7 @@ import echarts from '@/utils/echarts'
 import { getInsightMemberMine, getInsightTeamMembers } from '@/api/insight'
 import { bindTeamIdentity, listIdentityUserOptions } from '@/api/system/identity'
 import { checkPermi } from '@/utils/permission'
-import { loadInsightFilters, saveInsightFilters } from '../components/insightFilter'
+import { loadInsightFilters, saveInsightFilters, toIdParam } from '../components/insightFilter'
 
 const router = useRouter()
 const loading = ref(false)
@@ -360,8 +360,8 @@ function rangeParams() {
 function teamParams() {
   return {
     ...rangeParams(),
-    businessSystemId: teamQuery.businessSystemId,
-    projectId: teamQuery.projectId
+    businessSystemId: toIdParam(teamQuery.businessSystemId),
+    projectId: toIdParam(teamQuery.projectId)
   }
 }
 
@@ -501,8 +501,8 @@ onMounted(async () => {
   if (remembered) {
     rangePreset.value = remembered.rangePreset ?? 7
     customRange.value = remembered.customRange || []
-    teamQuery.businessSystemId = remembered.businessSystemId
-    teamQuery.projectId = remembered.projectId
+    teamQuery.businessSystemId = toIdParam(remembered.businessSystemId)
+    teamQuery.projectId = toIdParam(remembered.projectId)
     selectedAuthors.value = remembered.selectedAuthors || []
   }
   await reload()

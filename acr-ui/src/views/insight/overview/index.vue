@@ -128,7 +128,8 @@ import {
   formatKpiValue,
   formatRatio,
   loadInsightFilters,
-  saveInsightFilters
+  saveInsightFilters,
+  toIdParam
 } from '../components/insightFilter'
 
 const loading = ref(false)
@@ -296,7 +297,7 @@ onMounted(async () => {
   if (remembered) {
     rangePreset.value = remembered.rangePreset ?? 7
     customRange.value = remembered.customRange || []
-    query.businessSystemId = remembered.businessSystemId
+    query.businessSystemId = toIdParam(remembered.businessSystemId)
   }
   await loadOptions()
   await loadDict()
