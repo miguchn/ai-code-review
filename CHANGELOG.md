@@ -2,6 +2,44 @@
 
 ## [Unreleased]
 
+### 数据洞察补充：成员增删行数、身份关联与定时任务种子（M12 补充）
+
+- 成员分析新增代码增删行数：任务级 additions/deletions 按「SUCCESS 且行数非空」口径回填聚合（`review_member_stats_daily` 增 `additions_sum`/`deletions_sum`，脚本 `sql/43_member_stats_lines.sql`）；本人视图 KPI 卡与团队表新增新增/删减行数（绿/红、可排序）
+- 身份关联体系取代旧「认领」（脚本 `sql/42_identity_binding.sql`：`sys_user_identity` + 存量 claim 幂等迁移 + `insight:identity:manage`）：个人设置「我的提交邮箱」页签（候选卡带真实提交样例、手动添加、冲突人话提示、IM 账号预留位）；成员分析本人视图空态引导去关联；团队视图按关联合并同人多身份、未关联成员分组、管理员指派/改派/解除（部门数据权限 + 操作日志）；旧 `/insight/member/claim` 接口与前端认领交互移除。设计事实源：`docs/planning/identity-binding-design.md`
+- 健壮性修复：指派用户候选改洞察域专用接口（`GET /insight/team/identities/userOptions`，不依赖 `system:user:list`）；并发重复关联唯一约束冲突转人话提示；sql/42 迁移对同一用户大小写不同邮箱去重加固；团队趋势图纳入未关联成员全量口径
+- 基础定时任务种子随脚本交付（脚本 `sql/41_sys_job_seed.sql`）：数据洞察聚合任务（近期刷新每 10 分钟 / 夜间全量重算每日 02:30）幂等注册，新装环境无需手工创建
+- `init-full.sql` 同步至 01–43 全量并通过临时库空库验证；后端 631 例测试与前端生产构建通过
+
+### 数据洞察（M12 一二期）
+
+- 一期：`review_stats_daily` 日聚合表（覆盖式重算幂等）+ 数据洞察菜单与 `insight:overview:view`/`insight:project:view`/`insight:team:view` 权限 + 指标口径版本参数；总览看板（KPI/趋势/结论分布/渠道健康/处置漏斗）、项目明细视图
+- 二期：`review_commit_fact`（push 载荷提交事实抽取）与 `review_member_stats_daily`（成员日聚合，pr_author 弱匹配）；成员分析本人/团队视图（提交趋势、被审任务、关联问题）；聚合任务走 RuoYi Quartz 运行期配置
+- 脚本 `sql/37_data_insights_m12.sql`、`sql/38_data_insights_m12_2.sql`；设计事实源：`docs/planning/data-insights-module-design.md`
+- 已知局限（M12 补充批已部分解决）：二期「认领」交互被身份关联体系取代；聚合定时任务改由 `sql/41_sys_job_seed.sql` 随装注册
+
+### 行内评论（M11）
+
+- PR 线审查成功后，达到严重度门槛的问题以行内评论发布到代码平台：一问题一评论、全生命周期只发一次；三层防重（意图键唯一 + 标记查找 `<!-- acr:inline:issue-{id} -->` + external_id 落库）
+- 项目级开关 `inline_comment_enabled`（默认停用）+ 严重度白名单 `inline_severities`（默认 CRITICAL,HIGH）；投递复用 S3 意图队列状态机（退避/租约/上限转人工），单条失败不影响总结评论与 IM
+- 四平台适配：GitHub/GitLab/Gitea 完整实现，Gitee 能力不支持时降级 SKIPPED；push 线无 PR 短路不入队；总结评论范围段追加行内预告（确定性文案）
+- 问题详情「行内评论」状态行、投递记录行内渠道、任务详情投递小节联动；脚本 `sql/36_inline_comments_m11.sql`；设计事实源：`docs/planning/inline-comments-m11.md`
+
+### 企业级架构风险修复（S1–S6）
+
+- S1 外部进程硬化：git/OCR 外部调用统一 `ExternalProcessRunner`（超时、输出上限、失败可读），OkHttp 单例 + callTimeout
+- S2 持久调度与恢复：任务变更键（change_key）、数据库调度领取、租约/epoch fencing、重试恢复（脚本 `sql/34`）；删除 isStaleRunning 内存判断
+- S3 投递补偿：持久化投递意图、租约领取、自动退避、人工处置与统一补发状态机（脚本 `sql/35`）；存量失败记录不自动补发
+- S4 顺序围栏：同 PR 连续审查按 head 围栏、SUPERSEDED 语义、投递 marker 嵌 run_id
+- S5 有界资源：审查/投递执行池有界化、项目并发上限、Git/工作区/OCR/LLM 四类预算参数（脚本 `sql/39`）
+- S6 可观测运营面：运行告警阈值、优雅停机参数、运行概览菜单与 `review:runtime:view`/`review:task:cancel`/`review:task:handle` 权限（脚本 `sql/40`）
+- 设计事实源：`docs/planning/enterprise-architecture-risk-remediation-design.md`；升级前须停旧实例（S2 调度切换）
+
+### 推送审查（M10 / M10.1 / M10.2）
+
+- M10：push 到 main/develop 等配置分支触发审查（项目推送开关/触发分支、任务事件来源、问题台账参考分支 ref_branch 归组、四平台 Push 参数与字典）；脚本 `sql/33_push_review_m10.sql`；设计事实源：`docs/planning/push-review-m10.md`
+- M10.1：OCR 引擎 push 结果映射（comments→topIssues、对账放行 OCR、无分数渲染降级）；LLM/OCR 双路径 push E2E 通过
+- M10.2：联调修复批次——GitHub form 载荷解包（push/ping 事件 form-urlencoded 兼容）、push 提交信息上下文注入、协议附录 push 感知；OCR 工作区修复（去 --depth、失败消息可读、空变更短路）；设计事实源：`docs/planning/push-review-experience-m10.2.md`
+
 ### 问题台账审查记录上下文（M8.2）
 
 - 新增按审查记录查看：复用现有 `taskId`，从记录详情进入台账时按该次最新成功运行的实际问题结果精确展示，不再仅按 PR/分支混入其他轮次；失败记录保留上下文空态，历史未物化结果明确提示
