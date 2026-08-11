@@ -70,10 +70,11 @@ mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/NN_xxx.sql
 41. `41_sys_job_seed.sql`：基础定时任务种子（数据洞察聚合任务 `insightStatsJobTask.refreshRecent`/`fullRecalc` 幂等注册，用户无需手工创建；须 utf8mb4）。
 42. `42_identity_binding.sql`：M12 身份关联（`sys_user_identity`、claim 存量迁移、`insight:identity:manage`；须 utf8mb4）。
 43. `43_member_stats_lines.sql`：M12 补充成员增删行数（`review_member_stats_daily` 增 `additions_sum`/`deletions_sum`；须 utf8mb4）。
+44. `44_trigger_source_failed.sql`：投递触发来源补 `TASK_FAILED`（失败简讯字典 + `trigger_source` 列注释；历史不回填；须 utf8mb4）。
 
 ## init-full.sql 维护规则
 
-- `init-full.sql` 是增量脚本执行完成后的最终状态快照（2026-08-11 同步，含 01–43 全部增量中的结构/参数/菜单/定时任务种子）。
+- `init-full.sql` 是增量脚本执行完成后的最终状态快照（2026-08-11 同步，含 01–44 全部增量中的结构/参数/菜单/定时任务种子）。
 - **新增编号增量脚本后必须同步重新生成**，否则新装环境会缺失该脚本的变更。生成方式（在已执行全部增量脚本的本地库上）：
 
 ```bash

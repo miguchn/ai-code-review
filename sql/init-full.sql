@@ -1,7 +1,7 @@
 -- ============================================================================
 -- AI Code Review 一次性初始化脚本（仅适用于全新环境）
 --
--- 本脚本是 sql/01_core_schema.sql … sql/43_member_stats_lines.sql
+-- 本脚本是 sql/01_core_schema.sql … sql/44_trigger_source_failed.sql
 -- 全部执行完成后的最终状态（表结构 + 初始化数据），新环境一条命令即可完成初始化：
 --
 --   mysql --default-character-set=utf8mb4 -u root -p < sql/init-full.sql
@@ -16,14 +16,14 @@
 -- 5. 新增编号增量脚本后必须同步重新生成本脚本（生成方式见 sql/README.md）。
 --
 -- 生成日期：2026-08-11；基线：企业级架构风险修复 S6 + M11 行内评论 + M12 数据洞察
--- （已含 01-43 全部增量：含 41 定时任务种子、42 身份关联、43 成员增删行数）
+-- （已含 01-44 全部增量：41 定时任务种子、42 身份关联、43 成员增删行数、44 触发来源 TASK_FAILED）
 -- ============================================================================
 
 CREATE DATABASE IF NOT EXISTS `ai_code_review` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
 USE `ai_code_review`;
 
 -- ----------------------------------------------------------------------------
--- 第一部分：表结构最终态（01-43 增量合并后的最终状态）
+-- 第一部分：表结构最终态（01-44 增量合并后的最终状态）
 -- ----------------------------------------------------------------------------
 
 
@@ -239,7 +239,7 @@ CREATE TABLE `review_delivery_record` (
   `lease_owner` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '投递租约持有者',
   `lease_until` datetime DEFAULT NULL COMMENT '投递租约到期时间(DB时钟)',
   `last_attempt_time` datetime DEFAULT NULL COMMENT '最近尝试时间',
-  `trigger_source` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '触发来源(TASK_SUCCESS/ISSUE_DISPOSITION/MANUAL_RETRY)',
+  `trigger_source` varchar(32) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '触发来源(TASK_SUCCESS/TASK_FAILED/ISSUE_DISPOSITION/MANUAL_RETRY)',
   `content_snapshot` mediumtext CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci COMMENT '实际发出正文快照(JSON)',
   `create_by` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT '',
   `create_time` datetime DEFAULT NULL,
@@ -1112,7 +1112,7 @@ CREATE TABLE `sys_user_role` (
 
 LOCK TABLES `sys_user` WRITE;
 /*!40000 ALTER TABLE `sys_user` DISABLE KEYS */;
-INSERT INTO `sys_user` (`user_id`, `dept_id`, `user_name`, `nick_name`, `user_type`, `email`, `phonenumber`, `sex`, `avatar`, `password`, `status`, `del_flag`, `login_ip`, `login_date`, `pwd_update_date`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (1,100,'admin','系统管理员','00','','','2','','$2a$10$7JB720yubVSZvUI0rEqK/.VqGOZTH.ulu33dHOiBE8ByOhJIrdAu2','0','0','127.0.0.1','2026-08-11 14:51:09','2026-07-30 17:15:00','admin','2026-07-30 17:15:00','',NULL,'初始管理员');
+INSERT INTO `sys_user` (`user_id`, `dept_id`, `user_name`, `nick_name`, `user_type`, `email`, `phonenumber`, `sex`, `avatar`, `password`, `status`, `del_flag`, `login_ip`, `login_date`, `pwd_update_date`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (1,100,'admin','系统管理员','00','','','2','','$2a$10$7JB720yubVSZvUI0rEqK/.VqGOZTH.ulu33dHOiBE8ByOhJIrdAu2','0','0','127.0.0.1','2026-08-11 15:22:32','2026-07-30 17:15:00','admin','2026-07-30 17:15:00','',NULL,'初始管理员');
 /*!40000 ALTER TABLE `sys_user` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -1506,6 +1506,7 @@ INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value
 INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (183,10,'GitLab 行内评论','GITLAB_MR_INLINE_COMMENT','review_delivery_channel','','primary','N','0','admin','2026-08-10 09:28:50','',NULL,'MR 行内评论投递');
 INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (184,11,'Gitee 行内评论','GITEE_PR_INLINE_COMMENT','review_delivery_channel','','primary','N','0','admin','2026-08-10 09:28:50','',NULL,'PR 行内评论投递');
 INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (185,12,'Gitea 行内评论','GITEA_PR_INLINE_COMMENT','review_delivery_channel','','primary','N','0','admin','2026-08-10 09:28:50','',NULL,'PR 行内评论投递');
+INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (186,4,'任务失败通知','TASK_FAILED','review_delivery_trigger_source','','warning','N','0','admin','2026-08-11 07:28:08','',NULL,'');
 /*!40000 ALTER TABLE `sys_dict_data` ENABLE KEYS */;
 UNLOCK TABLES;
 

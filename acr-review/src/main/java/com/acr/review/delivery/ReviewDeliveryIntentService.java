@@ -153,9 +153,12 @@ public class ReviewDeliveryIntentService
         String status = resolvable ? ReviewDeliveryConstants.STATUS_PENDING : ReviewDeliveryConstants.STATUS_MANUAL;
         String errorCode = resolvable ? null : ReviewDeliveryConstants.ERROR_CONFIGURATION;
         String failure = resolvable ? null : "项目已启用通知，但通知渠道缺失、停用或类型不受支持，请修复配置后人工补发";
+        String triggerSource = success
+            ? ReviewDeliveryConstants.TRIGGER_TASK_SUCCESS
+            : ReviewDeliveryConstants.TRIGGER_TASK_FAILED;
         return upsert(task, run, provider, channel,
             ReviewDeliveryConstants.imIdempotencyKey(channel, task.getTaskId()),
-            null, status, errorCode, failure, ReviewDeliveryConstants.TRIGGER_TASK_SUCCESS, operator);
+            null, status, errorCode, failure, triggerSource, operator);
     }
 
     public void requeue(Long deliveryId, String operator)

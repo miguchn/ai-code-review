@@ -88,6 +88,37 @@ class ReviewDeliveryIntentServiceTest
         verify(publisher, never()).publishEvent(any(ReviewDeliveryPendingEvent.class));
     }
 
+    @Test
+    void successTaskNotificationUsesTaskSuccessTrigger()
+    {
+        ReviewProject project = notifyEnabledProject();
+        when(projectMapper.selectReviewProjectById(3L)).thenReturn(project);
+        when(channelService.selectReviewNotifyChannelById(7L)).thenReturn(activeDingTalkChannel());
+        when(mapper.upsertDeliveryIntent(any())).thenReturn(1);
+
+        service.enqueueTerminalNotification(task(10L, ReviewPipelineConstants.TASK_SUCCESS), run(100L), "system");
+
+        ArgumentCaptor<ReviewDeliveryRecord> captor = ArgumentCaptor.forClass(ReviewDeliveryRecord.class);
+        verify(mapper).upsertDeliveryIntent(captor.capture());
+        assertEquals(ReviewDeliveryConstants.TRIGGER_TASK_SUCCESS, captor.getValue().getTriggerSource());
+    }
+
+    @Test
+    void failedTaskNotificationUsesTaskFailedTrigger()
+    {
+        ReviewProject project = notifyEnabledProject();
+        project.setNotifyOnFailure("Y");
+        when(projectMapper.selectReviewProjectById(3L)).thenReturn(project);
+        when(channelService.selectReviewNotifyChannelById(7L)).thenReturn(activeDingTalkChannel());
+        when(mapper.upsertDeliveryIntent(any())).thenReturn(1);
+
+        service.enqueueTerminalNotification(task(10L, ReviewPipelineConstants.TASK_FAILED), run(100L), "system");
+
+        ArgumentCaptor<ReviewDeliveryRecord> captor = ArgumentCaptor.forClass(ReviewDeliveryRecord.class);
+        verify(mapper).upsertDeliveryIntent(captor.capture());
+        assertEquals(ReviewDeliveryConstants.TRIGGER_TASK_FAILED, captor.getValue().getTriggerSource());
+    }
+
     private static ReviewTask task(Long id, String status)
     {
         ReviewTask task = new ReviewTask();
@@ -113,5 +144,21 @@ class ReviewDeliveryIntentServiceTest
         project.setProvider("GITHUB");
         project.setNotifyEnabled("N");
         return project;
+    }
+
+    private static ReviewProject notifyEnabledProject()
+    {
+        ReviewProject project = project();
+        project.setNotifyEnabled("Y");
+        project.setNotifyChannelId(7L);
+        return project;
+    }
+
+    private static ReviewNotifyChannel activeDingTalkChannel()
+    {
+        ReviewNotifyChannel channel = new ReviewNotifyChannel();
+        channel.setChannelType(ReviewDeliveryConstants.CHANNEL_DINGTALK_ROBOT);
+        channel.setStatus("0");
+        return channel;
     }
 }

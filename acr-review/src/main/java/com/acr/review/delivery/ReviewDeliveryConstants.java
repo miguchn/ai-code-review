@@ -51,8 +51,10 @@ public final class ReviewDeliveryConstants
     public static final String STATUS_MANUAL = "MANUAL";
     public static final String STATUS_SKIPPED = "SKIPPED";
 
-    /** 任务 SUCCESS/FAILED 后的外部投递（GitHub 总结评论或 IM）。 */
+    /** 任务 SUCCESS 后的外部投递（GitHub 总结评论或 IM）。 */
     public static final String TRIGGER_TASK_SUCCESS = "TASK_SUCCESS";
+    /** 任务 FAILED 后的 IM 失败简讯投递。 */
+    public static final String TRIGGER_TASK_FAILED = "TASK_FAILED";
     /** 问题处置后重渲染 PR 总结评论。 */
     public static final String TRIGGER_ISSUE_DISPOSITION = "ISSUE_DISPOSITION";
     /** 投递记录页或任务详情手动重试/补发。 */
