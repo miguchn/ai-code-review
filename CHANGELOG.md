@@ -8,6 +8,7 @@
 - 身份关联体系取代旧「认领」（脚本 `sql/42_identity_binding.sql`：`sys_user_identity` + 存量 claim 幂等迁移 + `insight:identity:manage`）：个人设置「我的提交邮箱」页签（候选卡带真实提交样例、手动添加、冲突人话提示、IM 账号预留位）；成员分析本人视图空态引导去关联；团队视图按关联合并同人多身份、未关联成员分组、管理员指派/改派/解除（部门数据权限 + 操作日志）；旧 `/insight/member/claim` 接口与前端认领交互移除。设计事实源：`docs/planning/identity-binding-design.md`
 - 健壮性修复：指派用户候选改洞察域专用接口（`GET /insight/team/identities/userOptions`，不依赖 `system:user:list`）；并发重复关联唯一约束冲突转人话提示；sql/42 迁移对同一用户大小写不同邮箱去重加固；团队趋势图纳入未关联成员全量口径
 - 基础定时任务种子随脚本交付（脚本 `sql/41_sys_job_seed.sql`）：数据洞察聚合任务（近期刷新每 10 分钟 / 夜间全量重算每日 02:30）幂等注册，新装环境无需手工创建
+- 成员分析团队视图增加业务系统/项目级联筛选：下拉选项限当前数据权限范围，筛选与选项分离，越权或不存在的筛选条件按空集返回（`AND 1=0` 兜底）；配套 KPI 合计、范围说明与成员勾选联动
 - `init-full.sql` 同步至 01–43 全量并通过临时库空库验证；后端 631 例测试与前端生产构建通过
 
 ### 数据洞察（M12 一二期）
@@ -79,6 +80,7 @@
 
 ### 缺陷修复
 
+- 修复成员提交趋势数据稀疏期视觉空白：趋势原只返回有数据的日期，仅 1 天数据时整图退化为一个不可见点；改按查询区间全日期补零（`commitCount=0`），对齐工作台趋势「缺失日期补零」口径，mine/团队/未关联/堆叠四处统一
 - 修复失败简讯投递触发来源错标「任务回写」：任务失败后的 IM 失败简讯在投递记录中 `trigger_source` 被硬编码为 `TASK_SUCCESS`，误导排查与按触发来源的统计；改按任务终态分流（SUCCESS→TASK_SUCCESS / FAILED→TASK_FAILED），字典增「任务失败通知」（脚本 `sql/44_trigger_source_failed.sql`），历史数据不回填
 - 修复项目管理中 Webhook Secret 配置状态恒显示"未配置"：列表/详情 SQL 按安全设计不读取密文列，原 `fillWebhookView` 却用恒为空的密文字段判断配置状态；改为 `projectSelect` 直接输出布尔列 `webhook_secret_configured`（列表与详情同步修正），密文不出服务端的边界不变
 - 修复问题台账「当前活跃」视图列表接口 500：activeFlag 的 OGNL 比较中 `'Y'`/`'1'` 单字符字面量被解析为 Character，与 String 参数比较触发数字转换抛 NumberFormatException；改为 `.toString()` 比较后恢复
