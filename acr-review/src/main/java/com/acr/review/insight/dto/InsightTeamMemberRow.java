@@ -5,13 +5,27 @@ import java.util.List;
 
 public class InsightTeamMemberRow
 {
+    private Long userId;
     private String authorKey;
     private String authorName;
+    private List<String> identities = new ArrayList<>();
     private Integer commitCount;
     private Integer tasksReviewed;
+    private Integer additionsSum;
+    private Integer deletionsSum;
     private Integer issuesNew;
     private Integer issuesOpen;
     private List<InsightCommitTrendPoint> commitTrend = new ArrayList<>();
+
+    public Long getUserId()
+    {
+        return userId;
+    }
+
+    public void setUserId(Long userId)
+    {
+        this.userId = userId;
+    }
 
     public String getAuthorKey()
     {
@@ -33,6 +47,16 @@ public class InsightTeamMemberRow
         this.authorName = authorName;
     }
 
+    public List<String> getIdentities()
+    {
+        return identities;
+    }
+
+    public void setIdentities(List<String> identities)
+    {
+        this.identities = identities;
+    }
+
     public Integer getCommitCount()
     {
         return commitCount;
@@ -51,6 +75,26 @@ public class InsightTeamMemberRow
     public void setTasksReviewed(Integer tasksReviewed)
     {
         this.tasksReviewed = tasksReviewed;
+    }
+
+    public Integer getAdditionsSum()
+    {
+        return additionsSum;
+    }
+
+    public void setAdditionsSum(Integer additionsSum)
+    {
+        this.additionsSum = additionsSum;
+    }
+
+    public Integer getDeletionsSum()
+    {
+        return deletionsSum;
+    }
+
+    public void setDeletionsSum(Integer deletionsSum)
+    {
+        this.deletionsSum = deletionsSum;
     }
 
     public Integer getIssuesNew()

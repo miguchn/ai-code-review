@@ -77,6 +77,10 @@ public final class InsightMetrics
             "进入 RECHECKING 的问题占比（二期完善；一期仅字典占位）", "ratio"));
         list.add(def("commitActivity", "提交活跃度",
             "commit_fact 按日/项目/身份计数（二期）", "count"));
+        list.add(def("additionsSum", "新增行数",
+            "SUCCESS 且 additions 非空的任务 additions 合计；pr_author 与 author_key 弱匹配", "count"));
+        list.add(def("deletionsSum", "删减行数",
+            "SUCCESS 且 deletions 非空的任务 deletions 合计；pr_author 与 author_key 弱匹配", "count"));
         return list;
     }
 

@@ -20,10 +20,6 @@ export function getInsightMemberMine(query) {
   return request({ url: '/insight/member/mine', method: 'get', params: query })
 }
 
-export function claimInsightMemberIdentity(data) {
-  return request({ url: '/insight/member/claim', method: 'post', data })
-}
-
 export function getInsightTeamMembers(query) {
   return request({ url: '/insight/team/members', method: 'get', params: query })
 }

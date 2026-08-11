@@ -204,6 +204,23 @@
         GROUP BY DATE(finished_time), pr_author
     </select>
 
+    <!-- 与 tasks_reviewed 同弱匹配/按日口径；仅 SUCCESS；SUM 忽略 NULL -->
+    <select id="selectLineStatsByAuthorDay" resultType="map">
+        SELECT DATE(finished_time) AS stat_date,
+               pr_author AS author_key,
+               COALESCE(SUM(additions), 0) AS additions_sum,
+               COALESCE(SUM(deletions), 0) AS deletions_sum
+        FROM review_task
+        WHERE project_id = #{projectId}
+          AND pr_author IS NOT NULL AND pr_author != ''
+          AND task_status = 'SUCCESS'
+          AND finished_time IS NOT NULL
+          AND (additions IS NOT NULL OR deletions IS NOT NULL)
+          AND DATE(finished_time) &gt;= #{beginDate}
+          AND DATE(finished_time) &lt;= #{endDate}
+        GROUP BY DATE(finished_time), pr_author
+    </select>
+
     <select id="selectIssuesNewByAuthorDay" resultType="map">
         SELECT DATE(i.create_time) AS stat_date,
                t.pr_author AS author_key,

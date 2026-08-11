@@ -1,13 +1,17 @@
 package com.acr.review.insight;
 
 import java.sql.Date;
+import java.text.SimpleDateFormat;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import com.acr.common.core.domain.entity.SysUser;
@@ -19,24 +23,30 @@ import com.acr.review.domain.ReviewProject;
 import com.acr.review.insight.dto.InsightChannelHealth;
 import com.acr.review.insight.dto.InsightCommitTrendPoint;
 import com.acr.review.insight.dto.InsightDispositionFunnel;
+import com.acr.review.insight.dto.InsightIdentityBindRequest;
 import com.acr.review.insight.dto.InsightIdentityCandidate;
+import com.acr.review.insight.dto.InsightIdentityCandidateVo;
 import com.acr.review.insight.dto.InsightKpiCard;
-import com.acr.review.insight.dto.InsightMemberClaimRequest;
 import com.acr.review.insight.dto.InsightMemberMineResponse;
 import com.acr.review.insight.dto.InsightMetricsDictResponse;
 import com.acr.review.insight.dto.InsightNamedCount;
 import com.acr.review.insight.dto.InsightOverviewResponse;
 import com.acr.review.insight.dto.InsightProjectDetailResponse;
 import com.acr.review.insight.dto.InsightProjectRow;
+import com.acr.review.insight.dto.InsightTeamIdentitiesResponse;
 import com.acr.review.insight.dto.InsightTeamMemberRow;
 import com.acr.review.insight.dto.InsightTeamMembersResponse;
 import com.acr.review.insight.dto.InsightTrendPoint;
-import com.acr.review.mapper.InsightIdentityClaimMapper;
+import com.acr.review.insight.dto.InsightUnboundIdentity;
+import com.acr.review.insight.dto.InsightUserOption;
 import com.acr.review.mapper.ReviewCommitFactMapper;
 import com.acr.review.mapper.ReviewMemberStatsDailyMapper;
 import com.acr.review.mapper.ReviewStatsDailyMapper;
 import com.acr.review.mapper.ReviewStatsSourceMapper;
+import com.acr.system.domain.SysUserIdentity;
 import com.acr.system.service.ISysConfigService;
+import com.acr.system.service.ISysUserIdentityService;
+import com.acr.system.service.ISysUserService;
 
 /** 看板查询：聚合表为主，类别/渠道/未处置重点为受限只读聚合。 */
 @Service
@@ -49,7 +59,8 @@ public class ReviewInsightServiceImpl implements IReviewInsightService
     private final ReviewStatsSourceMapper sourceMapper;
     private final ReviewCommitFactMapper commitFactMapper;
     private final ReviewMemberStatsDailyMapper memberStatsMapper;
-    private final InsightIdentityClaimMapper claimMapper;
+    private final ISysUserIdentityService userIdentityService;
+    private final ISysUserService userService;
     private final ISysConfigService configService;
 
     public ReviewInsightServiceImpl(InsightScopeQueries scopeQueries,
@@ -57,7 +68,8 @@ public class ReviewInsightServiceImpl implements IReviewInsightService
                                     ReviewStatsSourceMapper sourceMapper,
                                     ReviewCommitFactMapper commitFactMapper,
                                     ReviewMemberStatsDailyMapper memberStatsMapper,
-                                    InsightIdentityClaimMapper claimMapper,
+                                    ISysUserIdentityService userIdentityService,
+                                    ISysUserService userService,
                                     ISysConfigService configService)
     {
         this.scopeQueries = scopeQueries;
@@ -65,7 +77,8 @@ public class ReviewInsightServiceImpl implements IReviewInsightService
         this.sourceMapper = sourceMapper;
         this.commitFactMapper = commitFactMapper;
         this.memberStatsMapper = memberStatsMapper;
-        this.claimMapper = claimMapper;
+        this.userIdentityService = userIdentityService;
+        this.userService = userService;
         this.configService = configService;
     }
 
@@ -248,49 +261,46 @@ public class ReviewInsightServiceImpl implements IReviewInsightService
     {
         InsightRange range = InsightRange.of(beginDate, endDate, days);
         LoginUser loginUser = SecurityUtils.getLoginUser();
-        SysUser user = loginUser.getUser();
         Long userId = loginUser.getUserId();
-        List<InsightIdentityClaim> claims = claimMapper.selectByUserId(userId);
+        List<SysUserIdentity> identities = userIdentityService.listMineGit(userId);
         InsightMemberMineResponse resp = new InsightMemberMineResponse();
         resp.setMetricsVersion(metricsVersion());
-        if (claims == null || claims.isEmpty())
+        if (identities == null || identities.isEmpty())
         {
             resp.setClaimed(false);
-            List<ReviewCommitFact> candidates = commitFactMapper.selectCandidateIdentities(
-                user.getEmail(), user.getUserName(), 10);
-            for (ReviewCommitFact fact : candidates)
-            {
-                resp.getCandidates().add(new InsightIdentityCandidate(
-                    fact.getAuthorEmail(), fact.getAuthorName(),
-                    InsightAuthorKeys.of(fact.getAuthorEmail(), fact.getAuthorName())));
-            }
             return resp;
         }
         resp.setClaimed(true);
         List<String> authorKeys = new ArrayList<>();
-        for (InsightIdentityClaim claim : claims)
+        for (SysUserIdentity identity : identities)
         {
-            String key = InsightAuthorKeys.of(claim.getAuthorEmail(), claim.getAuthorName());
+            String key = identity.getIdentifier();
             authorKeys.add(key);
             resp.getClaimedIdentities().add(new InsightIdentityCandidate(
-                claim.getAuthorEmail(), claim.getAuthorName(), key));
+                key, identity.getDisplayName(), key));
         }
         resp.setDataSince(formatDate(memberStatsMapper.selectEarliestStatDate(authorKeys)));
         List<Map<String, Object>> trend = commitFactMapper.selectCommitTrendByAuthorKeys(
             authorKeys, Date.valueOf(range.getBegin()), Date.valueOf(range.getEnd()), null);
-        resp.setCommitTrend(toCommitTrend(trend));
+        resp.setCommitTrend(mergeTrendByDay(toCommitTrend(trend)));
         List<Map<String, Object>> agg = memberStatsMapper.selectMemberAgg(
             Date.valueOf(range.getBegin()), Date.valueOf(range.getEnd()), authorKeys, null);
         int tasks = 0;
+        int additions = 0;
+        int deletions = 0;
         int issuesNew = 0;
         int issuesOpen = 0;
         for (Map<String, Object> row : agg)
         {
             tasks += intOf(row.get("tasks_reviewed"));
+            additions += intOf(row.get("additions_sum"));
+            deletions += intOf(row.get("deletions_sum"));
             issuesNew += intOf(row.get("issues_new"));
             issuesOpen = Math.max(issuesOpen, intOf(row.get("issues_open")));
         }
         resp.setTasksReviewed(tasks);
+        resp.setAdditionsSum(additions);
+        resp.setDeletionsSum(deletions);
         resp.setIssuesNew(issuesNew);
         resp.setIssuesOpen(issuesOpen);
         for (Map<String, Object> issue : sourceMapper.selectOpenIssuesByAuthorKeys(authorKeys, 20))
@@ -299,22 +309,6 @@ public class ReviewInsightServiceImpl implements IReviewInsightService
                 String.valueOf(issue.get("title")), intOf(issue.get("cnt"))));
         }
         return resp;
-    }
-
-    @Override
-    public void claimMemberIdentity(InsightMemberClaimRequest request)
-    {
-        if (request == null || StringUtils.isEmpty(request.getAuthorEmail()))
-        {
-            throw new ServiceException("authorEmail 不能为空");
-        }
-        LoginUser loginUser = SecurityUtils.getLoginUser();
-        InsightIdentityClaim claim = new InsightIdentityClaim();
-        claim.setUserId(loginUser.getUserId());
-        claim.setAuthorEmail(request.getAuthorEmail().trim());
-        claim.setAuthorName(request.getAuthorName());
-        claim.setCreateBy(loginUser.getUsername());
-        claimMapper.insertIgnore(claim);
     }
 
     @Override
@@ -339,40 +333,93 @@ public class ReviewInsightServiceImpl implements IReviewInsightService
         }
         List<ReviewMemberStatsDaily> dailyRows = scopeQueries.selectMemberStatsTeam(query);
 
-        Map<String, InsightTeamMemberRow> members = new HashMap<>();
+        List<SysUserIdentity> bindings = userIdentityService.listByType(SysUserIdentity.TYPE_GIT_COMMIT);
+        Map<String, SysUserIdentity> identityByKey = new HashMap<>();
+        for (SysUserIdentity binding : bindings)
+        {
+            identityByKey.put(binding.getIdentifier(), binding);
+        }
+
+        Map<Long, InsightTeamMemberRow> boundMembers = new LinkedHashMap<>();
+        Map<String, InsightTeamMemberRow> unboundMembers = new LinkedHashMap<>();
+
         for (ReviewMemberStatsDaily row : dailyRows)
         {
-            InsightTeamMemberRow member = members.computeIfAbsent(row.getAuthorKey(), key -> {
-                InsightTeamMemberRow m = new InsightTeamMemberRow();
-                m.setAuthorKey(key);
-                m.setAuthorName(row.getAuthorName());
-                m.setCommitCount(0);
-                m.setTasksReviewed(0);
-                m.setIssuesNew(0);
-                m.setIssuesOpen(0);
-                return m;
-            });
-            member.setCommitCount(n(member.getCommitCount()) + n(row.getCommitCount()));
-            member.setTasksReviewed(n(member.getTasksReviewed()) + n(row.getTasksReviewed()));
-            member.setIssuesNew(n(member.getIssuesNew()) + n(row.getIssuesNew()));
-            member.setIssuesOpen(Math.max(n(member.getIssuesOpen()), n(row.getIssuesOpen())));
-            if (StringUtils.isEmpty(member.getAuthorName()) && StringUtils.isNotEmpty(row.getAuthorName()))
+            String authorKey = row.getAuthorKey();
+            if (StringUtils.isEmpty(authorKey))
             {
-                member.setAuthorName(row.getAuthorName());
+                continue;
+            }
+            SysUserIdentity binding = identityByKey.get(authorKey);
+            if (binding != null)
+            {
+                InsightTeamMemberRow member = boundMembers.computeIfAbsent(binding.getUserId(), uid -> {
+                    InsightTeamMemberRow m = emptyMemberRow();
+                    m.setUserId(uid);
+                    m.setAuthorName(StringUtils.isNotEmpty(binding.getNickName())
+                        ? binding.getNickName() : binding.getUserName());
+                    m.setAuthorKey("user:" + uid);
+                    return m;
+                });
+                if (!member.getIdentities().contains(authorKey))
+                {
+                    member.getIdentities().add(authorKey);
+                }
+                accumulate(member, row);
+            }
+            else
+            {
+                InsightTeamMemberRow member = unboundMembers.computeIfAbsent(authorKey, key -> {
+                    InsightTeamMemberRow m = emptyMemberRow();
+                    m.setAuthorKey(key);
+                    m.setAuthorName(row.getAuthorName());
+                    m.getIdentities().add(key);
+                    return m;
+                });
+                accumulate(member, row);
+                if (StringUtils.isEmpty(member.getAuthorName()) && StringUtils.isNotEmpty(row.getAuthorName()))
+                {
+                    member.setAuthorName(row.getAuthorName());
+                }
             }
         }
 
-        List<String> authorKeys = new ArrayList<>(members.keySet());
-        List<Map<String, Object>> trendRows = authorKeys.isEmpty() ? List.of()
+        List<String> allKeys = new ArrayList<>();
+        for (InsightTeamMemberRow m : boundMembers.values())
+        {
+            allKeys.addAll(m.getIdentities());
+        }
+        allKeys.addAll(unboundMembers.keySet());
+        List<Map<String, Object>> trendRows = allKeys.isEmpty() ? List.of()
             : commitFactMapper.selectCommitTrendByAuthorKeys(
-                authorKeys, Date.valueOf(range.getBegin()), Date.valueOf(range.getEnd()),
+                allKeys, Date.valueOf(range.getBegin()), Date.valueOf(range.getEnd()),
                 projectIds.isEmpty() ? null : projectIds);
         List<InsightCommitTrendPoint> stacked = toCommitTrend(trendRows);
         Map<String, List<InsightCommitTrendPoint>> byAuthor = stacked.stream()
             .collect(Collectors.groupingBy(p -> p.getAuthorKey() == null ? "" : p.getAuthorKey()));
-        for (InsightTeamMemberRow member : members.values())
+
+        List<InsightCommitTrendPoint> stackedTrend = new ArrayList<>();
+        for (InsightTeamMemberRow member : boundMembers.values())
         {
-            member.setCommitTrend(byAuthor.getOrDefault(member.getAuthorKey(), List.of()));
+            List<InsightCommitTrendPoint> merged = new ArrayList<>();
+            for (String key : member.getIdentities())
+            {
+                merged.addAll(byAuthor.getOrDefault(key, List.of()));
+            }
+            List<InsightCommitTrendPoint> dayMerged = mergeTrendByDay(merged);
+            for (InsightCommitTrendPoint p : dayMerged)
+            {
+                p.setAuthorKey(member.getAuthorKey());
+            }
+            member.setCommitTrend(dayMerged);
+            stackedTrend.addAll(dayMerged);
+        }
+        for (InsightTeamMemberRow member : unboundMembers.values())
+        {
+            List<InsightCommitTrendPoint> points = byAuthor.getOrDefault(member.getAuthorKey(), List.of());
+            member.setCommitTrend(points);
+            // 未关联成员保留原始 authorKey，并入全量 stackedTrend
+            stackedTrend.addAll(points);
         }
 
         InsightTeamMembersResponse resp = new InsightTeamMembersResponse();
@@ -380,12 +427,199 @@ public class ReviewInsightServiceImpl implements IReviewInsightService
         resp.setEndDate(range.endText());
         resp.setMetricsVersion(metricsVersion());
         resp.setDataSince(formatDate(memberStatsMapper.selectEarliestStatDate(null)));
-        resp.setMembers(members.values().stream()
+        resp.setMembers(boundMembers.values().stream()
             .sorted(Comparator.comparing(InsightTeamMemberRow::getCommitCount,
                 Comparator.nullsFirst(Integer::compareTo)).reversed())
             .collect(Collectors.toList()));
-        resp.setStackedTrend(stacked);
+        resp.setUnbound(unboundMembers.values().stream()
+            .sorted(Comparator.comparing(InsightTeamMemberRow::getCommitCount,
+                Comparator.nullsFirst(Integer::compareTo)).reversed())
+            .collect(Collectors.toList()));
+        resp.setStackedTrend(stackedTrend);
         return resp;
+    }
+
+    @Override
+    public List<InsightUserOption> listIdentityUserOptions(String keyword)
+    {
+        SysUser query = new SysUser();
+        if (StringUtils.isNotEmpty(keyword))
+        {
+            query.setUserName(keyword.trim());
+        }
+        List<SysUser> users = userService.selectUserList(query);
+        if (users == null || users.isEmpty())
+        {
+            return List.of();
+        }
+        int limit = Math.min(20, users.size());
+        List<InsightUserOption> options = new ArrayList<>(limit);
+        for (int i = 0; i < limit; i++)
+        {
+            SysUser user = users.get(i);
+            options.add(new InsightUserOption(user.getUserId(), user.getUserName(), user.getNickName()));
+        }
+        return options;
+    }
+
+    @Override
+    public List<InsightIdentityCandidateVo> listIdentityCandidates()
+    {
+        LoginUser loginUser = SecurityUtils.getLoginUser();
+        SysUser user = loginUser.getUser();
+        List<SysUserIdentity> mine = userIdentityService.listMineGit(loginUser.getUserId());
+        Set<String> exclude = new HashSet<>();
+        for (SysUserIdentity identity : mine)
+        {
+            exclude.add(identity.getIdentifier());
+        }
+        List<Map<String, Object>> rows = commitFactMapper.selectMatchCandidateIdentities(
+            user.getEmail(), user.getUserName(), user.getNickName(), 30);
+        List<IdentityCandidateMatcher.CommitIdentity> commits = new ArrayList<>();
+        for (Map<String, Object> row : rows)
+        {
+            commits.add(new IdentityCandidateMatcher.CommitIdentity(
+                str(row.get("author_email")), str(row.get("author_name")), str(row.get("author_key"))));
+        }
+        List<IdentityCandidateMatcher.Match> matches = IdentityCandidateMatcher.match(
+            user.getEmail(), user.getUserName(), user.getNickName(), commits, exclude);
+        List<InsightIdentityCandidateVo> result = new ArrayList<>();
+        for (IdentityCandidateMatcher.Match match : matches)
+        {
+            InsightIdentityCandidateVo vo = new InsightIdentityCandidateVo();
+            vo.setIdentifier(match.authorKey);
+            vo.setDisplayName(match.authorName);
+            vo.setMatchType(match.matchType);
+            Map<String, Object> sample = commitFactMapper.selectLatestCommitSample(match.authorKey);
+            if (sample != null)
+            {
+                vo.setSampleProjectName(str(sample.get("project_name")));
+                vo.setSampleMessage(str(sample.get("message_first_line")));
+                vo.setSampleTime(formatDateTime(sample.get("commit_time")));
+                if (StringUtils.isEmpty(vo.getDisplayName()))
+                {
+                    vo.setDisplayName(str(sample.get("author_name")));
+                }
+            }
+            result.add(vo);
+        }
+        return result;
+    }
+
+    @Override
+    public InsightTeamIdentitiesResponse listTeamIdentities()
+    {
+        SysUserIdentity query = new SysUserIdentity();
+        query.setIdentityType(SysUserIdentity.TYPE_GIT_COMMIT);
+        List<SysUserIdentity> bindings = scopeQueries.selectIdentitiesManage(query);
+        Set<String> boundKeys = new HashSet<>();
+        for (SysUserIdentity binding : bindings)
+        {
+            boundKeys.add(binding.getIdentifier());
+        }
+        InsightTeamIdentitiesResponse resp = new InsightTeamIdentitiesResponse();
+        resp.setBindings(bindings);
+        List<String> allKeys = commitFactMapper.selectDistinctAuthorKeys();
+        for (String key : allKeys)
+        {
+            if (boundKeys.contains(key))
+            {
+                continue;
+            }
+            InsightUnboundIdentity unbound = new InsightUnboundIdentity();
+            unbound.setIdentifier(key);
+            Map<String, Object> sample = commitFactMapper.selectLatestCommitSample(key);
+            if (sample != null)
+            {
+                unbound.setDisplayName(str(sample.get("author_name")));
+                unbound.setSampleProjectName(str(sample.get("project_name")));
+                unbound.setSampleMessage(str(sample.get("message_first_line")));
+                unbound.setSampleTime(formatDateTime(sample.get("commit_time")));
+            }
+            resp.getUnbound().add(unbound);
+        }
+        return resp;
+    }
+
+    @Override
+    public boolean bindTeamIdentity(InsightIdentityBindRequest request)
+    {
+        if (request == null)
+        {
+            return false;
+        }
+        LoginUser loginUser = SecurityUtils.getLoginUser();
+        return userIdentityService.bindAdmin(request.getUserId(), request.getIdentifier(),
+            request.getDisplayName(), loginUser.getUsername());
+    }
+
+    @Override
+    public void unbindTeamIdentity(Long id)
+    {
+        userIdentityService.unbindAdmin(id);
+    }
+
+    private static InsightTeamMemberRow emptyMemberRow()
+    {
+        InsightTeamMemberRow m = new InsightTeamMemberRow();
+        m.setCommitCount(0);
+        m.setTasksReviewed(0);
+        m.setAdditionsSum(0);
+        m.setDeletionsSum(0);
+        m.setIssuesNew(0);
+        m.setIssuesOpen(0);
+        return m;
+    }
+
+    private static void accumulate(InsightTeamMemberRow member, ReviewMemberStatsDaily row)
+    {
+        member.setCommitCount(n(member.getCommitCount()) + n(row.getCommitCount()));
+        member.setTasksReviewed(n(member.getTasksReviewed()) + n(row.getTasksReviewed()));
+        member.setAdditionsSum(n(member.getAdditionsSum()) + n(row.getAdditionsSum()));
+        member.setDeletionsSum(n(member.getDeletionsSum()) + n(row.getDeletionsSum()));
+        member.setIssuesNew(n(member.getIssuesNew()) + n(row.getIssuesNew()));
+        member.setIssuesOpen(Math.max(n(member.getIssuesOpen()), n(row.getIssuesOpen())));
+    }
+
+    private static List<InsightCommitTrendPoint> mergeTrendByDay(List<InsightCommitTrendPoint> points)
+    {
+        Map<String, Integer> byDay = new LinkedHashMap<>();
+        for (InsightCommitTrendPoint p : points)
+        {
+            if (p == null || p.getDate() == null)
+            {
+                continue;
+            }
+            byDay.merge(p.getDate(), n(p.getCommitCount()), Integer::sum);
+        }
+        List<InsightCommitTrendPoint> merged = new ArrayList<>();
+        for (Map.Entry<String, Integer> e : byDay.entrySet())
+        {
+            InsightCommitTrendPoint point = new InsightCommitTrendPoint();
+            point.setDate(e.getKey());
+            point.setCommitCount(e.getValue());
+            merged.add(point);
+        }
+        merged.sort(Comparator.comparing(InsightCommitTrendPoint::getDate));
+        return merged;
+    }
+
+    private static String str(Object value)
+    {
+        return value == null ? null : String.valueOf(value);
+    }
+
+    private static String formatDateTime(Object value)
+    {
+        if (value == null)
+        {
+            return null;
+        }
+        if (value instanceof java.util.Date date)
+        {
+            return new SimpleDateFormat("yyyy-MM-dd HH:mm").format(date);
+        }
+        return String.valueOf(value);
     }
 
     private List<InsightCommitTrendPoint> buildProjectCommitTrend(Long projectId, InsightRange range)

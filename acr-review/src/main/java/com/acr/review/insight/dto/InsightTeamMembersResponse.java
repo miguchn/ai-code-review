@@ -11,6 +11,7 @@ public class InsightTeamMembersResponse
     private String dataSince;
     private String disclaimer = "用于团队管理与辅导，不作为绩效评价直接输入";
     private List<InsightTeamMemberRow> members = new ArrayList<>();
+    private List<InsightTeamMemberRow> unbound = new ArrayList<>();
     private List<InsightCommitTrendPoint> stackedTrend = new ArrayList<>();
 
     public String getBeginDate()
@@ -71,6 +72,16 @@ public class InsightTeamMembersResponse
     public void setMembers(List<InsightTeamMemberRow> members)
     {
         this.members = members;
+    }
+
+    public List<InsightTeamMemberRow> getUnbound()
+    {
+        return unbound;
+    }
+
+    public void setUnbound(List<InsightTeamMemberRow> unbound)
+    {
+        this.unbound = unbound;
     }
 
     public List<InsightCommitTrendPoint> getStackedTrend()

@@ -114,6 +114,7 @@ public class ReviewStatsAggregationService
         mergeMemberCommits(rows, projectId, commitFactMapper.selectCommitCountByAuthorDay(projectId, begin, end));
         mergeMemberInt(rows, projectId, sourceMapper.selectTasksReviewedByAuthorDay(projectId, begin, end),
             "tasks_reviewed");
+        mergeMemberLineStats(rows, projectId, sourceMapper.selectLineStatsByAuthorDay(projectId, begin, end));
         mergeMemberInt(rows, projectId, sourceMapper.selectIssuesNewByAuthorDay(projectId, begin, end),
             "issues_new");
 
@@ -190,6 +191,24 @@ public class ReviewStatsAggregationService
         }
     }
 
+    private void mergeMemberLineStats(Map<String, ReviewMemberStatsDaily> rows, Long projectId,
+                                      List<Map<String, Object>> agg)
+    {
+        for (Map<String, Object> item : safe(agg))
+        {
+            LocalDate day = toLocalDate(item.get("stat_date"));
+            String authorKey = str(item.get("author_key"));
+            if (day == null || StringUtils.isEmpty(authorKey))
+            {
+                continue;
+            }
+            ReviewMemberStatsDaily row = rows.computeIfAbsent(day + "|" + authorKey,
+                k -> emptyMemberRow(projectId, authorKey, day));
+            row.setAdditionsSum(intVal(item.get("additions_sum")));
+            row.setDeletionsSum(intVal(item.get("deletions_sum")));
+        }
+    }
+
     private static ReviewMemberStatsDaily emptyMemberRow(Long projectId, String authorKey, LocalDate day)
     {
         ReviewMemberStatsDaily row = new ReviewMemberStatsDaily();
@@ -198,9 +217,58 @@ public class ReviewStatsAggregationService
         row.setStatDate(Date.valueOf(day));
         row.setCommitCount(0);
         row.setTasksReviewed(0);
+        row.setAdditionsSum(0);
+        row.setDeletionsSum(0);
         row.setIssuesNew(0);
         row.setIssuesOpen(0);
         return row;
+    }
+
+    /**
+     * 成员增删行数口径（与 selectLineStatsByAuthorDay 一致）：仅 SUCCESS；
+     * additions/deletions 各自非空才计入对应合计。
+     *
+     * @return int[2] {additionsSum, deletionsSum}
+     */
+    static int[] sumMemberTaskLines(List<TaskLineSample> samples)
+    {
+        int additions = 0;
+        int deletions = 0;
+        if (samples == null)
+        {
+            return new int[] {0, 0};
+        }
+        for (TaskLineSample sample : samples)
+        {
+            if (sample == null || !"SUCCESS".equals(sample.taskStatus))
+            {
+                continue;
+            }
+            if (sample.additions != null)
+            {
+                additions += sample.additions;
+            }
+            if (sample.deletions != null)
+            {
+                deletions += sample.deletions;
+            }
+        }
+        return new int[] {additions, deletions};
+    }
+
+    /** 供口径单测的任务行数样本。 */
+    static final class TaskLineSample
+    {
+        final String taskStatus;
+        final Integer additions;
+        final Integer deletions;
+
+        TaskLineSample(String taskStatus, Integer additions, Integer deletions)
+        {
+            this.taskStatus = taskStatus;
+            this.additions = additions;
+            this.deletions = deletions;
+        }
     }
 
     private static String str(Object value)
