@@ -17,5 +17,6 @@ public interface ReviewMemberStatsDailyMapper
                                               @Param("authorKeys") List<String> authorKeys,
                                               @Param("projectIds") List<Long> projectIds);
 
-    Date selectEarliestStatDate(@Param("authorKeys") List<String> authorKeys);
+    Date selectEarliestStatDate(@Param("authorKeys") List<String> authorKeys,
+                                @Param("projectIds") List<Long> projectIds);
 }

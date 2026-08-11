@@ -13,10 +13,7 @@
         <el-radio-button value="mine">本人视图</el-radio-button>
         <el-radio-button v-hasPermi="['insight:team:view']" value="team">团队视图</el-radio-button>
       </el-radio-group>
-      <el-radio-group v-model="rangePreset" @change="reload">
-        <el-radio-button :value="7">近 7 天</el-radio-button>
-        <el-radio-button :value="30">近 30 天</el-radio-button>
-      </el-radio-group>
+      <span class="toolbar-hint">本人视图仅展示已关联的提交身份；团队视图按授权范围统计</span>
     </div>
 
     <div v-if="loading"><el-skeleton :rows="6" animated /></div>
@@ -26,6 +23,24 @@
     </div>
 
     <template v-else-if="viewMode === 'mine'">
+      <div class="toolbar">
+        <span class="filter-label">时间范围</span>
+        <el-radio-group v-model="rangePreset" @change="onRangeChange">
+          <el-radio-button :value="7">近 7 天</el-radio-button>
+          <el-radio-button :value="30">近 30 天</el-radio-button>
+          <el-radio-button value="custom">自定义</el-radio-button>
+        </el-radio-group>
+        <el-date-picker
+          v-if="rangePreset === 'custom'"
+          v-model="customRange"
+          type="daterange"
+          value-format="YYYY-MM-DD"
+          start-placeholder="开始"
+          end-placeholder="结束"
+          :clearable="false"
+          @change="reload"
+        />
+      </div>
       <template v-if="!mine?.claimed">
         <el-empty>
           <template #description>
@@ -66,21 +81,101 @@
     </template>
 
     <template v-else>
+      <el-form :inline="true" :model="teamQuery" class="insight-filters">
+        <el-form-item label="时间范围">
+          <el-radio-group v-model="rangePreset">
+            <el-radio-button :value="7">近 7 天</el-radio-button>
+            <el-radio-button :value="30">近 30 天</el-radio-button>
+            <el-radio-button value="custom">自定义</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item v-if="rangePreset === 'custom'" label="自定义">
+          <el-date-picker
+            v-model="customRange"
+            type="daterange"
+            value-format="YYYY-MM-DD"
+            start-placeholder="开始"
+            end-placeholder="结束"
+            :clearable="false"
+          />
+        </el-form-item>
+        <el-form-item label="业务系统">
+          <el-select
+            v-model="teamQuery.businessSystemId"
+            clearable
+            filterable
+            placeholder="全部"
+            style="width: 180px"
+            @change="onTeamSystemChange"
+          >
+            <el-option
+              v-for="item in teamBusinessSystems"
+              :key="item.id"
+              :label="item.label"
+              :value="item.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="项目">
+          <el-select v-model="teamQuery.projectId" clearable filterable placeholder="全部" style="width: 200px">
+            <el-option
+              v-for="item in teamProjectOptions"
+              :key="item.projectId"
+              :label="item.projectName"
+              :value="item.projectId"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="成员">
+          <el-select
+            v-model="selectedAuthors"
+            multiple
+            collapse-tags
+            collapse-tags-tooltip
+            clearable
+            filterable
+            placeholder="全部成员"
+            style="width: 210px"
+          >
+            <el-option
+              v-for="member in allTeamMembers"
+              :key="member.authorKey"
+              :label="memberLabel(member)"
+              :value="member.authorKey"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" icon="Search" @click="reload">查询</el-button>
+          <el-button @click="resetTeamFilters">重置</el-button>
+        </el-form-item>
+      </el-form>
+      <div class="scope-meta">
+        {{ teamScopeLabel }}<span v-if="team?.dataSince"> · 数据自 {{ team.dataSince }} 起积累</span>
+      </div>
+      <el-row :gutter="16" class="kpi-row">
+        <el-col v-for="card in teamKpis" :key="card.key" :xs="12" :sm="8" :lg="4">
+          <div class="kpi-card">
+            <div class="kpi-name">{{ card.label }}</div>
+            <div class="kpi-value" :class="card.className">{{ card.value }}</div>
+          </div>
+        </el-col>
+      </el-row>
       <section class="chart-panel">
         <header class="panel-head">
           <h3>成员提交趋势</h3>
           <div class="legend-toggles">
             <el-checkbox
-              v-for="m in team?.members || []"
+              v-for="m in visibleTeamMembers"
               :key="m.authorKey"
               v-model="visibleAuthors[m.authorKey]"
               @change="renderTeamChart"
-            >{{ m.authorName || m.authorKey }}</el-checkbox>
+            >{{ memberLabel(m) }}</el-checkbox>
           </div>
         </header>
         <div ref="teamChartRef" class="chart-box" />
       </section>
-      <el-table class="mt16" :data="team?.members || []" empty-text="暂无已关联成员数据">
+      <el-table class="mt16" :data="visibleBoundMembers" empty-text="暂无已关联成员数据">
         <el-table-column label="成员" min-width="160" :show-overflow-tooltip="true">
           <template #default="scope">
             <el-tooltip
@@ -88,9 +183,9 @@
               :content="(scope.row.identities || []).join('、')"
               placement="top"
             >
-              <span>{{ scope.row.authorName || scope.row.authorKey }}</span>
+              <el-link type="primary" @click="focusMember(scope.row)">{{ scope.row.authorName || scope.row.authorKey }}</el-link>
             </el-tooltip>
-            <span v-else>{{ scope.row.authorName || scope.row.authorKey }}</span>
+            <el-link v-else type="primary" @click="focusMember(scope.row)">{{ scope.row.authorName || scope.row.authorKey }}</el-link>
           </template>
         </el-table-column>
         <el-table-column label="提交次数" prop="commitCount" width="100" sortable />
@@ -114,9 +209,11 @@
           <h3>未关联成员</h3>
           <span class="panel-desc">以下提交身份尚未关联到平台账号</span>
         </header>
-        <el-table :data="team?.unbound || []" empty-text="暂无未关联成员" size="small">
+        <el-table :data="visibleUnboundMembers" empty-text="暂无未关联成员" size="small">
           <el-table-column label="提交身份" min-width="180" :show-overflow-tooltip="true">
-            <template #default="scope">{{ scope.row.authorName || scope.row.authorKey }}</template>
+            <template #default="scope">
+              <el-link type="primary" @click="focusMember(scope.row)">{{ scope.row.authorName || scope.row.authorKey }}</el-link>
+            </template>
           </el-table-column>
           <el-table-column label="提交次数" prop="commitCount" width="100" />
           <el-table-column label="被审变更数" prop="tasksReviewed" width="120" />
@@ -166,14 +263,21 @@ import echarts from '@/utils/echarts'
 import { getInsightMemberMine, getInsightTeamMembers } from '@/api/insight'
 import { bindTeamIdentity, listIdentityUserOptions } from '@/api/system/identity'
 import { checkPermi } from '@/utils/permission'
+import { loadInsightFilters, saveInsightFilters } from '../components/insightFilter'
 
 const router = useRouter()
 const loading = ref(false)
 const error = ref(false)
 const viewMode = ref('mine')
 const rangePreset = ref(7)
+const customRange = ref([])
 const mine = ref(null)
 const team = ref(null)
+const teamQuery = reactive({
+  businessSystemId: undefined,
+  projectId: undefined
+})
+const selectedAuthors = ref([])
 const visibleAuthors = reactive({})
 const mineChartRef = ref(null)
 const teamChartRef = ref(null)
@@ -187,8 +291,102 @@ const bindUserId = ref(null)
 const userOptions = ref([])
 const userLoading = ref(false)
 
+const teamProjectOptions = computed(() => {
+  const options = team.value?.projectOptions || []
+  if (!teamQuery.businessSystemId) return options
+  return options.filter(item => String(item.businessSystemId) === String(teamQuery.businessSystemId))
+})
+const teamBusinessSystems = computed(() => {
+  const seen = new Map()
+  ;(team.value?.projectOptions || []).forEach(item => {
+    if (item.businessSystemId == null || seen.has(String(item.businessSystemId))) return
+    seen.set(String(item.businessSystemId), { id: item.businessSystemId, label: item.businessSystemName || '--' })
+  })
+  return [...seen.values()].sort((a, b) => a.label.localeCompare(b.label))
+})
+const allTeamMembers = computed(() => [...(team.value?.members || []), ...(team.value?.unbound || [])])
+const visibleTeamMembers = computed(() => {
+  if (!selectedAuthors.value.length) return allTeamMembers.value
+  return allTeamMembers.value.filter(member => selectedAuthors.value.includes(member.authorKey))
+})
+const visibleBoundMembers = computed(() => visibleTeamMembers.value.filter(member => member.userId != null))
+const visibleUnboundMembers = computed(() => visibleTeamMembers.value.filter(member => member.userId == null))
+const teamTotals = computed(() => visibleTeamMembers.value.reduce((total, member) => ({
+  commits: total.commits + numberOf(member.commitCount),
+  tasks: total.tasks + numberOf(member.tasksReviewed),
+  additions: total.additions + numberOf(member.additionsSum),
+  deletions: total.deletions + numberOf(member.deletionsSum),
+  issuesNew: total.issuesNew + numberOf(member.issuesNew),
+  issuesOpen: total.issuesOpen + numberOf(member.issuesOpen)
+}), { commits: 0, tasks: 0, additions: 0, deletions: 0, issuesNew: 0, issuesOpen: 0 }))
+const teamKpis = computed(() => [
+  { key: 'members', label: '成员数', value: visibleTeamMembers.value.length },
+  { key: 'commits', label: '提交次数', value: teamTotals.value.commits },
+  { key: 'tasks', label: '被审变更数', value: teamTotals.value.tasks },
+  { key: 'additions', label: '新增行数', value: teamTotals.value.additions, className: 'kpi-add' },
+  { key: 'issuesNew', label: '关联新增问题', value: teamTotals.value.issuesNew },
+  { key: 'issuesOpen', label: '未关闭问题', value: teamTotals.value.issuesOpen, className: 'kpi-warn' }
+])
+const teamScopeLabel = computed(() => {
+  const system = teamBusinessSystems.value.find(item => String(item.id) === String(teamQuery.businessSystemId))
+  const project = (team.value?.projectOptions || []).find(item => String(item.projectId) === String(teamQuery.projectId))
+  const scope = [system?.label, project?.projectName].filter(Boolean)
+  const range = rangePreset.value === 'custom' && customRange.value.length === 2
+    ? `${customRange.value[0]} 至 ${customRange.value[1]}`
+    : `近 ${Number(rangePreset.value) || 7} 天`
+  return `当前范围：${scope.length ? scope.join(' / ') : '全部授权项目'} · ${range}`
+})
+
+function numberOf(value) {
+  return Number(value) || 0
+}
+
+function memberLabel(member) {
+  const name = member.authorName || member.authorKey
+  return member.userId == null ? `${name}（未关联）` : name
+}
+
 function params() {
+  return rangeParams()
+}
+
+function rangeParams() {
+  if (rangePreset.value === 'custom' && customRange.value?.length === 2) {
+    return { beginDate: customRange.value[0], endDate: customRange.value[1] }
+  }
   return { days: Number(rangePreset.value) || 7 }
+}
+
+function teamParams() {
+  return {
+    ...rangeParams(),
+    businessSystemId: teamQuery.businessSystemId,
+    projectId: teamQuery.projectId
+  }
+}
+
+function onRangeChange() {
+  if (viewMode.value === 'mine' && rangePreset.value !== 'custom') reload()
+}
+
+function onTeamSystemChange() {
+  if (teamQuery.projectId && !teamProjectOptions.value.some(item => String(item.projectId) === String(teamQuery.projectId))) {
+    teamQuery.projectId = undefined
+  }
+}
+
+function resetTeamFilters() {
+  rangePreset.value = 7
+  customRange.value = []
+  teamQuery.businessSystemId = undefined
+  teamQuery.projectId = undefined
+  selectedAuthors.value = []
+  reload()
+}
+
+function focusMember(member) {
+  selectedAuthors.value = [member.authorKey]
+  nextTick(renderTeamChart)
 }
 
 function goBindEmail() {
@@ -198,6 +396,15 @@ function goBindEmail() {
 async function reload() {
   loading.value = true
   error.value = false
+  if (viewMode.value === 'team') {
+    saveInsightFilters('member', {
+      rangePreset: rangePreset.value,
+      customRange: customRange.value,
+      businessSystemId: teamQuery.businessSystemId,
+      projectId: teamQuery.projectId,
+      selectedAuthors: selectedAuthors.value
+    })
+  }
   try {
     if (viewMode.value === 'mine') {
       const res = await getInsightMemberMine(params())
@@ -205,11 +412,12 @@ async function reload() {
       await nextTick()
       renderMineChart()
     } else {
-      const res = await getInsightTeamMembers(params())
+      const res = await getInsightTeamMembers(teamParams())
       team.value = res.data
-      ;(team.value?.members || []).forEach(m => {
+      ;allTeamMembers.value.forEach(m => {
         if (visibleAuthors[m.authorKey] === undefined) visibleAuthors[m.authorKey] = true
       })
+      selectedAuthors.value = selectedAuthors.value.filter(key => allTeamMembers.value.some(m => m.authorKey === key))
       await nextTick()
       renderTeamChart()
     }
@@ -265,10 +473,7 @@ function renderMineChart() {
 function renderTeamChart() {
   if (!teamChartRef.value) return
   if (!teamChart) teamChart = echarts.init(teamChartRef.value)
-  // 图例仍只切换已关联成员；未关联成员始终入图，与 stackedTrend 全量口径一致
-  const bound = (team.value?.members || []).filter(m => visibleAuthors[m.authorKey] !== false)
-  const unbound = team.value?.unbound || []
-  const chartMembers = [...bound, ...unbound]
+  const chartMembers = visibleTeamMembers.value.filter(m => visibleAuthors[m.authorKey] !== false)
   const dates = new Set()
   chartMembers.forEach(m => (m.commitTrend || []).forEach(p => dates.add(p.date)))
   const sortedDates = [...dates].sort()
@@ -291,7 +496,17 @@ function renderTeamChart() {
 }
 
 watch(viewMode, reload)
-onMounted(reload)
+onMounted(async () => {
+  const remembered = loadInsightFilters('member')
+  if (remembered) {
+    rangePreset.value = remembered.rangePreset ?? 7
+    customRange.value = remembered.customRange || []
+    teamQuery.businessSystemId = remembered.businessSystemId
+    teamQuery.projectId = remembered.projectId
+    selectedAuthors.value = remembered.selectedAuthors || []
+  }
+  await reload()
+})
 onBeforeUnmount(() => {
   mineChart?.dispose()
   teamChart?.dispose()
@@ -300,6 +515,11 @@ onBeforeUnmount(() => {
 
 <style scoped lang="scss">
 .toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 16px; }
+.toolbar-hint { color: var(--text-secondary, #64748b); font-size: 13px; }
+.filter-label { color: var(--text-regular, #334155); font-size: 13px; }
+.insight-filters { margin-bottom: 16px; }
+.scope-meta { color: var(--text-secondary, #64748b); font-size: 13px; margin: 0 0 16px; }
+.kpi-row { margin-bottom: 4px; }
 .mr16 { margin-right: 16px; }
 .mb16 { margin-bottom: 16px; }
 .mt16 { margin-top: 16px; }
@@ -319,6 +539,7 @@ onBeforeUnmount(() => {
 .kpi-value { margin-top: 6px; font-size: 24px; font-weight: 600; color: var(--text-primary, #0f172a); }
 .kpi-add { color: #2f7650; }
 .kpi-del { color: #c2413a; }
+.kpi-warn { color: #946200; }
 .line-add { color: #2f7650; font-variant-numeric: tabular-nums; }
 .line-del { color: #c2413a; font-variant-numeric: tabular-nums; }
 .chart-panel, .unbound-panel {

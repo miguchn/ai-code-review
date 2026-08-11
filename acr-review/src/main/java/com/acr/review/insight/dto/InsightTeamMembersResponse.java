@@ -10,6 +10,7 @@ public class InsightTeamMembersResponse
     private String metricsVersion;
     private String dataSince;
     private String disclaimer = "用于团队管理与辅导，不作为绩效评价直接输入";
+    private List<InsightTeamProjectOption> projectOptions = new ArrayList<>();
     private List<InsightTeamMemberRow> members = new ArrayList<>();
     private List<InsightTeamMemberRow> unbound = new ArrayList<>();
     private List<InsightCommitTrendPoint> stackedTrend = new ArrayList<>();
@@ -62,6 +63,16 @@ public class InsightTeamMembersResponse
     public void setDisclaimer(String disclaimer)
     {
         this.disclaimer = disclaimer;
+    }
+
+    public List<InsightTeamProjectOption> getProjectOptions()
+    {
+        return projectOptions;
+    }
+
+    public void setProjectOptions(List<InsightTeamProjectOption> projectOptions)
+    {
+        this.projectOptions = projectOptions;
     }
 
     public List<InsightTeamMemberRow> getMembers()

@@ -104,6 +104,19 @@
                     #{k}
                 </foreach>
             </if>
+            <if test="projectIds != null">
+                <choose>
+                    <when test="projectIds.size() &gt; 0">
+                        AND project_id IN
+                        <foreach collection="projectIds" item="pid" open="(" separator="," close=")">
+                            #{pid}
+                        </foreach>
+                    </when>
+                    <otherwise>
+                        AND 1 = 0
+                    </otherwise>
+                </choose>
+            </if>
         </where>
     </select>
 </mapper>

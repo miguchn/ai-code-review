@@ -36,6 +36,7 @@ import com.acr.review.insight.dto.InsightProjectRow;
 import com.acr.review.insight.dto.InsightTeamIdentitiesResponse;
 import com.acr.review.insight.dto.InsightTeamMemberRow;
 import com.acr.review.insight.dto.InsightTeamMembersResponse;
+import com.acr.review.insight.dto.InsightTeamProjectOption;
 import com.acr.review.insight.dto.InsightTrendPoint;
 import com.acr.review.insight.dto.InsightUnboundIdentity;
 import com.acr.review.insight.dto.InsightUserOption;
@@ -279,10 +280,10 @@ public class ReviewInsightServiceImpl implements IReviewInsightService
             resp.getClaimedIdentities().add(new InsightIdentityCandidate(
                 key, identity.getDisplayName(), key));
         }
-        resp.setDataSince(formatDate(memberStatsMapper.selectEarliestStatDate(authorKeys)));
+        resp.setDataSince(formatDate(memberStatsMapper.selectEarliestStatDate(authorKeys, null)));
         List<Map<String, Object>> trend = commitFactMapper.selectCommitTrendByAuthorKeys(
             authorKeys, Date.valueOf(range.getBegin()), Date.valueOf(range.getEnd()), null);
-        resp.setCommitTrend(mergeTrendByDay(toCommitTrend(trend)));
+        resp.setCommitTrend(fillCommitTrendGaps(mergeTrendByDay(toCommitTrend(trend)), range, null));
         List<Map<String, Object>> agg = memberStatsMapper.selectMemberAgg(
             Date.valueOf(range.getBegin()), Date.valueOf(range.getEnd()), authorKeys, null);
         int tasks = 0;
@@ -313,7 +314,7 @@ public class ReviewInsightServiceImpl implements IReviewInsightService
 
     @Override
     public InsightTeamMembersResponse getTeamMembers(String beginDate, String endDate, Integer days,
-                                                     Long businessSystemId)
+                                                     Long businessSystemId, Long projectId)
     {
         InsightRange range = InsightRange.of(beginDate, endDate, days);
         ReviewProject projectFilter = new ReviewProject();
@@ -321,7 +322,17 @@ public class ReviewInsightServiceImpl implements IReviewInsightService
         {
             projectFilter.setBusinessSystemId(businessSystemId);
         }
+        if (projectId != null)
+        {
+            projectFilter.setProjectId(projectId);
+        }
         List<ReviewProject> projects = scopeQueries.selectProjectsTeam(projectFilter);
+        List<ReviewProject> projectOptions = projects;
+        if (businessSystemId != null || projectId != null)
+        {
+            // 筛选结果与下拉选项分离；选项仍只来自当前用户可见的项目范围。
+            projectOptions = scopeQueries.selectProjectsTeam(new ReviewProject());
+        }
         List<Long> projectIds = projects.stream().map(ReviewProject::getProjectId).collect(Collectors.toList());
 
         ReviewMemberStatsDaily query = new ReviewMemberStatsDaily();
@@ -330,6 +341,10 @@ public class ReviewInsightServiceImpl implements IReviewInsightService
         if (businessSystemId != null)
         {
             query.getParams().put("businessSystemId", businessSystemId);
+        }
+        if (projectId != null)
+        {
+            query.getParams().put("projectId", projectId);
         }
         List<ReviewMemberStatsDaily> dailyRows = scopeQueries.selectMemberStatsTeam(query);
 
@@ -407,26 +422,30 @@ public class ReviewInsightServiceImpl implements IReviewInsightService
                 merged.addAll(byAuthor.getOrDefault(key, List.of()));
             }
             List<InsightCommitTrendPoint> dayMerged = mergeTrendByDay(merged);
-            for (InsightCommitTrendPoint p : dayMerged)
-            {
-                p.setAuthorKey(member.getAuthorKey());
-            }
-            member.setCommitTrend(dayMerged);
-            stackedTrend.addAll(dayMerged);
+            List<InsightCommitTrendPoint> filled = fillCommitTrendGaps(dayMerged, range, member.getAuthorKey());
+            member.setCommitTrend(filled);
+            stackedTrend.addAll(filled);
         }
         for (InsightTeamMemberRow member : unboundMembers.values())
         {
             List<InsightCommitTrendPoint> points = byAuthor.getOrDefault(member.getAuthorKey(), List.of());
-            member.setCommitTrend(points);
-            // 未关联成员保留原始 authorKey，并入全量 stackedTrend
-            stackedTrend.addAll(points);
+            // 未关联成员保留原始 authorKey，区间补零后并入全量 stackedTrend
+            List<InsightCommitTrendPoint> filled = fillCommitTrendGaps(points, range, member.getAuthorKey());
+            member.setCommitTrend(filled);
+            stackedTrend.addAll(filled);
         }
 
         InsightTeamMembersResponse resp = new InsightTeamMembersResponse();
         resp.setBeginDate(range.beginText());
         resp.setEndDate(range.endText());
         resp.setMetricsVersion(metricsVersion());
-        resp.setDataSince(formatDate(memberStatsMapper.selectEarliestStatDate(null)));
+        resp.setDataSince(formatDate(memberStatsMapper.selectEarliestStatDate(null, projectIds)));
+        resp.setProjectOptions(projectOptions.stream()
+            .map(project -> new InsightTeamProjectOption(project.getProjectId(), project.getProjectName(),
+                project.getBusinessSystemId(), project.getBusinessSystemName()))
+            .sorted(Comparator.comparing(InsightTeamProjectOption::getProjectName,
+                Comparator.nullsFirst(String::compareToIgnoreCase)))
+            .collect(Collectors.toList()));
         resp.setMembers(boundMembers.values().stream()
             .sorted(Comparator.comparing(InsightTeamMemberRow::getCommitCount,
                 Comparator.nullsFirst(Integer::compareTo)).reversed())
@@ -602,6 +621,40 @@ public class ReviewInsightServiceImpl implements IReviewInsightService
         }
         merged.sort(Comparator.comparing(InsightCommitTrendPoint::getDate));
         return merged;
+    }
+
+    /**
+     * 按 InsightRange 的 begin..end 生成连续日期序列，缺失日期 commitCount=0（对齐 WorkbenchTrend）。
+     * authorKey 写入整段序列，保证成员趋势与 stackedTrend 口径一致。
+     */
+    static List<InsightCommitTrendPoint> fillCommitTrendGaps(List<InsightCommitTrendPoint> points,
+                                                             InsightRange range, String authorKey)
+    {
+        Map<String, Integer> byDay = new HashMap<>();
+        if (points != null)
+        {
+            for (InsightCommitTrendPoint p : points)
+            {
+                if (p == null || p.getDate() == null)
+                {
+                    continue;
+                }
+                byDay.merge(p.getDate(), n(p.getCommitCount()), Integer::sum);
+            }
+        }
+        List<InsightCommitTrendPoint> filled = new ArrayList<>();
+        for (LocalDate day = range.getBegin(); !day.isAfter(range.getEnd()); day = day.plusDays(1))
+        {
+            InsightCommitTrendPoint point = new InsightCommitTrendPoint();
+            point.setDate(day.format(DAY));
+            point.setCommitCount(byDay.getOrDefault(point.getDate(), 0));
+            if (authorKey != null)
+            {
+                point.setAuthorKey(authorKey);
+            }
+            filled.add(point);
+        }
+        return filled;
     }
 
     private static String str(Object value)

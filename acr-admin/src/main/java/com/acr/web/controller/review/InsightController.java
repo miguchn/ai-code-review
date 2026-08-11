@@ -98,9 +98,10 @@ public class InsightController extends BaseController
     public AjaxResult teamMembers(@RequestParam(required = false) String beginDate,
                                   @RequestParam(required = false) String endDate,
                                   @RequestParam(required = false) Integer days,
-                                  @RequestParam(required = false) Long businessSystemId)
+                                  @RequestParam(required = false) Long businessSystemId,
+                                  @RequestParam(required = false) Long projectId)
     {
-        return success(insightService.getTeamMembers(beginDate, endDate, days, businessSystemId));
+        return success(insightService.getTeamMembers(beginDate, endDate, days, businessSystemId, projectId));
     }
 
     @PreAuthorize("@ss.hasPermi('" + InsightConstants.PERM_IDENTITY_MANAGE + "')")

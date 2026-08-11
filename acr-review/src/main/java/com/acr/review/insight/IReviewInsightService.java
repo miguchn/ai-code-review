@@ -25,7 +25,8 @@ public interface IReviewInsightService
 
     InsightMemberMineResponse getMemberMine(String beginDate, String endDate, Integer days);
 
-    InsightTeamMembersResponse getTeamMembers(String beginDate, String endDate, Integer days, Long businessSystemId);
+    InsightTeamMembersResponse getTeamMembers(String beginDate, String endDate, Integer days,
+                                              Long businessSystemId, Long projectId);
 
     List<InsightIdentityCandidateVo> listIdentityCandidates();
 

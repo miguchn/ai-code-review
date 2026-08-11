@@ -105,6 +105,41 @@ class MemberIdentityMergeTest
         assertEquals(2, stackedTrend.size());
     }
 
+    @Test
+    void fillCommitTrendGaps_singleDayInSevenDayRange()
+    {
+        InsightRange range = InsightRange.of("2026-08-01", "2026-08-07", null);
+        List<InsightCommitTrendPoint> filled = ReviewInsightServiceImpl.fillCommitTrendGaps(
+            List.of(point("user:10", "2026-08-04", 1)), range, "user:10");
+
+        assertEquals(7, filled.size());
+        assertEquals("2026-08-01", filled.get(0).getDate());
+        assertEquals("2026-08-07", filled.get(6).getDate());
+        for (int i = 0; i < filled.size(); i++)
+        {
+            InsightCommitTrendPoint p = filled.get(i);
+            assertEquals("user:10", p.getAuthorKey());
+            assertEquals(i == 3 ? 1 : 0, p.getCommitCount().intValue());
+        }
+    }
+
+    @Test
+    void fillCommitTrendGaps_emptyDataYieldsAllZeros()
+    {
+        InsightRange range = InsightRange.of("2026-08-01", "2026-08-07", null);
+        List<InsightCommitTrendPoint> filled = ReviewInsightServiceImpl.fillCommitTrendGaps(
+            List.of(), range, "orphan@x.com");
+
+        assertEquals(7, filled.size());
+        for (InsightCommitTrendPoint p : filled)
+        {
+            assertEquals(0, p.getCommitCount().intValue());
+            assertEquals("orphan@x.com", p.getAuthorKey());
+        }
+        assertEquals("2026-08-01", filled.get(0).getDate());
+        assertEquals("2026-08-07", filled.get(6).getDate());
+    }
+
     private static InsightCommitTrendPoint point(String authorKey, String date, int count)
     {
         InsightCommitTrendPoint p = new InsightCommitTrendPoint();

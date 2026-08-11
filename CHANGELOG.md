@@ -79,6 +79,7 @@
 
 ### 缺陷修复
 
+- 修复失败简讯投递触发来源错标「任务回写」：任务失败后的 IM 失败简讯在投递记录中 `trigger_source` 被硬编码为 `TASK_SUCCESS`，误导排查与按触发来源的统计；改按任务终态分流（SUCCESS→TASK_SUCCESS / FAILED→TASK_FAILED），字典增「任务失败通知」（脚本 `sql/44_trigger_source_failed.sql`），历史数据不回填
 - 修复项目管理中 Webhook Secret 配置状态恒显示"未配置"：列表/详情 SQL 按安全设计不读取密文列，原 `fillWebhookView` 却用恒为空的密文字段判断配置状态；改为 `projectSelect` 直接输出布尔列 `webhook_secret_configured`（列表与详情同步修正），密文不出服务端的边界不变
 - 修复问题台账「当前活跃」视图列表接口 500：activeFlag 的 OGNL 比较中 `'Y'`/`'1'` 单字符字面量被解析为 Character，与 String 参数比较触发数字转换抛 NumberFormatException；改为 `.toString()` 比较后恢复
 
