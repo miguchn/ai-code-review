@@ -78,7 +78,7 @@
 <script setup name="InsightProject">
 import { getReviewProjectOptions } from '@/api/review/project'
 import { listInsightProjects } from '@/api/insight'
-import { formatRatio, loadInsightFilters, saveInsightFilters, toIdParam } from '../components/insightFilter'
+import { formatRatio, loadInsightFilters, saveInsightFilters, toIdParam, toRangePreset, toDateRangeParam } from '../components/insightFilter'
 
 const router = useRouter()
 
@@ -101,8 +101,8 @@ function onPresetChange() {
 
 function buildParams() {
   const params = {
-    businessSystemId: query.businessSystemId,
-    projectId: query.projectId,
+    businessSystemId: toIdParam(query.businessSystemId),
+    projectId: toIdParam(query.projectId),
     orderBy: orderBy.value
   }
   if (rangePreset.value === 'custom' && customRange.value?.length === 2) {
@@ -171,8 +171,8 @@ async function loadData() {
 onMounted(async () => {
   const remembered = loadInsightFilters('project')
   if (remembered) {
-    rangePreset.value = remembered.rangePreset ?? 7
-    customRange.value = remembered.customRange || []
+    rangePreset.value = toRangePreset(remembered.rangePreset)
+    customRange.value = toDateRangeParam(remembered.customRange)
     query.businessSystemId = toIdParam(remembered.businessSystemId)
     query.projectId = toIdParam(remembered.projectId)
   }

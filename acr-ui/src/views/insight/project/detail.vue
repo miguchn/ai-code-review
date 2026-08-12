@@ -11,11 +11,12 @@
           <span v-if="data?.metricsVersion">· 口径 {{ data.metricsVersion }}</span>
         </div>
       </div>
-      <el-form :inline="true" :model="query">
+      <el-form :inline="true">
         <el-form-item label="时间范围">
           <el-radio-group v-model="rangePreset" @change="loadData">
             <el-radio-button :value="7">近 7 天</el-radio-button>
             <el-radio-button :value="30">近 30 天</el-radio-button>
+            <el-radio-button v-if="customRange.length === 2" value="custom" disabled>自定义区间</el-radio-button>
           </el-radio-group>
         </el-form-item>
       </el-form>
@@ -85,7 +86,9 @@
           <section class="chart-panel">
             <header class="panel-head"><h3>严重度分布</h3></header>
             <el-table :data="data?.severityDistribution || []" size="small">
-              <el-table-column label="严重度" prop="name" />
+              <el-table-column label="严重度">
+                <template #default="scope">{{ severityLabel(scope.row.name) }}</template>
+              </el-table-column>
               <el-table-column label="数量" prop="count" width="80" />
             </el-table>
           </section>
@@ -94,7 +97,9 @@
           <section class="chart-panel">
             <header class="panel-head"><h3>类别分布</h3></header>
             <el-table :data="data?.categoryDistribution || []" size="small" empty-text="暂无">
-              <el-table-column label="类别" prop="name" :show-overflow-tooltip="true" />
+              <el-table-column label="类别" :show-overflow-tooltip="true">
+                <template #default="scope">{{ issueCategoryLabel(scope.row.name) }}</template>
+              </el-table-column>
               <el-table-column label="数量" prop="count" width="80" />
             </el-table>
           </section>
@@ -117,7 +122,8 @@
 <script setup name="InsightProjectDetail">
 import echarts from '@/utils/echarts'
 import { getInsightProjectDetail } from '@/api/insight'
-import { formatChange, formatKpiValue } from '../components/insightFilter'
+import { issueCategoryLabel, severityLabel } from '@/utils/reviewDisplay'
+import { formatChange, formatKpiValue, toRangePreset } from '../components/insightFilter'
 
 const route = useRoute()
 const router = useRouter()
@@ -126,7 +132,17 @@ const projectId = computed(() => route.params.projectId)
 const loading = ref(false)
 const error = ref(false)
 const data = ref(null)
-const rangePreset = ref(Number(route.query.days) || 7)
+const DATE_QUERY_PATTERN = /^\d{4}-\d{2}-\d{2}$/
+function isValidDateParam(value) {
+  return typeof value === 'string' && DATE_QUERY_PATTERN.test(value)
+}
+// 列表页自定义区间下钻：query 带合法 beginDate/endDate 时优先沿用（原实现被 rangePreset 恒真吞掉）
+const customRange = isValidDateParam(route.query.beginDate) && isValidDateParam(route.query.endDate)
+  ? [route.query.beginDate, route.query.endDate]
+  : []
+const rangePreset = ref(route.query.days
+  ? toRangePreset(Number(route.query.days))
+  : (customRange.length === 2 ? 'custom' : 7))
 const taskChartRef = ref(null)
 const issueChartRef = ref(null)
 const commitChartRef = ref(null)
@@ -144,10 +160,10 @@ function goBack() {
 }
 
 function buildParams() {
-  if (route.query.beginDate && route.query.endDate && !rangePreset.value) {
-    return { beginDate: route.query.beginDate, endDate: route.query.endDate }
+  if (rangePreset.value === 'custom' && customRange.length === 2) {
+    return { beginDate: customRange[0], endDate: customRange[1] }
   }
-  return { days: Number(rangePreset.value) || 7 }
+  return { days: rangePreset.value === 30 ? 30 : 7 }
 }
 
 async function loadData() {
@@ -156,11 +172,12 @@ async function loadData() {
   try {
     const res = await getInsightProjectDetail(projectId.value, buildParams())
     data.value = res.data
+    // 先翻转 loading 再渲染：骨架 v-if 会移除图表容器，须等容器挂载后渲染
+    loading.value = false
     await nextTick()
     renderCharts()
   } catch (e) {
     error.value = true
-  } finally {
     loading.value = false
   }
 }
@@ -169,10 +186,17 @@ function cssVar(name) {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim()
 }
 
+/** loading 骨架会销毁图表容器，旧实例不可复用：DOM 变化或已 dispose 时重建 */
+function ensureChart(existing, el) {
+  if (existing && !existing.isDisposed() && existing.getDom() === el) return existing
+  if (existing && !existing.isDisposed()) existing.dispose()
+  return echarts.init(el)
+}
+
 function renderCharts() {
   const taskPts = data.value?.taskTrend || []
   if (taskChartRef.value) {
-    if (!charts.task) charts.task = echarts.init(taskChartRef.value)
+    charts.task = ensureChart(charts.task, taskChartRef.value)
     charts.task.setOption({
       legend: { top: 0, left: 0 },
       grid: { top: 36, left: 8, right: 12, bottom: 0, containLabel: true },
@@ -187,7 +211,7 @@ function renderCharts() {
   }
   const issuePts = data.value?.issueTrend || []
   if (issueChartRef.value) {
-    if (!charts.issue) charts.issue = echarts.init(issueChartRef.value)
+    charts.issue = ensureChart(charts.issue, issueChartRef.value)
     charts.issue.setOption({
       legend: { top: 0, left: 0 },
       grid: { top: 36, left: 8, right: 12, bottom: 0, containLabel: true },
@@ -195,16 +219,16 @@ function renderCharts() {
       xAxis: { type: 'category', data: issuePts.map(p => String(p.date).slice(5)) },
       yAxis: { type: 'value', minInterval: 1 },
       series: [
-        { name: 'CRITICAL', type: 'bar', stack: 'i', data: issuePts.map(p => p.critical), itemStyle: { color: '#B91C1C' } },
-        { name: 'HIGH', type: 'bar', stack: 'i', data: issuePts.map(p => p.high), itemStyle: { color: '#C2410C' } },
-        { name: 'MEDIUM', type: 'bar', stack: 'i', data: issuePts.map(p => p.medium), itemStyle: { color: '#A16207' } },
-        { name: 'LOW', type: 'bar', stack: 'i', data: issuePts.map(p => p.low), itemStyle: { color: '#64748B' } }
+        { name: severityLabel('CRITICAL'), type: 'bar', stack: 'i', data: issuePts.map(p => p.critical), itemStyle: { color: '#B91C1C' } },
+        { name: severityLabel('HIGH'), type: 'bar', stack: 'i', data: issuePts.map(p => p.high), itemStyle: { color: '#C2410C' } },
+        { name: severityLabel('MEDIUM'), type: 'bar', stack: 'i', data: issuePts.map(p => p.medium), itemStyle: { color: '#A16207' } },
+        { name: severityLabel('LOW'), type: 'bar', stack: 'i', data: issuePts.map(p => p.low), itemStyle: { color: '#64748B' } }
       ]
     }, true)
   }
   const commitPts = data.value?.commitTrend || []
   if (commitChartRef.value) {
-    if (!charts.commit) charts.commit = echarts.init(commitChartRef.value)
+    charts.commit = ensureChart(charts.commit, commitChartRef.value)
     charts.commit.setOption({
       grid: { top: 24, left: 8, right: 12, bottom: 0, containLabel: true },
       tooltip: { trigger: 'axis' },
@@ -232,9 +256,32 @@ function exportChart(key) {
   a.click()
 }
 
-onMounted(loadData)
+onMounted(() => {
+  bindResize()
+  loadData()
+})
 watch(projectId, loadData)
+
+function resizeCharts() {
+  Object.values(charts).forEach(c => c && !c.isDisposed() && c.resize())
+}
+
+/** keep-alive 缓存期容器被 detach，resize 会把画布打成 0×0：激活时重绑并自愈，停用时摘除 */
+function bindResize() {
+  window.removeEventListener('resize', resizeCharts)
+  window.addEventListener('resize', resizeCharts)
+}
+
+onActivated(() => {
+  bindResize()
+  nextTick(resizeCharts)
+})
+onDeactivated(() => {
+  window.removeEventListener('resize', resizeCharts)
+})
+
 onBeforeUnmount(() => {
+  window.removeEventListener('resize', resizeCharts)
   Object.keys(charts).forEach(k => {
     charts[k]?.dispose()
     charts[k] = null

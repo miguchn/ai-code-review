@@ -263,7 +263,7 @@ import echarts from '@/utils/echarts'
 import { getInsightMemberMine, getInsightTeamMembers } from '@/api/insight'
 import { bindTeamIdentity, listIdentityUserOptions } from '@/api/system/identity'
 import { checkPermi } from '@/utils/permission'
-import { loadInsightFilters, saveInsightFilters, toIdParam } from '../components/insightFilter'
+import { loadInsightFilters, saveInsightFilters, toIdParam, toRangePreset, toDateRangeParam, toStringArrayParam } from '../components/insightFilter'
 
 const router = useRouter()
 const loading = ref(false)
@@ -393,7 +393,11 @@ function goBindEmail() {
   router.push({ name: 'Profile', params: { activeTab: 'commitEmail' } })
 }
 
+// 请求序号守卫：快速切换视图/连续查询时丢弃过期响应，防止旧载荷覆盖新状态
+let reloadSeq = 0
+
 async function reload() {
+  const seq = ++reloadSeq
   loading.value = true
   error.value = false
   if (viewMode.value === 'team') {
@@ -408,22 +412,26 @@ async function reload() {
   try {
     if (viewMode.value === 'mine') {
       const res = await getInsightMemberMine(params())
+      if (seq !== reloadSeq) return
       mine.value = res.data
-      await nextTick()
-      renderMineChart()
     } else {
       const res = await getInsightTeamMembers(teamParams())
+      if (seq !== reloadSeq) return
       team.value = res.data
       ;allTeamMembers.value.forEach(m => {
         if (visibleAuthors[m.authorKey] === undefined) visibleAuthors[m.authorKey] = true
       })
       selectedAuthors.value = selectedAuthors.value.filter(key => allTeamMembers.value.some(m => m.authorKey === key))
-      await nextTick()
-      renderTeamChart()
     }
+    // 先翻转 loading 再渲染：骨架 v-if 会移除图表容器，须等容器挂载后渲染
+    loading.value = false
+    await nextTick()
+    if (seq !== reloadSeq) return
+    if (viewMode.value === 'mine') renderMineChart()
+    else renderTeamChart()
   } catch (e) {
+    if (seq !== reloadSeq) return
     error.value = true
-  } finally {
     loading.value = false
   }
 }
@@ -457,9 +465,16 @@ async function confirmBind() {
   await reload()
 }
 
+/** loading 骨架会销毁图表容器，旧实例不可复用：DOM 变化或已 dispose 时重建 */
+function ensureChart(existing, el) {
+  if (existing && !existing.isDisposed() && existing.getDom() === el) return existing
+  if (existing && !existing.isDisposed()) existing.dispose()
+  return echarts.init(el)
+}
+
 function renderMineChart() {
   if (!mineChartRef.value) return
-  if (!mineChart) mineChart = echarts.init(mineChartRef.value)
+  mineChart = ensureChart(mineChart, mineChartRef.value)
   const pts = mine.value?.commitTrend || []
   mineChart.setOption({
     grid: { top: 24, left: 8, right: 12, bottom: 0, containLabel: true },
@@ -472,7 +487,7 @@ function renderMineChart() {
 
 function renderTeamChart() {
   if (!teamChartRef.value) return
-  if (!teamChart) teamChart = echarts.init(teamChartRef.value)
+  teamChart = ensureChart(teamChart, teamChartRef.value)
   const chartMembers = visibleTeamMembers.value.filter(m => visibleAuthors[m.authorKey] !== false)
   const dates = new Set()
   chartMembers.forEach(m => (m.commitTrend || []).forEach(p => dates.add(p.date)))
@@ -495,21 +510,49 @@ function renderTeamChart() {
   }, true)
 }
 
-watch(viewMode, reload)
+watch(viewMode, () => {
+  // 切换视图即销毁旧图实例，避免僵尸 canvas 跨视图复用
+  if (mineChart && !mineChart.isDisposed()) mineChart.dispose()
+  if (teamChart && !teamChart.isDisposed()) teamChart.dispose()
+  mineChart = null
+  teamChart = null
+  reload()
+})
 onMounted(async () => {
+  bindResize()
   const remembered = loadInsightFilters('member')
   if (remembered) {
-    rangePreset.value = remembered.rangePreset ?? 7
-    customRange.value = remembered.customRange || []
+    rangePreset.value = toRangePreset(remembered.rangePreset)
+    customRange.value = toDateRangeParam(remembered.customRange)
     teamQuery.businessSystemId = toIdParam(remembered.businessSystemId)
     teamQuery.projectId = toIdParam(remembered.projectId)
-    selectedAuthors.value = remembered.selectedAuthors || []
+    selectedAuthors.value = toStringArrayParam(remembered.selectedAuthors)
   }
   await reload()
 })
+function resizeCharts() {
+  if (mineChart && !mineChart.isDisposed()) mineChart.resize()
+  if (teamChart && !teamChart.isDisposed()) teamChart.resize()
+}
+
+/** keep-alive 缓存期监听会被容器 detach 打成 0×0：激活时重绑并自愈，停用时摘除 */
+function bindResize() {
+  window.removeEventListener('resize', resizeCharts)
+  window.addEventListener('resize', resizeCharts)
+}
+
+onActivated(() => {
+  bindResize()
+  nextTick(resizeCharts)
+})
+onDeactivated(() => {
+  window.removeEventListener('resize', resizeCharts)
+})
+
 onBeforeUnmount(() => {
-  mineChart?.dispose()
-  teamChart?.dispose()
+  window.removeEventListener('resize', resizeCharts)
+  if (mineChart && !mineChart.isDisposed()) mineChart.dispose()
+  if (teamChart && !teamChart.isDisposed()) teamChart.dispose()
 })
 </script>
 

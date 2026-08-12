@@ -29,6 +29,28 @@ export function toIdParam(value) {
   return Number.isFinite(n) && n > 0 ? n : undefined
 }
 
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
+
+/** 本地缓存恢复的自定义区间净化：只接受两个 yyyy-MM-dd 字符串 */
+export function toDateRangeParam(value) {
+  if (!Array.isArray(value) || value.length !== 2) return []
+  const [begin, end] = value
+  return typeof begin === 'string' && DATE_PATTERN.test(begin)
+    && typeof end === 'string' && DATE_PATTERN.test(end) ? [begin, end] : []
+}
+
+/** 时间预设净化：只接受 7 / 30 / 'custom'，其余（含小数/字符串污染）归一为 7 */
+export function toRangePreset(value) {
+  if (value === 'custom') return 'custom'
+  const n = Number(value)
+  return n === 7 || n === 30 ? n : 7
+}
+
+/** 成员筛选净化：只接受非空字符串数组 */
+export function toStringArrayParam(value) {
+  return Array.isArray(value) ? value.filter(item => typeof item === 'string' && item !== '') : []
+}
+
 export function formatRatio(value) {
   if (value == null || Number.isNaN(value)) return '--'
   return (Number(value) * 100).toFixed(1) + '%'

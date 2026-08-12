@@ -97,7 +97,11 @@
           <section class="chart-panel">
             <header class="panel-head"><h3>交付渠道健康</h3></header>
             <el-table :data="data?.deliveryHealth || []" size="small" empty-text="暂无投递数据">
-              <el-table-column label="渠道" prop="channel" min-width="160" :show-overflow-tooltip="true" />
+              <el-table-column label="渠道" min-width="160" :show-overflow-tooltip="true">
+                <template #default="scope">
+                  <dict-tag :options="review_delivery_channel" :value="scope.row.channel" />
+                </template>
+              </el-table-column>
               <el-table-column label="尝试" prop="total" width="80" />
               <el-table-column label="成功" prop="success" width="80" />
               <el-table-column label="成功率" width="100">
@@ -123,16 +127,21 @@
 import echarts from '@/utils/echarts'
 import { getReviewProjectOptions } from '@/api/review/project'
 import { getInsightMetricsDict, getInsightOverview } from '@/api/insight'
+import { issueCategoryLabel, severityLabel } from '@/utils/reviewDisplay'
 import {
   formatChange,
   formatKpiValue,
   formatRatio,
   loadInsightFilters,
   saveInsightFilters,
-  toIdParam
+  toIdParam,
+  toRangePreset,
+  toDateRangeParam
 } from '../components/insightFilter'
 
 const loading = ref(false)
+const { proxy } = getCurrentInstance()
+const { review_delivery_channel } = proxy.useDict('review_delivery_channel')
 const error = ref(false)
 const data = ref(null)
 const businessSystems = ref([])
@@ -165,10 +174,10 @@ function buildParams() {
     return {
       beginDate: customRange.value[0],
       endDate: customRange.value[1],
-      businessSystemId: query.businessSystemId
+      businessSystemId: toIdParam(query.businessSystemId)
     }
   }
-  return { days: Number(rangePreset.value) || 7, businessSystemId: query.businessSystemId }
+  return { days: Number(rangePreset.value) || 7, businessSystemId: toIdParam(query.businessSystemId) }
 }
 
 async function loadOptions() {
@@ -191,11 +200,12 @@ async function loadData() {
   try {
     const res = await getInsightOverview(buildParams())
     data.value = res.data
+    // 先翻转 loading 再渲染：骨架 v-if 会移除图表容器，须等容器挂载后渲染
+    loading.value = false
     await nextTick()
     renderCharts()
   } catch (e) {
     error.value = true
-  } finally {
     loading.value = false
   }
 }
@@ -250,10 +260,10 @@ function renderCharts() {
     legend: { top: 0, left: 0, textStyle: { color: cssVar('--text-secondary'), fontSize: 12 } },
     xAxis: { ...baseAxis().xAxis, data: issuePts.map(p => String(p.date).slice(5)) },
     series: [
-      { name: 'CRITICAL', type: 'bar', stack: 'i', data: issuePts.map(p => p.critical), itemStyle: { color: '#B91C1C' } },
-      { name: 'HIGH', type: 'bar', stack: 'i', data: issuePts.map(p => p.high), itemStyle: { color: '#C2410C' } },
-      { name: 'MEDIUM', type: 'bar', stack: 'i', data: issuePts.map(p => p.medium), itemStyle: { color: '#A16207' } },
-      { name: 'LOW', type: 'bar', stack: 'i', data: issuePts.map(p => p.low), itemStyle: { color: '#64748B' } }
+      { name: severityLabel('CRITICAL'), type: 'bar', stack: 'i', data: issuePts.map(p => p.critical), itemStyle: { color: '#B91C1C' } },
+      { name: severityLabel('HIGH'), type: 'bar', stack: 'i', data: issuePts.map(p => p.high), itemStyle: { color: '#C2410C' } },
+      { name: severityLabel('MEDIUM'), type: 'bar', stack: 'i', data: issuePts.map(p => p.medium), itemStyle: { color: '#A16207' } },
+      { name: severityLabel('LOW'), type: 'bar', stack: 'i', data: issuePts.map(p => p.low), itemStyle: { color: '#64748B' } }
     ]
   }, true)
 
@@ -264,7 +274,7 @@ function renderCharts() {
     xAxis: { type: 'value', minInterval: 1, splitLine: { lineStyle: { color: cssVar('--divider') } } },
     yAxis: {
       type: 'category',
-      data: cats.map(c => c.name).reverse(),
+      data: cats.map(c => issueCategoryLabel(c.name)).reverse(),
       axisLabel: { color: cssVar('--text-assist'), fontSize: 11 }
     },
     series: [{
@@ -278,7 +288,11 @@ function renderCharts() {
 
 function ensureChart(key, el) {
   if (!el) return null
-  if (!charts[key]) charts[key] = echarts.init(el)
+  const existing = charts[key]
+  // loading 骨架会销毁图表容器，旧实例不可复用：DOM 变化或已 dispose 时重建
+  if (existing && !existing.isDisposed() && existing.getDom() === el) return existing
+  if (existing && !existing.isDisposed()) existing.dispose()
+  charts[key] = echarts.init(el)
   return charts[key]
 }
 
@@ -295,14 +309,28 @@ function exportChart(key) {
 onMounted(async () => {
   const remembered = loadInsightFilters('overview')
   if (remembered) {
-    rangePreset.value = remembered.rangePreset ?? 7
-    customRange.value = remembered.customRange || []
+    rangePreset.value = toRangePreset(remembered.rangePreset)
+    customRange.value = toDateRangeParam(remembered.customRange)
     query.businessSystemId = toIdParam(remembered.businessSystemId)
   }
   await loadOptions()
   await loadDict()
   await loadData()
+  bindResize()
+})
+
+/** keep-alive 缓存期容器被 detach，resize 会把画布打成 0×0：激活时重绑并自愈，停用时摘除 */
+function bindResize() {
+  window.removeEventListener('resize', resizeCharts)
   window.addEventListener('resize', resizeCharts)
+}
+
+onActivated(() => {
+  bindResize()
+  nextTick(resizeCharts)
+})
+onDeactivated(() => {
+  window.removeEventListener('resize', resizeCharts)
 })
 
 onBeforeUnmount(() => {
@@ -314,7 +342,7 @@ onBeforeUnmount(() => {
 })
 
 function resizeCharts() {
-  Object.values(charts).forEach(c => c && c.resize())
+  Object.values(charts).forEach(c => c && !c.isDisposed() && c.resize())
 }
 </script>
 

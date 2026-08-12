@@ -18,6 +18,14 @@ const SEVERITY_LABELS = {
   INFO: '信息'
 }
 
+const ISSUE_CATEGORY_LABELS = {
+  CORRECTNESS: '正确性',
+  SECURITY: '安全性',
+  PRACTICE: '最佳实践',
+  PERFORMANCE: '性能',
+  COMMIT_QUALITY: '提交质量'
+}
+
 /** 问题归属（协议 v1.1）：新增=本次变更引入，存量=历史遗留。v1.0 结果无 origin，按新增展示。 */
 export const ISSUE_ORIGIN_LABELS = {
   NEW: '新增',
@@ -355,6 +363,11 @@ export function getTopIssues(run) {
 export function severityLabel(value) {
   const key = (value || '').toUpperCase()
   return SEVERITY_LABELS[key] || value || '—'
+}
+
+export function issueCategoryLabel(value) {
+  const key = (value || '').toUpperCase()
+  return ISSUE_CATEGORY_LABELS[key] || value || '—'
 }
 
 export function severityTagType(value) {
