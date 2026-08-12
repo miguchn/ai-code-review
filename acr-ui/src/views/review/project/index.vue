@@ -307,7 +307,24 @@
               <div class="form-control-block">
                 <el-switch v-model="form.notifyOnFailure" active-value="Y" inactive-value="N"
                   active-text="通知" inactive-text="不通知" :disabled="form.notifyEnabled !== 'Y'" />
-                <div class="inline-tip">审查执行失败时发送简讯；关闭则仅在 SUCCESS 时发送摘要。</div>
+                <div class="inline-tip">审查执行失败时发送简讯；失败通知始终绕过冷却频控。</div>
+              </div>
+            </el-form-item>
+            <el-form-item label="结论通知策略">
+              <div class="form-control-block">
+                <el-select v-model="form.notifyResultPolicy" :disabled="form.notifyEnabled !== 'Y'">
+                  <el-option label="仅警告和阻断（推荐）" value="RISK_ONLY" />
+                  <el-option label="仅阻断" value="BLOCK_ONLY" />
+                  <el-option label="全部结论" value="ALL" />
+                </el-select>
+                <div class="inline-tip">控制审查成功后的摘要消息；执行失败由上方开关独立控制。</div>
+              </div>
+            </el-form-item>
+            <el-form-item label="低优先级冷却">
+              <div class="form-control-block">
+                <el-input-number v-model="form.notifyCooldownMinutes" :min="0" :max="1440" :step="5"
+                  :disabled="form.notifyEnabled !== 'Y'" controls-position="right" />
+                <div class="inline-tip">分钟。0 表示不频控；PASS/WARN 在窗口内最多发送一次，BLOCK 与执行失败始终立即通知。被抑制消息仍保留投递记录。</div>
               </div>
             </el-form-item>
           </el-tab-pane>
@@ -876,7 +893,8 @@ function reset() {
     webhookSecret: undefined, webhookSecretConfigured: false, webhookCallbackUrl: undefined,
     lastWebhookTime: undefined, lastWebhookResult: undefined,
     scopeExcludePatterns: undefined, scopeIncludeTests: 'N', scopeReportExisting: 'N', scopeExpandEnabled: 'Y',
-    notifyEnabled: 'N', notifyOnFailure: 'Y', notifyChannelId: undefined
+    notifyEnabled: 'N', notifyOnFailure: 'Y', notifyChannelId: undefined,
+    notifyResultPolicy: 'RISK_ONLY', notifyCooldownMinutes: 0
   }
   activeTab.value = 'basic'
   repositoryInfoLoaded.value = false
@@ -924,6 +942,8 @@ function handleUpdate(row) {
     project.scopeExpandEnabled = project.scopeExpandEnabled || 'Y'
     project.notifyEnabled = project.notifyEnabled || 'N'
     project.notifyOnFailure = project.notifyOnFailure || 'Y'
+    project.notifyResultPolicy = project.notifyResultPolicy || 'ALL'
+    project.notifyCooldownMinutes = project.notifyCooldownMinutes ?? 0
     if (project.reviewMode === 'OCR_ENGINE') {
       project.modelId = undefined
       project.templateId = undefined

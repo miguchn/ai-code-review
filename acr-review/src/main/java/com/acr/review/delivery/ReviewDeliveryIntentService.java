@@ -150,12 +150,33 @@ public class ReviewDeliveryIntentService
         String channelType = resolveChannelType(project);
         boolean resolvable = ReviewDeliveryConstants.isSupportedNotifyChannelType(channelType);
         String channel = resolvable ? channelType : ReviewDeliveryConstants.CHANNEL_IM_NOTIFICATION;
-        String status = resolvable ? ReviewDeliveryConstants.STATUS_PENDING : ReviewDeliveryConstants.STATUS_MANUAL;
-        String errorCode = resolvable ? null : ReviewDeliveryConstants.ERROR_CONFIGURATION;
-        String failure = resolvable ? null : "项目已启用通知，但通知渠道缺失、停用或类型不受支持，请修复配置后人工补发";
         String triggerSource = success
             ? ReviewDeliveryConstants.TRIGGER_TASK_SUCCESS
             : ReviewDeliveryConstants.TRIGGER_TASK_FAILED;
+        if (success && !allowsSuccessNotification(project.getNotifyResultPolicy(), resolveConclusion(task, run)))
+        {
+            return upsert(task, run, provider, channel,
+                ReviewDeliveryConstants.imIdempotencyKey(channel, task.getTaskId()), null,
+                ReviewDeliveryConstants.STATUS_SKIPPED,
+                ReviewDeliveryConstants.ERROR_NOTIFY_POLICY_SUPPRESSED,
+                "审查结论未达到项目通知策略门槛，已抑制本次消息",
+                triggerSource, operator);
+        }
+        if (success && resolvable && shouldApplyCooldown(project, resolveConclusion(task, run))
+            && deliveryMapper.countRecentImDeliveries(project.getProjectId(), channel, task.getTaskId(),
+                project.getNotifyCooldownMinutes()) > 0)
+        {
+            return upsert(task, run, provider, channel,
+                ReviewDeliveryConstants.imIdempotencyKey(channel, task.getTaskId()), null,
+                ReviewDeliveryConstants.STATUS_SKIPPED,
+                ReviewDeliveryConstants.ERROR_NOTIFY_RATE_LIMITED,
+                "低优先级通知命中项目 " + project.getNotifyCooldownMinutes()
+                    + " 分钟冷却窗口；阻断和执行失败通知不受频控影响",
+                triggerSource, operator);
+        }
+        String status = resolvable ? ReviewDeliveryConstants.STATUS_PENDING : ReviewDeliveryConstants.STATUS_MANUAL;
+        String errorCode = resolvable ? null : ReviewDeliveryConstants.ERROR_CONFIGURATION;
+        String failure = resolvable ? null : "项目已启用通知，但通知渠道缺失、停用或类型不受支持，请修复配置后人工补发";
         return upsert(task, run, provider, channel,
             ReviewDeliveryConstants.imIdempotencyKey(channel, task.getTaskId()),
             null, status, errorCode, failure, triggerSource, operator);
@@ -222,5 +243,36 @@ public class ReviewDeliveryIntentService
         {
             return null;
         }
+    }
+
+    private static String resolveConclusion(ReviewTask task, ReviewTaskRun run)
+    {
+        if (run != null && StringUtils.isNotEmpty(run.getReviewConclusion()))
+        {
+            return run.getReviewConclusion();
+        }
+        return task.getReviewConclusion();
+    }
+
+    private static boolean allowsSuccessNotification(String policy, String conclusion)
+    {
+        String effective = StringUtils.defaultIfEmpty(policy, ReviewDeliveryConstants.NOTIFY_POLICY_ALL);
+        if (ReviewDeliveryConstants.NOTIFY_POLICY_ALL.equals(effective))
+        {
+            return true;
+        }
+        if (ReviewDeliveryConstants.NOTIFY_POLICY_BLOCK_ONLY.equals(effective))
+        {
+            return ReviewPipelineConstants.CONCLUSION_BLOCK.equals(conclusion);
+        }
+        return ReviewPipelineConstants.CONCLUSION_WARN.equals(conclusion)
+            || ReviewPipelineConstants.CONCLUSION_BLOCK.equals(conclusion);
+    }
+
+    private static boolean shouldApplyCooldown(ReviewProject project, String conclusion)
+    {
+        Integer minutes = project.getNotifyCooldownMinutes();
+        return minutes != null && minutes > 0
+            && !ReviewPipelineConstants.CONCLUSION_BLOCK.equals(conclusion);
     }
 }

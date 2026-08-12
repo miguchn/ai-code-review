@@ -1,9 +1,9 @@
 <template>
   <div class="app-container insight-placeholder">
-    <el-empty description="报告中心即将上线">
+    <el-empty description="当前版本未开放报告中心">
       <template #description>
-        <p class="title">报告中心即将上线</p>
-        <p class="desc">三期将提供周/月模板快照、异步导出与发送记录。当前请使用总览看板与项目分析查看准实时指标。</p>
+        <p class="title">企业版报告能力尚未开放</p>
+        <p class="desc">不可变周/月快照、审计导出、订阅与发送记录尚未交付，本入口默认隐藏并停用。当前请使用总览看板与项目分析查看准实时指标。</p>
       </template>
       <el-button type="primary" @click="$router.push('/insight/overview')">前往总览看板</el-button>
     </el-empty>

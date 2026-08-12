@@ -20,6 +20,12 @@ public interface ReviewDeliveryRecordMapper
 
     ReviewDeliveryRecord selectLatestImByTaskId(@Param("taskId") Long taskId);
 
+    /** 同项目同渠道冷却窗口内是否已有待处理或已成功发送通知；失败不应抑制后续消息。 */
+    int countRecentImDeliveries(@Param("projectId") Long projectId,
+                                @Param("channel") String channel,
+                                @Param("excludeTaskId") Long excludeTaskId,
+                                @Param("cooldownMinutes") int cooldownMinutes);
+
     /** 按问题 ID 反查最近一条行内投递记录。 */
     ReviewDeliveryRecord selectByIssueId(@Param("issueId") Long issueId);
 

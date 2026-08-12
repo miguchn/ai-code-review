@@ -2,6 +2,8 @@
 
 > **状态（2026-08-03）：Review 已通过（含飞书同行多链接、渠道不可用落真实渠道类型、投递编排测试补齐三项修正），待真实环境验收。** 前置：`docs/planning/review-comment-writeback-m4.md`、`docs/planning/review-pipeline-m3.md`、`docs/planning/review-scoring-result-protocol.md`、`docs/planning/review-record-experience-m3.1.md`。本设计明确审查结束后的 IM 结论摘要投递（钉钉/企微/飞书群机器人）、平台级渠道资产、项目单渠道绑定，以及投递记录统一查询与失败补发。
 
+> **收口补充（2026-08-12）：** `sql/47_production_readiness_governance.sql` 在不改变单项目单渠道模型的前提下，补充 `ALL / RISK_ONLY / BLOCK_ONLY` 结论策略和 0–1440 分钟项目冷却；新项目默认 `RISK_ONLY`，存量项目保持 `ALL`，BLOCK/FAILED 绕过冷却，被抑制事件以 `SKIPPED` 留痕。聚合、多渠道、按人路由仍不在范围。
+
 ## 1. 目标与成功指标
 
 - 审查结束后，相关群内即可看到**审查结论摘要**（非泛化「系统通知」）：SUCCESS 发摘要卡，FAILED 发简讯；开发者无需打开后台即可获知结论与入口链接；
@@ -36,7 +38,7 @@
 6. 一级菜单「通知管理」：子菜单「通知渠道」「投递记录」；投递记录复用表，含 GitHub 行，支持筛选/失败原因/失败重试；
 7. 单测覆盖内容模型、IM 渲染截断、渠道加解密脱敏、幂等 upsert、失败隔离；`mvn test` + `npm run build:prod`；CHANGELOG 补 M5。
 
-### 3.2 非范围
+### 3.2 M5 原始非范围
 
 - 通知策略、频控、聚合、按严重度路由、IM 账号映射与强 @ 人；
 - 一项目多渠道并发投递；
@@ -369,8 +371,10 @@ acr-review
 - 与 M4 重试入口并存：文案区分「重试 PR 评论（跟最新成功结论）」与「按投递记录补发」；
 - `review.ui.base-url` 未配置：消息仍含 PR 链接，详情链省略，避免错误 URL。
 
-## 10. 非范围（再声明）
+## 10. M5 原始非范围（再声明）
 
 通知策略/频控/聚合、IM 账号映射与强 @、一项目多渠道、飞书卡片/钉钉 ActionCard、邮件、通用通知框架、`review_notify_channel` 以外的新业务表、预建未使用字段、inline/Status Check/多 Provider。
 
 **邮件为何非范围**：按人投递依赖 SMTP（或企业邮渠道）接入层，以及「收件人解析 / 通知策略」层（事件匹配、成员映射、订阅偏好）。本期仅具备群 Webhook 广播能力，上述依赖未满足；邮件单独立项，避免在无策略层时落入「全局邮箱刷屏」或半吊子按人路由。
+
+2026-08-12 的正式上线前治理只从上述非范围中释放“结论门槛 + 项目冷却”最小子集；未建设通用策略引擎、跨项目聚合任务或新的通知业务表，详见 `production-readiness-governance.md`。

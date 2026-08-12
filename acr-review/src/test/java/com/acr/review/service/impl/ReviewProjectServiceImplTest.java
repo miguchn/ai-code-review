@@ -25,6 +25,7 @@ import com.acr.review.domain.ReviewPipelineConstants;
 import com.acr.review.domain.ReviewProject;
 import com.acr.review.domain.ReviewProjectOptions;
 import com.acr.review.domain.ReviewRepositoryInfo;
+import com.acr.review.delivery.ReviewDeliveryConstants;
 import com.acr.review.git.GitAdapterRegistry;
 import com.acr.review.git.GitProvider;
 import com.acr.review.git.GitRepositoryCoordinates;
@@ -340,6 +341,8 @@ class ReviewProjectServiceImplTest
         project.setPrTargetBranches("main");
         project.setInlineCommentEnabled(null);
         project.setInlineSeverities(null);
+        project.setNotifyResultPolicy(null);
+        project.setNotifyCooldownMinutes(null);
 
         try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class))
         {
@@ -349,6 +352,8 @@ class ReviewProjectServiceImplTest
             service.insertReviewProject(project);
             assertEquals("1", project.getInlineCommentEnabled());
             assertEquals("CRITICAL,HIGH", project.getInlineSeverities());
+            assertEquals(ReviewDeliveryConstants.NOTIFY_POLICY_RISK_ONLY, project.getNotifyResultPolicy());
+            assertEquals(0, project.getNotifyCooldownMinutes());
         }
 
         assertEquals("CRITICAL,HIGH",

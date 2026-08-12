@@ -39,6 +39,14 @@ public final class ReviewDeliveryConstants
     /** 行内评论默认严重度白名单。 */
     public static final String DEFAULT_INLINE_SEVERITIES = "CRITICAL,HIGH";
 
+    /** 审查成功后全部结论都通知。 */
+    public static final String NOTIFY_POLICY_ALL = "ALL";
+    /** 仅 WARN / BLOCK 结论通知；新项目默认值。 */
+    public static final String NOTIFY_POLICY_RISK_ONLY = "RISK_ONLY";
+    /** 仅 BLOCK 结论通知。 */
+    public static final String NOTIFY_POLICY_BLOCK_ONLY = "BLOCK_ONLY";
+    public static final int MAX_NOTIFY_COOLDOWN_MINUTES = 1440;
+
     /** 行内评论描述截断上限。 */
     public static final int INLINE_MAX_DESCRIPTION_CHARS = 200;
 
@@ -63,6 +71,10 @@ public final class ReviewDeliveryConstants
     public static final String ERROR_CONFIGURATION = "DELIVERY_CONFIGURATION";
     public static final String ERROR_EXTERNAL_CALL = "DELIVERY_EXTERNAL_CALL";
     public static final String ERROR_LEASE_EXPIRED = "DELIVERY_LEASE_EXPIRED";
+    /** SUCCESS 结论未达到项目通知策略门槛。 */
+    public static final String ERROR_NOTIFY_POLICY_SUPPRESSED = "NOTIFY_POLICY_SUPPRESSED";
+    /** 低优先级通知命中项目冷却窗口。 */
+    public static final String ERROR_NOTIFY_RATE_LIMITED = "NOTIFY_RATE_LIMITED";
     /** 运营人员标记人工已处理，不再自动投递。 */
     public static final String ERROR_MANUAL_HANDLED = "MANUAL_HANDLED";
 

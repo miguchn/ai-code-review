@@ -73,10 +73,11 @@ mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/NN_xxx.sql
 44. `44_trigger_source_failed.sql`：投递触发来源补 `TASK_FAILED`（失败简讯字典 + `trigger_source` 列注释；历史不回填；须 utf8mb4）。
 45. `45_project_permission_governance.sql`：项目成员/项目角色隔离与平台级角色边界（`review_project_member` + `sys_role.role_scope`；须 utf8mb4）。
 46. `46_enterprise_roles_business_audit.sql`：企业标准角色模板、业务审计事实表与只读审计查询菜单（须 utf8mb4）。
+47. `47_production_readiness_governance.sql`：正式上线前收口（项目通知结论策略与低优先级冷却频控；隐藏并停用未交付的报告中心入口；须 utf8mb4）。
 
 ## init-full.sql 维护规则
 
-- `init-full.sql` 是增量脚本执行完成后的最终状态快照（2026-08-12 同步，含 01–46 全部增量中的结构/参数/菜单/定时任务种子）。
+- `init-full.sql` 是增量脚本执行完成后的最终状态快照（2026-08-12 同步，含 01–47 全部增量中的结构/参数/菜单/定时任务种子）。
 - **新增编号增量脚本后必须同步重新生成**，否则新装环境会缺失该脚本的变更。生成方式（在已执行全部增量脚本的本地库上）：
 
 ```bash

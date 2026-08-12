@@ -100,9 +100,19 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                last_attempt_time, trigger_source, create_by, create_time, update_by, update_time
         from review_delivery_record
         where task_id = #{taskId}
-          and channel in ('DINGTALK_ROBOT', 'WECOM_ROBOT', 'FEISHU_BOT')
+          and channel in ('DINGTALK_ROBOT', 'WECOM_ROBOT', 'FEISHU_BOT', 'IM_NOTIFICATION')
         order by coalesce(last_attempt_time, create_time) desc, delivery_id desc
         limit 1
+    </select>
+
+    <select id="countRecentImDeliveries" resultType="int">
+        select count(1)
+        from review_delivery_record
+        where project_id = #{projectId}
+          and channel = #{channel}
+          and task_id != #{excludeTaskId}
+          and delivery_status in ('PENDING', 'SUCCESS')
+          and create_time &gt;= timestampadd(MINUTE, -#{cooldownMinutes}, sysdate())
     </select>
 
     <select id="selectByIssueId" resultMap="ReviewDeliveryRecordResult">

@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### 正式上线前完整性治理（sql/47）
+
+- 未交付入口收口：报告中心在不可变快照、导出、订阅与发送记录交付前隐藏并停用；旧路由仅保留“企业版尚未开放”兜底，不再向用户暴露看似可用的占位功能
+- 通知最小策略：保留项目单渠道模型，新增 `ALL / RISK_ONLY / BLOCK_ONLY` 结论门槛与 0–1440 分钟项目冷却；新项目默认仅发风险结论，存量保持原行为，BLOCK/FAILED 绕过冷却，抑制事件以 `SKIPPED` 留痕
+- 依赖风险处置：Spring Boot 4.0.3→4.0.7、Apache POI 4.1.2→5.4.0；前端升级 Axios/js-cookie/ECharts/Vite 及相关修复版本，生产依赖审计清零；仅构建期 `vite-plugin-svg-icons → image-size` 无上游修复链按受控本地 SVG 条件登记风险接受
+- 产品真值回写：README/路线图区分 V0.2 受控推广与 V1.0 企业正式准入；统一身份或完整账号生命周期、审计导出、数据留存、备份恢复、不可变报告/订阅、Token/成本/配额和 GitLab/Gitee/Gitea 真实环境闭环明确为未交付
+- 设计与风险事实源：`docs/planning/production-readiness-governance.md`
+
 ### 项目级权限治理（sql/45–46）
 
 - 授权模型升级为交集语义：**有效权限 = 功能权限（RBAC）× 组织数据范围（DataScope）× 项目成员角色**，超级管理员保留全局旁路；同部门非成员不再默认可见项目数据（fail-close，需负责人补录成员），项目成员关系不成为跨部门提权通道

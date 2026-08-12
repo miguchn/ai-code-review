@@ -3,6 +3,7 @@ package com.acr.review.delivery;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -117,6 +118,73 @@ class ReviewDeliveryIntentServiceTest
         ArgumentCaptor<ReviewDeliveryRecord> captor = ArgumentCaptor.forClass(ReviewDeliveryRecord.class);
         verify(mapper).upsertDeliveryIntent(captor.capture());
         assertEquals(ReviewDeliveryConstants.TRIGGER_TASK_FAILED, captor.getValue().getTriggerSource());
+    }
+
+    @Test
+    void riskOnlyPolicyRecordsPassAsSkipped()
+    {
+        ReviewProject project = notifyEnabledProject();
+        project.setNotifyResultPolicy(ReviewDeliveryConstants.NOTIFY_POLICY_RISK_ONLY);
+        ReviewTask task = task(10L, ReviewPipelineConstants.TASK_SUCCESS);
+        task.setReviewConclusion(ReviewPipelineConstants.CONCLUSION_PASS);
+        when(projectMapper.selectReviewProjectById(3L)).thenReturn(project);
+        when(channelService.selectReviewNotifyChannelById(7L)).thenReturn(activeDingTalkChannel());
+
+        service.enqueueTerminalNotification(task, run(100L), "system");
+
+        ArgumentCaptor<ReviewDeliveryRecord> captor = ArgumentCaptor.forClass(ReviewDeliveryRecord.class);
+        verify(mapper).upsertDeliveryIntent(captor.capture());
+        assertEquals(ReviewDeliveryConstants.STATUS_SKIPPED, captor.getValue().getDeliveryStatus());
+        assertEquals(ReviewDeliveryConstants.ERROR_NOTIFY_POLICY_SUPPRESSED,
+            captor.getValue().getLastErrorCode());
+        verify(publisher, never()).publishEvent(any(ReviewDeliveryPendingEvent.class));
+    }
+
+    @Test
+    void cooldownRecordsWarnAsSkippedWhenRecentNotificationExists()
+    {
+        ReviewProject project = notifyEnabledProject();
+        project.setNotifyResultPolicy(ReviewDeliveryConstants.NOTIFY_POLICY_ALL);
+        project.setNotifyCooldownMinutes(30);
+        ReviewTask task = task(10L, ReviewPipelineConstants.TASK_SUCCESS);
+        task.setReviewConclusion(ReviewPipelineConstants.CONCLUSION_WARN);
+        when(projectMapper.selectReviewProjectById(3L)).thenReturn(project);
+        when(channelService.selectReviewNotifyChannelById(7L)).thenReturn(activeDingTalkChannel());
+        when(mapper.countRecentImDeliveries(3L, ReviewDeliveryConstants.CHANNEL_DINGTALK_ROBOT, 10L, 30))
+            .thenReturn(1);
+
+        service.enqueueTerminalNotification(task, run(100L), "system");
+
+        ArgumentCaptor<ReviewDeliveryRecord> captor = ArgumentCaptor.forClass(ReviewDeliveryRecord.class);
+        verify(mapper).upsertDeliveryIntent(captor.capture());
+        assertEquals(ReviewDeliveryConstants.STATUS_SKIPPED, captor.getValue().getDeliveryStatus());
+        assertEquals(ReviewDeliveryConstants.ERROR_NOTIFY_RATE_LIMITED,
+            captor.getValue().getLastErrorCode());
+        verify(publisher, never()).publishEvent(any(ReviewDeliveryPendingEvent.class));
+    }
+
+    @Test
+    void blockNotificationBypassesCooldown()
+    {
+        ReviewProject project = notifyEnabledProject();
+        project.setNotifyResultPolicy(ReviewDeliveryConstants.NOTIFY_POLICY_RISK_ONLY);
+        project.setNotifyCooldownMinutes(30);
+        ReviewTask task = task(10L, ReviewPipelineConstants.TASK_SUCCESS);
+        task.setReviewConclusion(ReviewPipelineConstants.CONCLUSION_BLOCK);
+        when(projectMapper.selectReviewProjectById(3L)).thenReturn(project);
+        when(channelService.selectReviewNotifyChannelById(7L)).thenReturn(activeDingTalkChannel());
+        when(mapper.upsertDeliveryIntent(any())).thenAnswer(invocation -> {
+            invocation.<ReviewDeliveryRecord>getArgument(0).setDeliveryId(56L);
+            return 1;
+        });
+
+        service.enqueueTerminalNotification(task, run(100L), "system");
+
+        ArgumentCaptor<ReviewDeliveryRecord> captor = ArgumentCaptor.forClass(ReviewDeliveryRecord.class);
+        verify(mapper).upsertDeliveryIntent(captor.capture());
+        assertEquals(ReviewDeliveryConstants.STATUS_PENDING, captor.getValue().getDeliveryStatus());
+        verify(mapper, never()).countRecentImDeliveries(any(), any(), any(), anyInt());
+        verify(publisher).publishEvent(any(ReviewDeliveryPendingEvent.class));
     }
 
     private static ReviewTask task(Long id, String status)

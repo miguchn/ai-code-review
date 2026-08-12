@@ -511,6 +511,8 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
         value.put("notifyEnabled", project.getNotifyEnabled());
         value.put("notifyChannelId", project.getNotifyChannelId());
         value.put("notifyOnFailure", project.getNotifyOnFailure());
+        value.put("notifyResultPolicy", project.getNotifyResultPolicy());
+        value.put("notifyCooldownMinutes", project.getNotifyCooldownMinutes());
         value.put("prReviewEnabled", project.getPrReviewEnabled());
         value.put("prTargetBranches", project.getPrTargetBranches());
         value.put("pushReviewEnabled", project.getPushReviewEnabled());
@@ -747,11 +749,29 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
         return ("Y".equals(value) || "N".equals(value)) ? value : defaultValue;
     }
 
-    /** 通知绑定归一：总开关默认 N；失败简讯默认 Y；启用时渠道必须存在且可用。 */
+    /** 通知绑定归一：新项目默认仅风险结论通知；低优先级冷却最多 24 小时。 */
     private void normalizeNotifyConfig(ReviewProject project)
     {
         project.setNotifyEnabled(normalizeScopeFlag(project.getNotifyEnabled(), "N"));
         project.setNotifyOnFailure(normalizeScopeFlag(project.getNotifyOnFailure(), "Y"));
+        String policy = StringUtils.defaultIfEmpty(project.getNotifyResultPolicy(),
+            ReviewDeliveryConstants.NOTIFY_POLICY_RISK_ONLY).trim().toUpperCase(java.util.Locale.ROOT);
+        if (!ReviewDeliveryConstants.NOTIFY_POLICY_ALL.equals(policy)
+            && !ReviewDeliveryConstants.NOTIFY_POLICY_RISK_ONLY.equals(policy)
+            && !ReviewDeliveryConstants.NOTIFY_POLICY_BLOCK_ONLY.equals(policy))
+        {
+            throw new ServiceException("通知结论策略无效");
+        }
+        project.setNotifyResultPolicy(policy);
+        if (project.getNotifyCooldownMinutes() == null)
+        {
+            project.setNotifyCooldownMinutes(0);
+        }
+        if (project.getNotifyCooldownMinutes() < 0
+            || project.getNotifyCooldownMinutes() > ReviewDeliveryConstants.MAX_NOTIFY_COOLDOWN_MINUTES)
+        {
+            throw new ServiceException("通知冷却时间必须在 0 到 1440 分钟之间");
+        }
         if (!"Y".equals(project.getNotifyEnabled()))
         {
             return;

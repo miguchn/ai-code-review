@@ -67,6 +67,10 @@ public class ReviewProject extends BaseEntity
     private String notifyChannelName;
     /** FAILED 时是否发送简讯（Y/N，默认 Y）。 */
     private String notifyOnFailure;
+    /** SUCCESS 结果通知策略：ALL / RISK_ONLY / BLOCK_ONLY。 */
+    private String notifyResultPolicy;
+    /** 低优先级通知冷却分钟数；BLOCK 与 FAILED 不受频控。 */
+    private Integer notifyCooldownMinutes;
 
     private String status;
     private String lastCheckStatus;
@@ -483,6 +487,26 @@ public class ReviewProject extends BaseEntity
     public void setNotifyOnFailure(String notifyOnFailure)
     {
         this.notifyOnFailure = notifyOnFailure;
+    }
+
+    public String getNotifyResultPolicy()
+    {
+        return notifyResultPolicy;
+    }
+
+    public void setNotifyResultPolicy(String notifyResultPolicy)
+    {
+        this.notifyResultPolicy = notifyResultPolicy;
+    }
+
+    public Integer getNotifyCooldownMinutes()
+    {
+        return notifyCooldownMinutes;
+    }
+
+    public void setNotifyCooldownMinutes(Integer notifyCooldownMinutes)
+    {
+        this.notifyCooldownMinutes = notifyCooldownMinutes;
     }
 
     public String getStatus()
