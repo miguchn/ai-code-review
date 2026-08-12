@@ -350,7 +350,14 @@ export function getScoreDimensions(run) {
 
 export function getReviewSummary(run) {
   const parsed = getParsedResultJson(run)
-  return parsed?.summary || run?.resultSummary || ''
+  const summary = parsed?.summary || run?.resultSummary || ''
+  const engineStats = safeParseJson(summary)
+  if (!engineStats || Array.isArray(engineStats)) return summary
+  const parts = []
+  if (engineStats.files_reviewed != null) parts.push(`已审查 ${engineStats.files_reviewed} 个文件`)
+  if (engineStats.comments != null) parts.push(`识别 ${engineStats.comments} 个问题`)
+  if (engineStats.elapsed) parts.push(`耗时 ${engineStats.elapsed}`)
+  return parts.length ? parts.join('，') + '。' : ''
 }
 
 export function getTopIssues(run) {

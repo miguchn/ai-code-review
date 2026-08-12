@@ -4,6 +4,16 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.acr.review.mapper.ReviewTaskMapper">
 
+    <sql id="projectMemberScope">
+        <if test="params.projectAccessUserId != null">
+            and (p.owner_user_id = #{params.projectAccessUserId}
+                 or exists (select 1 from review_project_member pm
+                            where pm.project_id = p.project_id
+                              and pm.user_id = #{params.projectAccessUserId}
+                              and pm.status = '0'))
+        </if>
+    </sql>
+
     <resultMap type="com.acr.review.domain.ReviewTask" id="ReviewTaskResult">
         <id property="taskId" column="task_id" />
         <result property="projectId" column="project_id" />
@@ -519,6 +529,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             and date_format(t.create_time,'%y%m%d') &lt;= date_format(#{params.endTime},'%y%m%d')
         </if>
         ${params.dataScope}
+        <include refid="projectMemberScope" />
         order by t.task_id desc
     </select>
 
@@ -551,6 +562,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             and date_format(ifnull(t.finished_time, t.create_time),'%y%m%d') &lt;= date_format(#{params.endTime},'%y%m%d')
         </if>
         ${params.dataScope}
+        <include refid="projectMemberScope" />
         order by ifnull(t.finished_time, t.create_time) desc, t.task_id desc
     </select>
 
@@ -584,6 +596,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             and date_format(t.create_time,'%y%m%d') &lt;= date_format(#{params.endTime},'%y%m%d')
         </if>
         ${params.dataScope}
+        <include refid="projectMemberScope" />
     </select>
 
     <select id="countReviewRecordList" parameterType="com.acr.review.domain.ReviewTask" resultType="int">
@@ -616,6 +629,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             and date_format(ifnull(t.finished_time, t.create_time),'%y%m%d') &lt;= date_format(#{params.endTime},'%y%m%d')
         </if>
         ${params.dataScope}
+        <include refid="projectMemberScope" />
     </select>
 
     <!-- 审查结论按天聚合：join 与 countReviewRecordList 完全一致，保证 DataScope 别名可用；别名驼峰（未开启全局驼峰映射） -->
@@ -639,6 +653,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             and date_format(ifnull(t.finished_time, t.create_time),'%y%m%d') &lt;= date_format(#{params.endTime},'%y%m%d')
         </if>
         ${params.dataScope}
+        <include refid="projectMemberScope" />
         group by date_format(ifnull(t.finished_time, t.create_time), '%Y-%m-%d')
         order by statDate asc
     </select>
@@ -652,6 +667,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         inner join sys_user owner on owner.user_id = p.owner_user_id
         where date(t.create_time) = curdate()
         ${params.dataScope}
+        <include refid="projectMemberScope" />
     </select>
 
     <select id="countTodaySuccessTasks" parameterType="com.acr.review.domain.ReviewTask" resultType="int">
@@ -664,6 +680,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         where t.task_status = 'SUCCESS'
           and date(ifnull(t.finished_time, t.create_time)) = curdate()
         ${params.dataScope}
+        <include refid="projectMemberScope" />
     </select>
 
     <select id="countTodayFailedTasks" parameterType="com.acr.review.domain.ReviewTask" resultType="int">
@@ -676,6 +693,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         where t.task_status = 'FAILED'
           and date(ifnull(t.finished_time, t.create_time)) = curdate()
         ${params.dataScope}
+        <include refid="projectMemberScope" />
     </select>
 
     <select id="selectLatestTaskTime" parameterType="com.acr.review.domain.ReviewTask" resultType="java.util.Date">
@@ -687,12 +705,14 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         inner join sys_user owner on owner.user_id = p.owner_user_id
         where 1 = 1
         ${params.dataScope}
+        <include refid="projectMemberScope" />
     </select>
 
     <select id="selectRecentTasks" parameterType="com.acr.review.domain.ReviewTask" resultMap="ReviewTaskResult">
         <include refid="taskListSelect" />
         where 1 = 1
         ${params.dataScope}
+        <include refid="projectMemberScope" />
         order by t.task_id desc
         limit 5
     </select>

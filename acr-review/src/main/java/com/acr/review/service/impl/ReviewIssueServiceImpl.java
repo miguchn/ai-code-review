@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -45,10 +46,14 @@ import com.acr.review.service.IReviewDeliveryService;
 import com.acr.review.service.IReviewIssueService;
 import com.acr.review.service.ReviewIssueDispositionEnricher;
 import com.acr.review.service.ReviewIssueFingerprint;
+import com.acr.review.service.ReviewProjectAccessService;
 import com.acr.review.service.ReviewScoringConstants;
 import com.acr.system.service.ISysConfigService;
 import com.acr.system.service.ISysDeptService;
+import com.acr.system.domain.SysBusinessAudit;
+import com.acr.system.service.ISysBusinessAuditService;
 import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
 
 /** 问题台账用例：轮次对账、状态机、处置后评论重渲染。 */
 @Service
@@ -67,6 +72,11 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
     private final ISysDeptService deptService;
     private final IReviewDeliveryService deliveryService;
     private final ISysConfigService configService;
+    private final ReviewProjectAccessService projectAccessService;
+
+    /** 测试中允许不装配，生产环境由系统模块提供。 */
+    @Autowired(required = false)
+    private ISysBusinessAuditService businessAuditService;
 
     public ReviewIssueServiceImpl(ReviewIssueMapper issueMapper,
                                   ReviewIssueActionMapper actionMapper,
@@ -75,7 +85,8 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
                                   ReviewTaskRunMapper runMapper,
                                   ISysDeptService deptService,
                                   IReviewDeliveryService deliveryService,
-                                  ISysConfigService configService)
+                                  ISysConfigService configService,
+                                  ReviewProjectAccessService projectAccessService)
     {
         this.issueMapper = issueMapper;
         this.actionMapper = actionMapper;
@@ -85,6 +96,7 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
         this.deptService = deptService;
         this.deliveryService = deliveryService;
         this.configService = configService;
+        this.projectAccessService = projectAccessService;
     }
 
     @Override
@@ -350,6 +362,7 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
     @DataScope(deptAlias = "d", userAlias = "owner", permission = "review:issue:list")
     public List<ReviewIssue> selectIssueList(ReviewIssue query)
     {
+        projectAccessService.applyQueryScope(query);
         return issueMapper.selectIssueList(query);
     }
 
@@ -374,7 +387,7 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
 
         ReviewIssue scopeCarrier = new ReviewIssue();
         scopeCarrier.setProjectId(task.getProjectId());
-        checkIssueDataScope(scopeCarrier);
+        projectAccessService.requireView(scopeCarrier.getProjectId());
 
         ReviewIssueRecordContext context = new ReviewIssueRecordContext();
         context.setRecord(task);
@@ -437,7 +450,7 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
     public ReviewIssueDetail selectIssueDetail(Long issueId)
     {
         ReviewIssue issue = requireIssue(issueId);
-        checkIssueDataScope(issue);
+        projectAccessService.requireView(issue.getProjectId());
         ReviewIssueDetail detail = new ReviewIssueDetail();
         detail.setIssue(issue);
         ReviewTask firstTask = null;
@@ -464,7 +477,7 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
     public ReviewCommentSyncResult confirm(Long issueId)
     {
         ReviewIssue issue = requireIssue(issueId);
-        checkIssueDataScope(issue);
+        projectAccessService.requireOperate(issue.getProjectId());
         if (!ReviewIssueConstants.STATUS_AWAITING_CONFIRM.equals(issue.getStatus()))
         {
             throw new ServiceException(terminalOrIllegalMessage(issue.getStatus(), "确认"));
@@ -479,12 +492,12 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
     public ReviewCommentSyncResult close(Long issueId, String resolveNote)
     {
         ReviewIssue issue = requireIssue(issueId);
-        checkIssueDataScope(issue);
+        projectAccessService.requireOperate(issue.getProjectId());
         if (!ReviewIssueConstants.isOpen(issue.getStatus()))
         {
             throw new ServiceException(terminalOrIllegalMessage(issue.getStatus(), "关闭"));
         }
-        String note = normalizeNote(resolveNote, false);
+        String note = normalizeNote(resolveNote, true);
         String closeSource = ReviewIssueConstants.STATUS_RECHECKING.equals(issue.getStatus())
             ? ReviewIssueConstants.CLOSE_SOURCE_AUTO_RECHECK
             : ReviewIssueConstants.CLOSE_SOURCE_MANUAL;
@@ -532,7 +545,7 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
     public ReviewCommentSyncResult dismiss(Long issueId, String dismissType, String resolveNote)
     {
         ReviewIssue issue = requireIssue(issueId);
-        checkIssueDataScope(issue);
+        projectAccessService.requireOperate(issue.getProjectId());
         if (ReviewIssueConstants.STATUS_RECHECKING.equals(issue.getStatus()))
         {
             throw new ServiceException("待复核问题不可忽略/误报，请确认已修复或重新打开");
@@ -557,7 +570,7 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
     public ReviewCommentSyncResult reopen(Long issueId)
     {
         ReviewIssue issue = requireIssue(issueId);
-        checkIssueDataScope(issue);
+        projectAccessService.requireOperate(issue.getProjectId());
         if (!ReviewIssueConstants.STATUS_RECHECKING.equals(issue.getStatus()))
         {
             throw new ServiceException("仅待复核问题可重新打开");
@@ -603,7 +616,7 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
         String note = null;
         if (ReviewIssueConstants.ACTION_CLOSE.equals(action))
         {
-            note = normalizeNote(request.getResolveNote(), false);
+            note = normalizeNote(request.getResolveNote(), true);
         }
         else if (ReviewIssueConstants.ACTION_DISMISS.equals(action))
         {
@@ -624,7 +637,7 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
             try
             {
                 issue = requireIssue(issueId);
-                checkIssueDataScope(issue);
+                projectAccessService.requireOperate(issue.getProjectId());
                 String reason = batchPreconditionFailure(issue, action);
                 if (reason != null)
                 {
@@ -799,6 +812,7 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
     @DataScope(deptAlias = "d", userAlias = "owner", permission = "review:issue:list")
     public int countIssueList(ReviewIssue query)
     {
+        projectAccessService.applyQueryScope(query);
         return issueMapper.countIssueList(query);
     }
 
@@ -806,6 +820,7 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
     @DataScope(deptAlias = "d", userAlias = "owner", permission = "review:issue:list")
     public int countClosedToday(ReviewIssue query)
     {
+        projectAccessService.applyQueryScope(query);
         return issueMapper.countClosedToday(query);
     }
 
@@ -813,7 +828,9 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
     @DataScope(deptAlias = "d", userAlias = "owner", permission = "review:issue:list")
     public ReviewIssueStats selectIssueStats(ReviewIssue query)
     {
-        ReviewIssueStats stats = issueMapper.selectIssueStats(query == null ? new ReviewIssue() : query);
+        ReviewIssue scopedQuery = query == null ? new ReviewIssue() : query;
+        projectAccessService.applyQueryScope(scopedQuery);
+        ReviewIssueStats stats = issueMapper.selectIssueStats(scopedQuery);
         if (stats == null)
         {
             stats = new ReviewIssueStats();
@@ -826,6 +843,10 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
                             String resolveNote, String closeSource)
     {
         String from = issue.getStatus();
+        String beforeResolveNote = issue.getResolveNote();
+        String beforeCloseSource = issue.getCloseSource();
+        String beforeClosedBy = issue.getClosedBy();
+        Date beforeClosedTime = issue.getClosedTime();
         String operator = safeOperator();
         Date now = new Date();
 
@@ -861,12 +882,18 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
         action.setResolveNote(resolveNote);
         action.setCreateTime(now);
         actionMapper.insertAction(action);
+        recordIssueAudit(issue, actionType, from, beforeResolveNote, beforeCloseSource, beforeClosedBy,
+            beforeClosedTime, issue, resolveNote, action.getActionId(), closeSource);
     }
 
     /** PR 关闭联动：与人工关闭同处置列，operator 固定 system，不写评论重渲染。 */
     private void systemClose(ReviewIssue issue, String closeSource, String note)
     {
         String from = issue.getStatus();
+        String beforeResolveNote = issue.getResolveNote();
+        String beforeCloseSource = issue.getCloseSource();
+        String beforeClosedBy = issue.getClosedBy();
+        Date beforeClosedTime = issue.getClosedTime();
         String operator = ReviewIssueConstants.OPERATOR_SYSTEM;
         Date now = new Date();
         issue.setStatus(ReviewIssueConstants.STATUS_CLOSED);
@@ -886,6 +913,8 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
         action.setResolveNote(note);
         action.setCreateTime(now);
         actionMapper.insertAction(action);
+        recordIssueAudit(issue, ReviewIssueConstants.ACTION_CLOSE, from, beforeResolveNote, beforeCloseSource,
+            beforeClosedBy, beforeClosedTime, issue, note, action.getActionId(), closeSource);
     }
 
     private void insertSystemAction(Long issueId, String actionType, String from, String to, String note)
@@ -899,6 +928,66 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
         action.setResolveNote(note);
         action.setCreateTime(new Date());
         actionMapper.insertAction(action);
+        ReviewIssue reference = null;
+        if (issueId != null)
+        {
+            reference = new ReviewIssue();
+            reference.setIssueId(issueId);
+        }
+        recordIssueAudit(reference, actionType, from, null, null, null, null, null, note, action.getActionId(), null);
+    }
+
+    private void recordIssueAudit(ReviewIssue issue, String actionType, String fromStatus,
+                                  String beforeResolveNote, String beforeCloseSource, String beforeClosedBy,
+                                  Date beforeClosedTime, ReviewIssue afterIssue, String reason, Long actionId,
+                                  String closeSource)
+    {
+        if (businessAuditService == null)
+        {
+            return;
+        }
+        SysBusinessAudit audit = new SysBusinessAudit();
+        audit.setEventKey("review-issue-action-" + (actionId == null
+            ? java.util.UUID.randomUUID() : actionId));
+        audit.setSource("acr-review");
+        audit.setAction("ISSUE_" + actionType);
+        audit.setObjectType("REVIEW_ISSUE");
+        audit.setObjectId(issue == null || issue.getIssueId() == null ? null : String.valueOf(issue.getIssueId()));
+        audit.setObjectName(issue == null ? null : issue.getTitle());
+        audit.setBeforeValue(issueStateSnapshot(fromStatus, beforeResolveNote, beforeCloseSource, beforeClosedBy,
+            beforeClosedTime));
+        audit.setAfterValue(issueStateSnapshot(afterIssue == null ? null : afterIssue.getStatus(),
+            afterIssue == null ? null : afterIssue.getResolveNote(),
+            afterIssue == null ? null : afterIssue.getCloseSource(),
+            afterIssue == null ? null : afterIssue.getClosedBy(),
+            afterIssue == null ? null : afterIssue.getClosedTime()));
+        audit.setReason(StringUtils.isEmpty(reason) ? closeSource : reason);
+        if (issue != null)
+        {
+            JSONObject related = new JSONObject();
+            related.put("projectId", issue.getProjectId());
+            related.put("prNumber", issue.getPrNumber());
+            related.put("refBranch", issue.getRefBranch());
+            related.put("firstTaskId", issue.getFirstTaskId());
+            related.put("firstRunId", issue.getFirstRunId());
+            related.put("lastTaskId", issue.getLastTaskId());
+            related.put("lastRunId", issue.getLastRunId());
+            related.put("fingerprint", issue.getFingerprint());
+            audit.setRelatedObject(related.toJSONString());
+        }
+        businessAuditService.record(audit);
+    }
+
+    private String issueStateSnapshot(String status, String resolveNote, String closeSource,
+                                      String closedBy, Date closedTime)
+    {
+        JSONObject state = new JSONObject();
+        state.put("status", status);
+        state.put("resolveNote", resolveNote);
+        state.put("closeSource", closeSource);
+        state.put("closedBy", closedBy);
+        state.put("closedTime", closedTime);
+        return state.toJSONString();
     }
 
     private static String roundHitNote(int roundNo, String headSha)
@@ -1053,16 +1142,6 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
             throw new ServiceException("问题不存在");
         }
         return issue;
-    }
-
-    private void checkIssueDataScope(ReviewIssue issue)
-    {
-        ReviewProject project = projectMapper.selectReviewProjectById(issue.getProjectId());
-        if (project == null)
-        {
-            throw new ServiceException("问题所属项目不存在");
-        }
-        deptService.checkDeptDataScope(project.getDeptId());
     }
 
     private static void applyHit(ReviewIssue issue, ReviewTask task, ReviewTaskRun run,
@@ -1232,7 +1311,7 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
         String note = resolveNote == null ? null : resolveNote.trim();
         if (required && StringUtils.isEmpty(note))
         {
-            throw new ServiceException("忽略/误报必须填写原因");
+            throw new ServiceException("关闭、忽略或误报必须填写原因");
         }
         if (note != null && note.length() > ReviewIssueConstants.MAX_RESOLVE_NOTE_CHARS)
         {

@@ -54,6 +54,7 @@ import com.acr.review.mapper.ReviewTaskRunMapper;
 import com.acr.review.service.IReviewDeliveryService;
 import com.acr.review.service.ReviewIssueFingerprint;
 import com.acr.review.service.ReviewScoringConstants;
+import com.acr.review.service.ReviewProjectAccessService;
 import com.acr.system.service.ISysConfigService;
 import com.acr.system.service.ISysDeptService;
 import com.alibaba.fastjson2.JSON;
@@ -69,6 +70,7 @@ class ReviewIssueServiceImplTest
     @Mock private ISysDeptService deptService;
     @Mock private IReviewDeliveryService deliveryService;
     @Mock private ISysConfigService configService;
+    @Mock private ReviewProjectAccessService projectAccessService;
 
     private ReviewIssueServiceImpl service;
 
@@ -76,7 +78,7 @@ class ReviewIssueServiceImplTest
     void setUp()
     {
         service = new ReviewIssueServiceImpl(issueMapper, actionMapper, projectMapper, taskMapper, runMapper,
-            deptService, deliveryService, configService);
+            deptService, deliveryService, configService, projectAccessService);
         lenient().when(configService.selectConfigByKey(ReviewIssueConstants.CONFIG_MISSED_ROUNDS_THRESHOLD))
             .thenReturn("1");
     }
@@ -474,6 +476,16 @@ class ReviewIssueServiceImplTest
     }
 
     @Test
+    void closeRequiresNote()
+    {
+        ReviewIssue issue = openIssue(10L, "SEC", "a.java", "x");
+        stubProjectScope(issue);
+        when(issueMapper.selectIssueById(10L)).thenReturn(issue);
+
+        assertThrows(ServiceException.class, () -> service.close(10L, " "));
+    }
+
+    @Test
     void dismissFalsePositiveWritesAction()
     {
         ReviewIssue issue = openIssue(9L, "SEC", "a.java", "x");
@@ -574,7 +586,7 @@ class ReviewIssueServiceImplTest
         ReviewProject project = new ReviewProject();
         project.setProjectId(10L);
         project.setDeptId(1L);
-        when(projectMapper.selectReviewProjectById(10L)).thenReturn(project);
+        when(projectAccessService.requireView(10L)).thenReturn(project);
         ReviewTaskRun success = runWithIssues(303L, top("SEC", "old.java", "not materialized", 1));
         success.setRunStatus(ReviewPipelineConstants.RUN_SUCCESS);
         when(runMapper.selectRunsByTaskId(202L)).thenReturn(List.of(success));
@@ -612,7 +624,7 @@ class ReviewIssueServiceImplTest
         ReviewProject project = new ReviewProject();
         project.setProjectId(10L);
         project.setDeptId(1L);
-        when(projectMapper.selectReviewProjectById(10L)).thenReturn(project);
+        when(projectAccessService.requireView(10L)).thenReturn(project);
         ReviewTaskRun failed = runWithIssues(304L);
         failed.setRunStatus(ReviewPipelineConstants.RUN_FAILED);
         when(runMapper.selectRunsByTaskId(204L)).thenReturn(List.of(failed));
@@ -635,8 +647,7 @@ class ReviewIssueServiceImplTest
         ReviewProject project = new ReviewProject();
         project.setProjectId(99L);
         project.setDeptId(9L);
-        when(projectMapper.selectReviewProjectById(99L)).thenReturn(project);
-        doThrow(new ServiceException("没有权限访问部门数据！")).when(deptService).checkDeptDataScope(9L);
+        doThrow(new ServiceException("没有权限访问项目！")).when(projectAccessService).requireView(99L);
         ReviewIssue query = new ReviewIssue();
         query.setReviewTaskId(205L);
 
@@ -710,18 +721,16 @@ class ReviewIssueServiceImplTest
             ReviewProject out = new ReviewProject();
             out.setProjectId(99L);
             out.setDeptId(9L);
-            when(projectMapper.selectReviewProjectById(99L)).thenReturn(out);
             when(issueMapper.selectIssueById(41L)).thenReturn(a);
             when(issueMapper.selectIssueById(42L)).thenReturn(b);
-            lenient().doNothing().when(deptService).checkDeptDataScope(1L);
-            doThrow(new ServiceException("没有权限访问部门数据！")).when(deptService).checkDeptDataScope(9L);
+            doThrow(new ServiceException("没有权限访问项目！")).when(projectAccessService).requireOperate(99L);
 
             ReviewIssueBatchResult result = service.batchDispose(
                 batchRequest(ReviewIssueConstants.ACTION_CONFIRM, List.of(41L, 42L)));
 
             assertTrue(result.hasFailures());
             assertEquals(42L, result.getFailures().get(0).get("issueId"));
-            verify(deptService).checkDeptDataScope(9L);
+            verify(projectAccessService).requireOperate(99L);
             verify(issueMapper, never()).updateIssueDisposition(any());
         }
     }
@@ -743,8 +752,10 @@ class ReviewIssueServiceImplTest
             when(deliveryService.rerenderSummaryComment(10L, 8))
                 .thenReturn(ReviewCommentSyncResult.of(ReviewDeliveryConstants.STATUS_SUCCESS, null, 1L));
 
-            ReviewIssueBatchResult result = service.batchDispose(
-                batchRequest(ReviewIssueConstants.ACTION_CLOSE, List.of(51L, 52L)));
+            ReviewIssueBatchRequest request = batchRequest(
+                ReviewIssueConstants.ACTION_CLOSE, List.of(51L, 52L));
+            request.setResolveNote("批量关闭");
+            ReviewIssueBatchResult result = service.batchDispose(request);
 
             assertFalse(result.hasFailures());
             assertEquals(2, result.getSuccessCount());
@@ -1050,7 +1061,8 @@ class ReviewIssueServiceImplTest
         ReviewProject project = new ReviewProject();
         project.setProjectId(issue.getProjectId());
         project.setDeptId(1L);
-        when(projectMapper.selectReviewProjectById(issue.getProjectId())).thenReturn(project);
+        lenient().when(projectAccessService.requireView(issue.getProjectId())).thenReturn(project);
+        lenient().when(projectAccessService.requireOperate(issue.getProjectId())).thenReturn(project);
     }
 
     private static ReviewIssue openIssue(Long id, String category, String path, String title)

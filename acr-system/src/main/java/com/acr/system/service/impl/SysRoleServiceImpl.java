@@ -22,7 +22,11 @@ import com.acr.system.mapper.SysRoleDeptMapper;
 import com.acr.system.mapper.SysRoleMapper;
 import com.acr.system.mapper.SysRoleMenuMapper;
 import com.acr.system.mapper.SysUserRoleMapper;
+import com.acr.system.domain.SysBusinessAudit;
+import com.acr.system.service.ISysBusinessAuditService;
 import com.acr.system.service.ISysRoleService;
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
 
 /**
  * 角色 业务层处理
@@ -44,6 +48,9 @@ public class SysRoleServiceImpl implements ISysRoleService
     @Autowired
     private SysRoleDeptMapper roleDeptMapper;
 
+    @Autowired
+    private ISysBusinessAuditService businessAuditService;
+
     /**
      * 根据条件分页查询角色数据
      * 
@@ -54,6 +61,10 @@ public class SysRoleServiceImpl implements ISysRoleService
     @DataScope(deptAlias = "d")
     public List<SysRole> selectRoleList(SysRole role)
     {
+        if (!SecurityUtils.isAdmin())
+        {
+            role.getParams().put("hidePlatformRoles", true);
+        }
         return roleMapper.selectRoleList(role);
     }
 
@@ -186,6 +197,15 @@ public class SysRoleServiceImpl implements ISysRoleService
         {
             throw new ServiceException("不允许操作超级管理员角色");
         }
+        if (!SecurityUtils.isAdmin())
+        {
+            SysRole existing = role.getRoleId() == null ? null : roleMapper.selectRoleById(role.getRoleId());
+            if (SysRole.ROLE_SCOPE_PLATFORM.equals(role.getRoleScope())
+                || (existing != null && SysRole.ROLE_SCOPE_PLATFORM.equals(existing.getRoleScope())))
+            {
+                throw new ServiceException("平台级角色仅允许超级管理员维护");
+            }
+        }
     }
 
     /**
@@ -233,9 +253,12 @@ public class SysRoleServiceImpl implements ISysRoleService
     @Transactional
     public int insertRole(SysRole role)
     {
+        normalizeAndCheckRoleScope(role);
         // 新增角色信息
         roleMapper.insertRole(role);
-        return insertRoleMenu(role);
+        int rows = insertRoleMenu(role);
+        recordRoleAudit("CREATE", null, role, "角色创建");
+        return rows;
     }
 
     /**
@@ -248,11 +271,15 @@ public class SysRoleServiceImpl implements ISysRoleService
     @Transactional
     public int updateRole(SysRole role)
     {
+        SysRole before = selectRoleById(role.getRoleId());
+        normalizeAndCheckRoleScope(role);
         // 修改角色信息
         roleMapper.updateRole(role);
         // 删除角色与菜单关联
         roleMenuMapper.deleteRoleMenuByRoleId(role.getRoleId());
-        return insertRoleMenu(role);
+        int rows = insertRoleMenu(role);
+        recordRoleAudit("UPDATE", before, role, "角色及菜单权限变更");
+        return rows;
     }
 
     /**
@@ -262,9 +289,14 @@ public class SysRoleServiceImpl implements ISysRoleService
      * @return 结果
      */
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public int updateRoleStatus(SysRole role)
     {
-        return roleMapper.updateRole(role);
+        SysRole before = selectRoleById(role.getRoleId());
+        int rows = roleMapper.updateRole(role);
+        SysRole after = selectRoleById(role.getRoleId());
+        recordRoleAudit("STATUS", before, after, "角色状态变更");
+        return rows;
     }
 
     /**
@@ -277,12 +309,15 @@ public class SysRoleServiceImpl implements ISysRoleService
     @Transactional
     public int authDataScope(SysRole role)
     {
+        SysRole before = selectRoleById(role.getRoleId());
         // 修改角色信息
         roleMapper.updateRole(role);
         // 删除角色与部门关联
         roleDeptMapper.deleteRoleDeptByRoleId(role.getRoleId());
         // 新增角色和部门信息（数据权限）
-        return insertRoleDept(role);
+        int rows = insertRoleDept(role);
+        recordRoleAudit("DATA_SCOPE", before, role, "角色数据范围变更");
+        return rows;
     }
 
     /**
@@ -343,11 +378,14 @@ public class SysRoleServiceImpl implements ISysRoleService
     @Transactional
     public int deleteRoleById(Long roleId)
     {
+        SysRole before = selectRoleById(roleId);
         // 删除角色与菜单关联
         roleMenuMapper.deleteRoleMenuByRoleId(roleId);
         // 删除角色与部门关联
         roleDeptMapper.deleteRoleDeptByRoleId(roleId);
-        return roleMapper.deleteRoleById(roleId);
+        int rows = roleMapper.deleteRoleById(roleId);
+        recordRoleAudit("DELETE", before, null, "角色删除");
+        return rows;
     }
 
     /**
@@ -360,11 +398,13 @@ public class SysRoleServiceImpl implements ISysRoleService
     @Transactional
     public int deleteRoleByIds(Long[] roleIds)
     {
+        List<SysRole> beforeRoles = new ArrayList<>();
         for (Long roleId : roleIds)
         {
             checkRoleAllowed(new SysRole(roleId));
             checkRoleDataScope(roleId);
             SysRole role = selectRoleById(roleId);
+            beforeRoles.add(role);
             if (countUserRoleByRoleId(roleId) > 0)
             {
                 throw new ServiceException(String.format("%1$s已分配,不能删除", role.getRoleName()));
@@ -374,7 +414,12 @@ public class SysRoleServiceImpl implements ISysRoleService
         roleMenuMapper.deleteRoleMenu(roleIds);
         // 删除角色与部门关联
         roleDeptMapper.deleteRoleDept(roleIds);
-        return roleMapper.deleteRoleByIds(roleIds);
+        int rows = roleMapper.deleteRoleByIds(roleIds);
+        for (SysRole role : beforeRoles)
+        {
+            recordRoleAudit("DELETE", role, null, "角色删除");
+        }
+        return rows;
     }
 
     /**
@@ -384,9 +429,13 @@ public class SysRoleServiceImpl implements ISysRoleService
      * @return 结果
      */
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public int deleteAuthUser(SysUserRole userRole)
     {
-        return userRoleMapper.deleteUserRoleInfo(userRole);
+        int rows = userRoleMapper.deleteUserRoleInfo(userRole);
+        recordRoleRelationAudit("REVOKE", userRole.getRoleId(),
+            new Long[] {userRole.getUserId()}, "角色授权撤销");
+        return rows;
     }
 
     /**
@@ -397,9 +446,12 @@ public class SysRoleServiceImpl implements ISysRoleService
      * @return 结果
      */
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public int deleteAuthUsers(Long roleId, Long[] userIds)
     {
-        return userRoleMapper.deleteUserRoleInfos(roleId, userIds);
+        int rows = userRoleMapper.deleteUserRoleInfos(roleId, userIds);
+        recordRoleRelationAudit("REVOKE", roleId, userIds, "角色授权撤销");
+        return rows;
     }
 
     /**
@@ -410,8 +462,10 @@ public class SysRoleServiceImpl implements ISysRoleService
      * @return 结果
      */
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public int insertAuthUsers(Long roleId, Long[] userIds)
     {
+        checkRoleAllowed(new SysRole(roleId));
         // 新增用户与角色管理
         List<SysUserRole> list = new ArrayList<SysUserRole>();
         for (Long userId : userIds)
@@ -421,6 +475,60 @@ public class SysRoleServiceImpl implements ISysRoleService
             ur.setRoleId(roleId);
             list.add(ur);
         }
-        return userRoleMapper.batchUserRole(list);
+        int rows = userRoleMapper.batchUserRole(list);
+        recordRoleRelationAudit("GRANT", roleId, userIds, "角色授权变更");
+        return rows;
+    }
+
+    private void recordRoleAudit(String action, SysRole before, SysRole after, String reason)
+    {
+        SysRole target = after == null ? before : after;
+        if (target == null)
+        {
+            return;
+        }
+        SysBusinessAudit audit = new SysBusinessAudit();
+        audit.setEventKey("system-role-" + action + "-" + target.getRoleId() + "-" + java.util.UUID.randomUUID());
+        audit.setSource("acr-system");
+        audit.setAction("SYSTEM_ROLE_" + action);
+        audit.setObjectType("SYS_ROLE");
+        audit.setObjectId(String.valueOf(target.getRoleId()));
+        audit.setObjectName(target.getRoleName());
+        audit.setBeforeValue(before == null ? null : JSON.toJSONString(before));
+        audit.setAfterValue(after == null ? null : JSON.toJSONString(after));
+        audit.setReason(reason);
+        businessAuditService.record(audit);
+    }
+
+    private void recordRoleRelationAudit(String action, Long roleId, Long[] userIds, String reason)
+    {
+        JSONObject relation = new JSONObject();
+        relation.put("roleId", roleId);
+        relation.put("userIds", userIds);
+        SysBusinessAudit audit = new SysBusinessAudit();
+        audit.setEventKey("system-role-user-" + action + "-" + roleId + "-" + java.util.UUID.randomUUID());
+        audit.setSource("acr-system");
+        audit.setAction("SYSTEM_ROLE_USER_" + action);
+        audit.setObjectType("SYS_ROLE_USER");
+        audit.setObjectId(String.valueOf(roleId));
+        audit.setBeforeValue("REVOKE".equals(action) ? relation.toJSONString() : null);
+        audit.setAfterValue("GRANT".equals(action) ? relation.toJSONString() : null);
+        audit.setRelatedObject(relation.toJSONString());
+        audit.setReason(reason);
+        businessAuditService.record(audit);
+    }
+
+    private void normalizeAndCheckRoleScope(SysRole role)
+    {
+        if (StringUtils.isEmpty(role.getRoleScope()))
+        {
+            role.setRoleScope(SysRole.ROLE_SCOPE_DEPARTMENT);
+        }
+        if (!SysRole.ROLE_SCOPE_PLATFORM.equals(role.getRoleScope())
+            && !SysRole.ROLE_SCOPE_DEPARTMENT.equals(role.getRoleScope()))
+        {
+            throw new ServiceException("角色层级无效");
+        }
+        checkRoleAllowed(role);
     }
 }

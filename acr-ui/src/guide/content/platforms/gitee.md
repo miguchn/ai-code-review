@@ -1,6 +1,6 @@
 # Gitee 接入
 
-这篇帮你完成 Gitee（码云）仓库接入：创建私人令牌 → 在平台建凭据与项目 → 配置 WebHook → 验证 PR 能自动触发审查。
+这篇帮你完成 Gitee（码云）仓库接入：创建私人令牌 → 在平台建凭据与项目 → 配置 WebHook → 验证 PR 或 Push 能自动触发审查。
 
 ## 第 1 步：创建私人令牌
 
@@ -23,7 +23,7 @@
 
 ## 第 3 步：接入项目并配置 Webhook
 
-**平台侧**：进入「项目接入 → 代码项目」新增项目（Git 平台选 Gitee，填仓库地址如 `https://gitee.com/your-org/your-repo`，选择凭据，启用合并请求审查并选目标分支与审查方式）。保存后再次编辑该项目，切换到 **Webhook** 页签：
+**平台侧**：进入「项目接入 → 代码项目」新增项目（Git 平台选 Gitee，填仓库地址如 `https://gitee.com/your-org/your-repo`，选择凭据，按需启用合并请求审查、Push 审查并配置对应分支与审查方式）。保存后再次编辑该项目，切换到 **Webhook** 页签：
 
 1. 回调地址：复制输入框中的值，形如 `https://acr.example.com/webhook/gitee`；
 2. Webhook Secret：点击「随机生成」生成一个并**另行记录**（保存后页面不回显明文），然后保存项目。
@@ -32,7 +32,7 @@
 
 1. URL：粘贴平台回调地址；
 2. 校验方式：Gitee 支持「密码」与「签名」两种，**平台两种都兼容**；页面提供签名选项时优先选签名，密钥填平台的 Webhook Secret；只有密码输入框时直接填同一个 Secret；
-3. 事件勾选 **Pull Request** 相关事件（如「Pull Request 事件」勾选项）；
+3. 平台启用合并请求审查时勾选 **Pull Request** 相关事件；启用 Push 审查时同时勾选 **Push** 相关事件；
 4. 保存。可在 WebHook 列表点击测试发送，观察响应。
 
 > 无论密码还是签名方式，Gitee 侧填写的值都必须与平台 Webhook Secret 完全一致；签名方式下平台还会校验时间戳（允许 1 小时时钟偏差），请保持服务器时间同步。
@@ -52,4 +52,4 @@
 | 平台事件记录显示「Webhook 签名校验失败」 | WebHook 的密码/签名与平台 Webhook Secret 不一致；签名模式下还可能是服务器时间偏差过大 |
 | 「未匹配到已接入的代码项目」 | 平台按 `owner/repo` 精确匹配，检查项目仓库地址 |
 | 凭据「检测」失败 | 私人令牌权限不足（至少 `projects`）或已过期 |
-| PR 已发起但无事件 | WebHook 未勾选 Pull Request 事件，回 Gitee 补勾 |
+| PR 或 Push 后无事件 | WebHook 未勾选对应的 Pull Request / Push 事件，回 Gitee 补勾 |

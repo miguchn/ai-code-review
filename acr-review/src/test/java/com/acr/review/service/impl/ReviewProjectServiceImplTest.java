@@ -35,6 +35,7 @@ import com.acr.review.mapper.ReviewProjectMapper;
 import com.acr.review.security.CredentialCryptoService;
 import com.acr.review.service.IGitCredentialService;
 import com.acr.review.service.IReviewTemplateService;
+import com.acr.review.service.ReviewProjectAccessService;
 import com.acr.system.domain.SysBusinessSystem;
 import com.acr.system.service.ISysAiModelConfigService;
 import com.acr.system.service.ISysBusinessSystemService;
@@ -71,15 +72,20 @@ class ReviewProjectServiceImplTest
             mock(ReviewNotifyChannelMapper.class),
             credentialService, adapterRegistry, mock(ISysBusinessSystemService.class), configService,
             mock(ISysDeptService.class), mock(ISysUserService.class), mock(ISysAiModelConfigService.class),
-            mock(IReviewTemplateService.class), mock(CredentialCryptoService.class), "http://localhost:8080");
+            mock(IReviewTemplateService.class), mock(CredentialCryptoService.class),
+            mock(ReviewProjectAccessService.class), "http://localhost:8080");
         GitRepositoryReadRequest request = new GitRepositoryReadRequest();
         request.setRepositoryUrl(repository.canonicalUrl());
         request.setCredentialId(1L);
 
-        ReviewRepositoryInfo result = service.readRepositoryInfo(request);
+        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class))
+        {
+            security.when(() -> SecurityUtils.hasPlatformPermi("review:credential:query")).thenReturn(true);
+            ReviewRepositoryInfo result = service.readRepositoryInfo(request);
 
-        assertTrue(result.success());
-        assertEquals(List.of("dev"), result.recommendedTargetBranches());
+            assertTrue(result.success());
+            assertEquals(List.of("dev"), result.recommendedTargetBranches());
+        }
     }
 
     @Test
@@ -245,7 +251,8 @@ class ReviewProjectServiceImplTest
         ReviewProjectServiceImpl service = new ReviewProjectServiceImpl(projectMapper, credentialMapper,
             mock(ReviewNotifyChannelMapper.class), credentialService, adapterRegistry, businessSystemService,
             mock(ISysConfigService.class), deptService, userService, mock(ISysAiModelConfigService.class),
-            mock(IReviewTemplateService.class), mock(CredentialCryptoService.class), "http://localhost:8080");
+            mock(IReviewTemplateService.class), mock(CredentialCryptoService.class),
+            mock(ReviewProjectAccessService.class), "http://localhost:8080");
 
         ReviewProject noneSelected = baseInsertProject();
         noneSelected.setPrReviewEnabled("1");
@@ -254,6 +261,7 @@ class ReviewProjectServiceImplTest
         try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class))
         {
             security.when(SecurityUtils::getUsername).thenReturn("admin");
+            security.when(() -> SecurityUtils.hasPlatformPermi("review:credential:query")).thenReturn(true);
             ServiceException ex = assertThrows(ServiceException.class,
                 () -> service.insertReviewProject(noneSelected));
             assertTrue(ex.getMessage().contains("请至少选择一种审查类型"));
@@ -280,6 +288,7 @@ class ReviewProjectServiceImplTest
         {
             security.when(SecurityUtils::getUsername).thenReturn("admin");
             security.when(SecurityUtils::isAdmin).thenReturn(true);
+            security.when(() -> SecurityUtils.hasPlatformPermi("review:credential:query")).thenReturn(true);
             service.insertReviewProject(illegal);
             assertEquals("0", illegal.getPrReviewEnabled());
             assertEquals("1", illegal.getPushReviewEnabled());
@@ -322,7 +331,8 @@ class ReviewProjectServiceImplTest
         ReviewProjectServiceImpl service = new ReviewProjectServiceImpl(projectMapper, credentialMapper,
             mock(ReviewNotifyChannelMapper.class), credentialService, adapterRegistry, businessSystemService,
             mock(ISysConfigService.class), deptService, userService, mock(ISysAiModelConfigService.class),
-            mock(IReviewTemplateService.class), mock(CredentialCryptoService.class), "http://localhost:8080");
+            mock(IReviewTemplateService.class), mock(CredentialCryptoService.class),
+            mock(ReviewProjectAccessService.class), "http://localhost:8080");
 
         ReviewProject project = baseInsertProject();
         project.setPrReviewEnabled("0");
@@ -335,6 +345,7 @@ class ReviewProjectServiceImplTest
         {
             security.when(SecurityUtils::getUsername).thenReturn("admin");
             security.when(SecurityUtils::isAdmin).thenReturn(true);
+            security.when(() -> SecurityUtils.hasPlatformPermi("review:credential:query")).thenReturn(true);
             service.insertReviewProject(project);
             assertEquals("1", project.getInlineCommentEnabled());
             assertEquals("CRITICAL,HIGH", project.getInlineSeverities());
@@ -369,15 +380,40 @@ class ReviewProjectServiceImplTest
             mock(ReviewNotifyChannelMapper.class), mock(IGitCredentialService.class), adapterRegistry,
             mock(ISysBusinessSystemService.class), mock(ISysConfigService.class), mock(ISysDeptService.class),
             mock(ISysUserService.class), mock(ISysAiModelConfigService.class),
-            mock(IReviewTemplateService.class), mock(CredentialCryptoService.class), "http://localhost:8080");
+            mock(IReviewTemplateService.class), mock(CredentialCryptoService.class),
+            mock(ReviewProjectAccessService.class), "http://localhost:8080");
 
         ReviewProject project = baseInsertProject();
         project.setPrReviewEnabled("1");
         project.setPushReviewEnabled("0");
         project.setPushTriggerBranches("");
 
-        ServiceException ex = assertThrows(ServiceException.class, () -> service.insertReviewProject(project));
-        assertTrue(ex.getMessage().contains("触发分支"));
+        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class))
+        {
+            security.when(() -> SecurityUtils.hasPlatformPermi("review:credential:query")).thenReturn(true);
+            ServiceException ex = assertThrows(ServiceException.class, () -> service.insertReviewProject(project));
+            assertTrue(ex.getMessage().contains("触发分支"));
+        }
+    }
+
+    @Test
+    void insertRejectsCredentialBindingWithoutPlatformRole()
+    {
+        ReviewProjectServiceImpl service = new ReviewProjectServiceImpl(mock(ReviewProjectMapper.class),
+            mock(GitCredentialMapper.class), mock(ReviewNotifyChannelMapper.class),
+            mock(IGitCredentialService.class), mock(GitAdapterRegistry.class),
+            mock(ISysBusinessSystemService.class), mock(ISysConfigService.class), mock(ISysDeptService.class),
+            mock(ISysUserService.class), mock(ISysAiModelConfigService.class),
+            mock(IReviewTemplateService.class), mock(CredentialCryptoService.class),
+            mock(ReviewProjectAccessService.class), "http://localhost:8080");
+
+        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class))
+        {
+            security.when(() -> SecurityUtils.hasPlatformPermi("review:credential:query")).thenReturn(false);
+            ServiceException ex = assertThrows(ServiceException.class,
+                () -> service.insertReviewProject(baseInsertProject()));
+            assertTrue(ex.getMessage().contains("平台级角色"));
+        }
     }
 
     private static ReviewProject baseInsertProject()
@@ -399,11 +435,15 @@ class ReviewProjectServiceImplTest
     private static ReviewProjectServiceImpl newStatusService(ReviewProjectMapper projectMapper,
                                                             IGitCredentialService credentialService)
     {
+        ReviewProjectAccessService accessService = mock(ReviewProjectAccessService.class);
+        when(accessService.requireManage(any())).thenAnswer(invocation ->
+            projectMapper.selectReviewProjectById(invocation.getArgument(0)));
         return new ReviewProjectServiceImpl(projectMapper, mock(GitCredentialMapper.class),
             mock(ReviewNotifyChannelMapper.class), credentialService, mock(GitAdapterRegistry.class),
             mock(ISysBusinessSystemService.class), mock(ISysConfigService.class), mock(ISysDeptService.class),
             mock(ISysUserService.class), mock(ISysAiModelConfigService.class),
-            mock(IReviewTemplateService.class), mock(CredentialCryptoService.class), "http://localhost:8080");
+            mock(IReviewTemplateService.class), mock(CredentialCryptoService.class),
+            accessService, "http://localhost:8080");
     }
 
     private static ReviewProjectServiceImpl newFormOptionsService(ISysDeptService deptService, ISysUserService userService)
@@ -424,7 +464,8 @@ class ReviewProjectServiceImplTest
             mock(ReviewNotifyChannelMapper.class),
             mock(IGitCredentialService.class), mock(GitAdapterRegistry.class), businessSystemService, configService,
             deptService, userService, aiModelConfigService, templateService,
-            mock(CredentialCryptoService.class), "http://localhost:8080");
+            mock(CredentialCryptoService.class), mock(ReviewProjectAccessService.class),
+            "http://localhost:8080");
     }
 
     private static SysDept dept(Long deptId, Long parentId, String name, String status)

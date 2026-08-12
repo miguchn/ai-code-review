@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.acr.system.mapper.SysBusinessAuditMapper">
+    <resultMap id="SysBusinessAuditResult" type="com.acr.system.domain.SysBusinessAudit">
+        <id property="auditId" column="audit_id" />
+        <result property="eventKey" column="event_key" />
+        <result property="source" column="source" />
+        <result property="action" column="action" />
+        <result property="objectType" column="object_type" />
+        <result property="objectId" column="object_id" />
+        <result property="objectName" column="object_name" />
+        <result property="beforeValue" column="before_value" />
+        <result property="afterValue" column="after_value" />
+        <result property="reason" column="reason" />
+        <result property="relatedObject" column="related_object" />
+        <result property="operator" column="operator" />
+        <result property="auditTime" column="audit_time" />
+    </resultMap>
+
+    <insert id="insertBusinessAudit" parameterType="com.acr.system.domain.SysBusinessAudit"
+            useGeneratedKeys="true" keyProperty="auditId">
+        insert into sys_business_audit
+        (event_key, source, action, object_type, object_id, object_name,
+         before_value, after_value, reason, related_object, operator, audit_time)
+        values
+        (#{eventKey}, #{source}, #{action}, #{objectType}, #{objectId}, #{objectName},
+         #{beforeValue}, #{afterValue}, #{reason}, #{relatedObject}, #{operator}, #{auditTime})
+    </insert>
+
+    <select id="selectBusinessAuditList" resultMap="SysBusinessAuditResult">
+        select audit_id, event_key, source, action, object_type, object_id, object_name,
+               before_value, after_value, reason, related_object, operator, audit_time
+        from sys_business_audit
+        <where>
+            <if test="source != null and source != ''">and source = #{source}</if>
+            <if test="action != null and action != ''">and action = #{action}</if>
+            <if test="objectType != null and objectType != ''">and object_type = #{objectType}</if>
+            <if test="objectId != null and objectId != ''">and object_id = #{objectId}</if>
+            <if test="operator != null and operator != ''">and operator like concat('%', #{operator}, '%')</if>
+            <if test="params.beginTime != null and params.beginTime != ''">and audit_time &gt;= #{params.beginTime}</if>
+            <if test="params.endTime != null and params.endTime != ''">and audit_time &lt;= #{params.endTime}</if>
+        </where>
+        order by audit_time desc, audit_id desc
+    </select>
+</mapper>

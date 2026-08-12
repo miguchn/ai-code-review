@@ -213,6 +213,7 @@ public class SysRoleController extends BaseController
     @PutMapping("/authUser/cancel")
     public AjaxResult cancelAuthUser(@RequestBody SysUserRole userRole)
     {
+        roleService.checkRoleDataScope(userRole.getRoleId());
         return toAjax(roleService.deleteAuthUser(userRole));
     }
 
@@ -224,6 +225,7 @@ public class SysRoleController extends BaseController
     @PutMapping("/authUser/cancelAll")
     public AjaxResult cancelAuthUserAll(Long roleId, Long[] userIds)
     {
+        roleService.checkRoleDataScope(roleId);
         return toAjax(roleService.deleteAuthUsers(roleId, userIds));
     }
 

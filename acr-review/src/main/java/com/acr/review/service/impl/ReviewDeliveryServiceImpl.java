@@ -56,6 +56,7 @@ import com.acr.review.service.IReviewIssueService;
 import com.acr.review.service.IReviewNotifyChannelService;
 import com.acr.review.service.IReviewNotifyChannelService.DecryptedNotifyChannel;
 import com.acr.review.service.ReviewIssueDispositionEnricher;
+import com.acr.review.service.ReviewProjectAccessService;
 import com.acr.review.notify.NotifyRobotClients;
 import com.acr.system.service.ISysDeptService;
 import com.alibaba.fastjson2.JSON;
@@ -82,6 +83,7 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
     private final IReviewIssueService issueService;
     private final ReviewDeliveryIntentService deliveryIntentService;
     private final ReviewDeliveryRuntimeSettings deliverySettings;
+    private final ReviewProjectAccessService projectAccessService;
 
     public ReviewDeliveryServiceImpl(ReviewDeliveryRecordMapper deliveryMapper,
                                      ReviewTaskMapper taskMapper,
@@ -97,7 +99,8 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
                                      GitCredentialMapper credentialMapper,
                                      @Lazy IReviewIssueService issueService,
                                      ReviewDeliveryIntentService deliveryIntentService,
-                                     ReviewDeliveryRuntimeSettings deliverySettings)
+                                     ReviewDeliveryRuntimeSettings deliverySettings,
+                                     ReviewProjectAccessService projectAccessService)
     {
         this.deliveryMapper = deliveryMapper;
         this.taskMapper = taskMapper;
@@ -114,6 +117,7 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
         this.issueService = issueService;
         this.deliveryIntentService = deliveryIntentService;
         this.deliverySettings = deliverySettings;
+        this.projectAccessService = projectAccessService;
     }
 
     @Override
@@ -179,12 +183,7 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
         {
             throw new ServiceException("投递记录不存在");
         }
-        ReviewProject project = projectMapper.selectReviewProjectById(record.getProjectId());
-        if (project == null)
-        {
-            throw new ServiceException("投递记录所属项目不存在");
-        }
-        deptService.checkDeptDataScope(project.getDeptId());
+        projectAccessService.requireOperate(record.getProjectId());
 
         if (ReviewDeliveryConstants.isSummaryCommentChannel(record.getChannel()))
         {
@@ -209,12 +208,7 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
         {
             throw new ServiceException("投递记录不存在");
         }
-        ReviewProject project = projectMapper.selectReviewProjectById(record.getProjectId());
-        if (project == null)
-        {
-            throw new ServiceException("投递记录所属项目不存在");
-        }
-        deptService.checkDeptDataScope(project.getDeptId());
+        projectAccessService.requireOperate(record.getProjectId());
         if (!ReviewDeliveryConstants.STATUS_MANUAL.equals(record.getDeliveryStatus()))
         {
             throw new ServiceException("仅「待人工处置」的投递可标记已处理");
@@ -404,12 +398,7 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
         {
             throw new ServiceException("审查任务不存在");
         }
-        ReviewProject project = projectMapper.selectReviewProjectById(task.getProjectId());
-        if (project == null)
-        {
-            throw new ServiceException("审查任务所属项目不存在");
-        }
-        deptService.checkDeptDataScope(project.getDeptId());
+        projectAccessService.requireView(task.getProjectId());
         return deliveryMapper.selectLatestImByTaskId(taskId);
     }
 
@@ -425,12 +414,7 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
         {
             throw new ServiceException("问题不存在");
         }
-        ReviewProject project = projectMapper.selectReviewProjectById(issue.getProjectId());
-        if (project == null)
-        {
-            throw new ServiceException("问题所属项目不存在");
-        }
-        deptService.checkDeptDataScope(project.getDeptId());
+        projectAccessService.requireView(issue.getProjectId());
         return deliveryMapper.selectByIssueId(issueId);
     }
 
@@ -442,12 +426,7 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
         {
             throw new ServiceException("审查任务不存在");
         }
-        ReviewProject project = projectMapper.selectReviewProjectById(task.getProjectId());
-        if (project == null)
-        {
-            throw new ServiceException("审查任务所属项目不存在");
-        }
-        deptService.checkDeptDataScope(project.getDeptId());
+        projectAccessService.requireView(task.getProjectId());
         List<ReviewDeliveryRecord> list = deliveryMapper.selectInlineByTaskId(taskId);
         return list == null ? Collections.emptyList() : list;
     }
@@ -460,12 +439,7 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
         {
             throw new ServiceException("投递记录不存在");
         }
-        ReviewProject project = projectMapper.selectReviewProjectById(record.getProjectId());
-        if (project == null)
-        {
-            throw new ServiceException("投递记录所属项目不存在");
-        }
-        deptService.checkDeptDataScope(project.getDeptId());
+        projectAccessService.requireView(record.getProjectId());
         return record;
     }
 
@@ -503,6 +477,7 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
     @DataScope(deptAlias = "d", userAlias = "owner", permission = "review:delivery:list")
     public List<ReviewDeliveryRecord> selectDeliveryList(ReviewDeliveryRecord query)
     {
+        projectAccessService.applyQueryScope(query);
         return deliveryMapper.selectDeliveryList(query);
     }
 
@@ -510,6 +485,7 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
     @DataScope(deptAlias = "d", userAlias = "owner", permission = "review:delivery:list")
     public int countDeliveryList(ReviewDeliveryRecord query)
     {
+        projectAccessService.applyQueryScope(query);
         return deliveryMapper.countDeliveryList(query);
     }
 
@@ -877,12 +853,7 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
 
     private void checkTaskDataScope(ReviewTask task)
     {
-        ReviewProject project = projectMapper.selectReviewProjectById(task.getProjectId());
-        if (project == null)
-        {
-            throw new ServiceException("审查任务所属项目不存在");
-        }
-        deptService.checkDeptDataScope(project.getDeptId());
+        projectAccessService.requireOperate(task.getProjectId());
     }
 
     private static String currentOperator()

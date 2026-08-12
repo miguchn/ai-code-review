@@ -18,6 +18,7 @@ import com.acr.review.service.IReviewDeliveryService;
 import com.acr.review.service.IReviewIssueService;
 import com.acr.review.service.IReviewTaskExecutionService;
 import com.acr.review.service.IReviewTaskService;
+import com.acr.review.service.ReviewProjectAccessService;
 import com.acr.system.service.ISysDeptService;
 
 /** 审查任务查询与重试。 */
@@ -31,6 +32,7 @@ public class ReviewTaskServiceImpl implements IReviewTaskService
     private final IReviewTaskExecutionService executionService;
     private final IReviewDeliveryService deliveryService;
     private final IReviewIssueService issueService;
+    private final ReviewProjectAccessService projectAccessService;
 
     public ReviewTaskServiceImpl(ReviewTaskMapper taskMapper,
                                  ReviewTaskRunMapper runMapper,
@@ -38,7 +40,8 @@ public class ReviewTaskServiceImpl implements IReviewTaskService
                                  ISysDeptService deptService,
                                  IReviewTaskExecutionService executionService,
                                  IReviewDeliveryService deliveryService,
-                                 IReviewIssueService issueService)
+                                 IReviewIssueService issueService,
+                                 ReviewProjectAccessService projectAccessService)
     {
         this.taskMapper = taskMapper;
         this.runMapper = runMapper;
@@ -47,6 +50,7 @@ public class ReviewTaskServiceImpl implements IReviewTaskService
         this.executionService = executionService;
         this.deliveryService = deliveryService;
         this.issueService = issueService;
+        this.projectAccessService = projectAccessService;
     }
 
     @Override
@@ -64,6 +68,7 @@ public class ReviewTaskServiceImpl implements IReviewTaskService
     @DataScope(deptAlias = "d", userAlias = "owner", permission = "review:task:list")
     public List<ReviewTask> selectReviewTaskList(ReviewTask task)
     {
+        projectAccessService.applyQueryScope(task);
         return taskMapper.selectReviewTaskList(task);
     }
 
@@ -71,6 +76,7 @@ public class ReviewTaskServiceImpl implements IReviewTaskService
     @DataScope(deptAlias = "d", userAlias = "owner", permission = "review:task:list")
     public int countReviewTaskList(ReviewTask task)
     {
+        projectAccessService.applyQueryScope(task);
         return taskMapper.countReviewTaskList(task);
     }
 
@@ -78,6 +84,7 @@ public class ReviewTaskServiceImpl implements IReviewTaskService
     @DataScope(deptAlias = "d", userAlias = "owner", permission = "review:task:list")
     public int countTodayNewTasks(ReviewTask task)
     {
+        projectAccessService.applyQueryScope(task);
         return taskMapper.countTodayNewTasks(task);
     }
 
@@ -85,6 +92,7 @@ public class ReviewTaskServiceImpl implements IReviewTaskService
     @DataScope(deptAlias = "d", userAlias = "owner", permission = "review:task:list")
     public int countTodaySuccessTasks(ReviewTask task)
     {
+        projectAccessService.applyQueryScope(task);
         return taskMapper.countTodaySuccessTasks(task);
     }
 
@@ -92,6 +100,7 @@ public class ReviewTaskServiceImpl implements IReviewTaskService
     @DataScope(deptAlias = "d", userAlias = "owner", permission = "review:task:list")
     public int countTodayFailedTasks(ReviewTask task)
     {
+        projectAccessService.applyQueryScope(task);
         return taskMapper.countTodayFailedTasks(task);
     }
 
@@ -99,6 +108,7 @@ public class ReviewTaskServiceImpl implements IReviewTaskService
     @DataScope(deptAlias = "d", userAlias = "owner", permission = "review:task:list")
     public Date selectLatestTaskTime(ReviewTask task)
     {
+        projectAccessService.applyQueryScope(task);
         return taskMapper.selectLatestTaskTime(task);
     }
 
@@ -106,6 +116,7 @@ public class ReviewTaskServiceImpl implements IReviewTaskService
     @DataScope(deptAlias = "d", userAlias = "owner", permission = "review:task:list")
     public List<ReviewTask> selectRecentTasks(ReviewTask task)
     {
+        projectAccessService.applyQueryScope(task);
         return taskMapper.selectRecentTasks(task);
     }
 
@@ -113,7 +124,7 @@ public class ReviewTaskServiceImpl implements IReviewTaskService
     public ReviewTaskDetail selectReviewTaskDetail(Long taskId)
     {
         ReviewTask task = selectReviewTaskById(taskId);
-        checkTaskDataScope(task);
+        projectAccessService.requireView(task.getProjectId());
         List<ReviewTaskRun> runs = runMapper.selectRunsByTaskId(taskId);
         issueService.enrichRuns(runs, task.getProjectId(), task.getPrNumber(),
             ReviewIssueServiceImpl.resolveRefBranch(task));
@@ -125,7 +136,7 @@ public class ReviewTaskServiceImpl implements IReviewTaskService
     public void retryTask(Long taskId)
     {
         ReviewTask task = selectReviewTaskById(taskId);
-        checkTaskDataScope(task);
+        projectAccessService.requireOperate(task.getProjectId());
         executionService.retryTask(taskId);
     }
 
@@ -133,7 +144,7 @@ public class ReviewTaskServiceImpl implements IReviewTaskService
     public void cancelTask(Long taskId)
     {
         ReviewTask task = selectReviewTaskById(taskId);
-        checkTaskDataScope(task);
+        projectAccessService.requireOperate(task.getProjectId());
         String status = task.getTaskStatus();
         if (ReviewPipelineConstants.TASK_SUCCESS.equals(status)
             || ReviewPipelineConstants.TASK_FAILED.equals(status)
@@ -179,13 +190,4 @@ public class ReviewTaskServiceImpl implements IReviewTaskService
     }
 
     /** 详情与重试不走列表的数据范围切面，按任务所属项目部门单独校验。 */
-    private void checkTaskDataScope(ReviewTask task)
-    {
-        ReviewProject project = projectMapper.selectReviewProjectById(task.getProjectId());
-        if (project == null)
-        {
-            throw new ServiceException("审查任务所属项目不存在");
-        }
-        deptService.checkDeptDataScope(project.getDeptId());
-    }
 }

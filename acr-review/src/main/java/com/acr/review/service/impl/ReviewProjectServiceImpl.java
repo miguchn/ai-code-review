@@ -6,6 +6,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,15 +39,20 @@ import com.acr.review.mapper.ReviewProjectMapper;
 import com.acr.review.security.CredentialCryptoService;
 import com.acr.review.service.IGitCredentialService;
 import com.acr.review.service.IReviewProjectService;
+import com.acr.review.service.ReviewProjectAccessService;
 import com.acr.review.service.IReviewTemplateService;
 import com.acr.review.service.ReviewScoringConstants;
 import com.acr.system.domain.SysAiModelConfig;
 import com.acr.system.domain.SysBusinessSystem;
+import com.acr.system.domain.SysBusinessAudit;
 import com.acr.system.service.ISysAiModelConfigService;
 import com.acr.system.service.ISysBusinessSystemService;
 import com.acr.system.service.ISysConfigService;
 import com.acr.system.service.ISysDeptService;
 import com.acr.system.service.ISysUserService;
+import com.acr.system.service.ISysBusinessAuditService;
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
 
 /** 代码项目管理（多平台）。 */
 @Service
@@ -58,6 +64,10 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
     private static final String DEFAULT_LONG_LIVED_BRANCHES = "dev,develop,main,int,uat";
     private static final String DEFAULT_ROBOT_BRANCH_PREFIXES = "dependabot/,renovate/,github-actions/";
     private static final String DEFAULT_PR_EVENTS = "opened,reopened,synchronize";
+    private static final String CREDENTIAL_QUERY_PERMISSION = "review:credential:query";
+    private static final String MODEL_QUERY_PERMISSION = "system:aimodelconfig:query";
+    private static final String TEMPLATE_QUERY_PERMISSION = "review:template:query";
+    private static final String NOTIFY_QUERY_PERMISSION = "review:notify:query";
 
     private final ReviewProjectMapper projectMapper;
     private final GitCredentialMapper credentialMapper;
@@ -71,7 +81,11 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
     private final ISysAiModelConfigService aiModelConfigService;
     private final IReviewTemplateService templateService;
     private final CredentialCryptoService cryptoService;
+    private final ReviewProjectAccessService projectAccessService;
     private final String webhookCallbackBaseUrl;
+
+    @Autowired(required = false)
+    private ISysBusinessAuditService businessAuditService;
 
     public ReviewProjectServiceImpl(ReviewProjectMapper projectMapper,
                                     GitCredentialMapper credentialMapper,
@@ -85,6 +99,7 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
                                     ISysAiModelConfigService aiModelConfigService,
                                     IReviewTemplateService templateService,
                                     CredentialCryptoService cryptoService,
+                                    ReviewProjectAccessService projectAccessService,
                                     @Value("${review.webhook.callback-base-url:http://localhost:8080}") String webhookCallbackBaseUrl)
     {
         this.projectMapper = projectMapper;
@@ -99,14 +114,14 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
         this.aiModelConfigService = aiModelConfigService;
         this.templateService = templateService;
         this.cryptoService = cryptoService;
+        this.projectAccessService = projectAccessService;
         this.webhookCallbackBaseUrl = webhookCallbackBaseUrl;
     }
 
     @Override
     public ReviewProject selectReviewProjectById(Long projectId)
     {
-        ReviewProject project = projectMapper.selectReviewProjectById(projectId);
-        checkProjectAccess(project);
+        ReviewProject project = projectAccessService.requireView(projectId);
         fillWebhookView(project);
         return project;
     }
@@ -115,10 +130,7 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
     @DataScope(deptAlias = "d", userAlias = "owner", permission = "review:project:list")
     public List<ReviewProject> selectReviewProjectList(ReviewProject project)
     {
-        if (!SecurityUtils.isAdmin())
-        {
-            project.setAccessUserId(SecurityUtils.getUserId());
-        }
+        projectAccessService.applyQueryScope(project);
         return projectMapper.selectReviewProjectList(project);
     }
 
@@ -126,10 +138,7 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
     @DataScope(deptAlias = "d", userAlias = "owner", permission = "review:project:list")
     public int countReviewProjectList(ReviewProject project)
     {
-        if (!SecurityUtils.isAdmin())
-        {
-            project.setAccessUserId(SecurityUtils.getUserId());
-        }
+        projectAccessService.applyQueryScope(project);
         return projectMapper.countReviewProjectList(project);
     }
 
@@ -146,36 +155,73 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
 
         fillDepartmentAndOwnerOptions(options);
 
-        GitCredential credentialQuery = new GitCredential();
-        credentialQuery.setStatus("0");
-        options.setCredentials(credentialMapper.selectGitCredentialList(credentialQuery).stream()
-            .map(credential -> new ReviewProjectOptions.Option(credential.getCredentialId(), credential.getCredentialName(), null, null, credential.getStatus()))
-            .toList());
+        boolean credentialBindingEditable = SecurityUtils.hasPlatformPermi(CREDENTIAL_QUERY_PERMISSION);
+        boolean modelBindingEditable = SecurityUtils.hasPlatformPermi(MODEL_QUERY_PERMISSION);
+        boolean templateBindingEditable = SecurityUtils.hasPlatformPermi(TEMPLATE_QUERY_PERMISSION);
+        boolean notifyBindingEditable = SecurityUtils.hasPlatformPermi(NOTIFY_QUERY_PERMISSION);
+        options.setCredentialBindingEditable(credentialBindingEditable);
+        options.setModelBindingEditable(modelBindingEditable);
+        options.setTemplateBindingEditable(templateBindingEditable);
+        options.setNotifyBindingEditable(notifyBindingEditable);
 
-        SysAiModelConfig modelQuery = new SysAiModelConfig();
-        modelQuery.setEnabled("1");
-        options.setModels(aiModelConfigService.selectSysAiModelConfigList(modelQuery).stream()
-            .map(model -> {
-                String label = model.getModelName();
-                if ("1".equals(model.getIsDefault()))
-                {
-                    label = label + "（平台默认）";
-                }
-                return new ReviewProjectOptions.Option(model.getModelId(), label, null, null, model.getEnabled());
-            })
-            .toList());
+        if (credentialBindingEditable)
+        {
+            GitCredential credentialQuery = new GitCredential();
+            credentialQuery.setStatus("0");
+            options.setCredentials(credentialMapper.selectGitCredentialList(credentialQuery).stream()
+                .map(credential -> {
+                    ReviewProjectOptions.Option option = new ReviewProjectOptions.Option(
+                        credential.getCredentialId(), credential.getCredentialName(), null, null, credential.getStatus());
+                    option.setProvider(credential.getProvider());
+                    return option;
+                })
+                .toList());
+        }
 
-        ReviewTemplate templateQuery = new ReviewTemplate();
-        templateQuery.setStatus("0");
-        options.setTemplates(templateService.selectReviewTemplateList(templateQuery).stream()
-            .map(template -> {
-                ReviewProjectOptions.Option option = new ReviewProjectOptions.Option(
-                    template.getTemplateId(), template.getTemplateName(), null, null, template.getStatus());
-                option.setTechStack(template.getTechStack());
-                option.setVersionNo(template.getVersionNo());
-                return option;
-            })
-            .toList());
+        if (notifyBindingEditable)
+        {
+            ReviewNotifyChannel channelQuery = new ReviewNotifyChannel();
+            channelQuery.setStatus("0");
+            options.setNotifyChannels(notifyChannelMapper.selectReviewNotifyChannelList(channelQuery).stream()
+                .map(channel -> {
+                    ReviewProjectOptions.Option option = new ReviewProjectOptions.Option(
+                        channel.getChannelId(), channel.getChannelName(), null, null, channel.getStatus());
+                    option.setChannelType(channel.getChannelType());
+                    return option;
+                })
+                .toList());
+        }
+
+        if (modelBindingEditable)
+        {
+            SysAiModelConfig modelQuery = new SysAiModelConfig();
+            modelQuery.setEnabled("1");
+            options.setModels(aiModelConfigService.selectSysAiModelConfigList(modelQuery).stream()
+                .map(model -> {
+                    String label = model.getModelName();
+                    if ("1".equals(model.getIsDefault()))
+                    {
+                        label = label + "（平台默认）";
+                    }
+                    return new ReviewProjectOptions.Option(model.getModelId(), label, null, null, model.getEnabled());
+                })
+                .toList());
+        }
+
+        if (templateBindingEditable)
+        {
+            ReviewTemplate templateQuery = new ReviewTemplate();
+            templateQuery.setStatus("0");
+            options.setTemplates(templateService.selectReviewTemplateList(templateQuery).stream()
+                .map(template -> {
+                    ReviewProjectOptions.Option option = new ReviewProjectOptions.Option(
+                        template.getTemplateId(), template.getTemplateName(), null, null, template.getStatus());
+                    option.setTechStack(template.getTechStack());
+                    option.setVersionNo(template.getVersionNo());
+                    return option;
+                })
+                .toList());
+        }
 
         options.setLongLivedBranches(configValues(LONG_LIVED_BRANCHES_KEY, DEFAULT_LONG_LIVED_BRANCHES));
         options.setRobotBranchPrefixes(configValues(ROBOT_BRANCH_PREFIXES_KEY, DEFAULT_ROBOT_BRANCH_PREFIXES));
@@ -249,13 +295,22 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
         return departments;
     }
 
-    /**
-     * Git 凭据为平台级共享资源，由管理员统一维护凭据，
-     * 访问控制依赖 review:project:test 权限串与操作日志审计。
-     */
+    /** Git 凭据由平台角色维护；项目角色仅可刷新当前项目已经绑定的仓库。 */
     @Override
     public ReviewRepositoryInfo readRepositoryInfo(GitRepositoryReadRequest request)
     {
+        ReviewProject existing = null;
+        if (request.getProjectId() != null)
+        {
+            existing = projectAccessService.requireManage(request.getProjectId());
+        }
+        if (existing == null
+            || !Objects.equals(existing.getCredentialId(), request.getCredentialId())
+            || !Objects.equals(existing.getRepositoryUrl(), request.getRepositoryUrl()))
+        {
+            requirePlatformPermission(CREDENTIAL_QUERY_PERMISSION, "绑定或使用新的 Git 凭据");
+        }
+
         GitCredential credential = credentialMapper.selectGitCredentialById(request.getCredentialId());
         if (credential == null || !"0".equals(credential.getStatus()))
         {
@@ -275,12 +330,6 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
         {
             return new ReviewRepositoryInfo(false, GitConnectionFailure.INVALID_REPOSITORY_URL, e.getMessage(),
                 null, null, null, null, null, List.of(), List.of(), new Date());
-        }
-
-        ReviewProject existing = null;
-        if (request.getProjectId() != null)
-        {
-            existing = selectReviewProjectById(request.getProjectId());
         }
 
         String token = credentialService.getPlainToken(request.getCredentialId(), true);
@@ -303,8 +352,10 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public int insertReviewProject(ReviewProject project)
     {
+        checkAssetBindingPermissions(null, project);
         normalizeAndValidate(project, null);
         readAndApplyRepositoryInfo(project);
         if ("0".equals(project.getStatus()))
@@ -313,7 +364,9 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
         }
         applyWebhookSecret(project);
         project.setCreateBy(SecurityUtils.getUsername());
-        return projectMapper.insertReviewProject(project);
+        int rows = projectMapper.insertReviewProject(project);
+        recordProjectAudit("CREATE", null, project, "代码项目策略创建");
+        return rows;
     }
 
     @Override
@@ -324,7 +377,12 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
         {
             throw new ServiceException("项目 ID 不能为空");
         }
-        ReviewProject existing = selectReviewProjectById(project.getProjectId());
+        ReviewProject existing = projectAccessService.requireManage(project.getProjectId());
+        if (!Objects.equals(existing.getOwnerUserId(), project.getOwnerUserId()))
+        {
+            projectAccessService.requireOwner(project.getProjectId());
+        }
+        checkAssetBindingPermissions(existing, project);
         normalizeAndValidate(project, project.getProjectId());
         boolean connectionChanged = !Objects.equals(existing.getRepositoryUrl(), project.getRepositoryUrl())
             || !Objects.equals(existing.getCredentialId(), project.getCredentialId());
@@ -346,6 +404,7 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
         {
             projectMapper.updateProjectStatus(project.getProjectId(), "1", SecurityUtils.getUsername());
         }
+        recordProjectAudit("UPDATE", existing, project, "代码项目策略变更");
         return rows;
     }
 
@@ -353,11 +412,16 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
     @Transactional
     public void deleteReviewProjectByIds(Long[] projectIds)
     {
+        List<ReviewProject> projects = new ArrayList<>();
         for (Long projectId : projectIds)
         {
-            selectReviewProjectById(projectId);
+            projects.add(projectAccessService.requireOwner(projectId));
         }
         projectMapper.deleteReviewProjectByIds(projectIds);
+        for (ReviewProject project : projects)
+        {
+            recordProjectAudit("DELETE", project, null, "代码项目策略删除");
+        }
     }
 
     @Override
@@ -367,7 +431,7 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
         {
             throw new ServiceException("项目状态无效");
         }
-        ReviewProject project = selectReviewProjectById(projectId);
+        ReviewProject project = projectAccessService.requireManage(projectId);
         if ("0".equals(status))
         {
             if (!"SUCCESS".equals(project.getLastCheckStatus()))
@@ -390,13 +454,77 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
                 throw new ServiceException("启用推送审查的项目必须配置触发分支");
             }
         }
-        return projectMapper.updateProjectStatus(projectId, status, SecurityUtils.getUsername());
+        int rows = projectMapper.updateProjectStatus(projectId, status, SecurityUtils.getUsername());
+        ReviewProject after = new ReviewProject();
+        after.setProjectId(projectId);
+        after.setProjectName(project.getProjectName());
+        after.setStatus(status);
+        recordProjectAudit("STATUS", project, after, "代码项目启停变更");
+        return rows;
+    }
+
+    private void recordProjectAudit(String action, ReviewProject before, ReviewProject after, String reason)
+    {
+        if (businessAuditService == null)
+        {
+            return;
+        }
+        ReviewProject target = after == null ? before : after;
+        SysBusinessAudit audit = new SysBusinessAudit();
+        audit.setEventKey("review-project-" + action + "-" + (target.getProjectId() == null
+            ? java.util.UUID.randomUUID() : target.getProjectId()) + "-" + java.util.UUID.randomUUID());
+        audit.setSource("acr-review");
+        audit.setAction("REVIEW_PROJECT_" + action);
+        audit.setObjectType("REVIEW_PROJECT");
+        audit.setObjectId(target.getProjectId() == null ? null : String.valueOf(target.getProjectId()));
+        audit.setObjectName(target.getProjectName());
+        audit.setBeforeValue(projectSnapshot(before));
+        audit.setAfterValue(projectSnapshot(after));
+        audit.setReason(reason);
+        businessAuditService.record(audit);
+    }
+
+    private String projectSnapshot(ReviewProject project)
+    {
+        if (project == null)
+        {
+            return null;
+        }
+        JSONObject value = new JSONObject();
+        value.put("projectId", project.getProjectId());
+        value.put("projectName", project.getProjectName());
+        value.put("provider", project.getProvider());
+        value.put("repositoryUrl", project.getRepositoryUrl());
+        value.put("repositoryFullPath", project.getRepositoryFullPath());
+        value.put("businessSystemId", project.getBusinessSystemId());
+        value.put("deptId", project.getDeptId());
+        value.put("ownerUserId", project.getOwnerUserId());
+        value.put("credentialId", project.getCredentialId());
+        value.put("modelId", project.getModelId());
+        value.put("templateId", project.getTemplateId());
+        value.put("reviewMode", project.getReviewMode());
+        value.put("engineCode", project.getEngineCode());
+        value.put("scopeExcludePatterns", project.getScopeExcludePatterns());
+        value.put("scopeIncludeTests", project.getScopeIncludeTests());
+        value.put("scopeReportExisting", project.getScopeReportExisting());
+        value.put("scopeExpandEnabled", project.getScopeExpandEnabled());
+        value.put("notifyEnabled", project.getNotifyEnabled());
+        value.put("notifyChannelId", project.getNotifyChannelId());
+        value.put("notifyOnFailure", project.getNotifyOnFailure());
+        value.put("prReviewEnabled", project.getPrReviewEnabled());
+        value.put("prTargetBranches", project.getPrTargetBranches());
+        value.put("pushReviewEnabled", project.getPushReviewEnabled());
+        value.put("pushTriggerBranches", project.getPushTriggerBranches());
+        value.put("inlineCommentEnabled", project.getInlineCommentEnabled());
+        value.put("inlineSeverities", project.getInlineSeverities());
+        value.put("status", project.getStatus());
+        return JSON.toJSONString(value);
     }
 
     @Override
     public GitConnectionResult testConnection(Long projectId)
     {
-        ReviewProject project = selectReviewProjectById(projectId);
+        ReviewProject project = projectAccessService.requireManage(projectId);
         GitCredential credential = credentialMapper.selectGitCredentialById(project.getCredentialId());
         String provider = project.getProvider();
         String token = credentialService.getPlainToken(project.getCredentialId(), true);
@@ -415,6 +543,39 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
         update.setUpdateBy(SecurityUtils.getUsername());
         projectMapper.updateConnectionCheck(update);
         return result;
+    }
+
+    private void checkAssetBindingPermissions(ReviewProject existing, ReviewProject candidate)
+    {
+        if (existing == null
+            || !Objects.equals(existing.getCredentialId(), candidate.getCredentialId())
+            || !Objects.equals(existing.getRepositoryUrl(), candidate.getRepositoryUrl()))
+        {
+            requirePlatformPermission(CREDENTIAL_QUERY_PERMISSION, "绑定 Git 凭据或变更仓库");
+        }
+        if (candidate.getModelId() != null
+            && (existing == null || !Objects.equals(existing.getModelId(), candidate.getModelId())))
+        {
+            requirePlatformPermission(MODEL_QUERY_PERMISSION, "绑定模型配置");
+        }
+        if (candidate.getTemplateId() != null
+            && (existing == null || !Objects.equals(existing.getTemplateId(), candidate.getTemplateId())))
+        {
+            requirePlatformPermission(TEMPLATE_QUERY_PERMISSION, "绑定审查模板");
+        }
+        if (candidate.getNotifyChannelId() != null
+            && (existing == null || !Objects.equals(existing.getNotifyChannelId(), candidate.getNotifyChannelId())))
+        {
+            requirePlatformPermission(NOTIFY_QUERY_PERMISSION, "绑定通知渠道");
+        }
+    }
+
+    private void requirePlatformPermission(String permission, String action)
+    {
+        if (!SecurityUtils.hasPlatformPermi(permission))
+        {
+            throw new ServiceException(action + "仅允许具备相应权限的平台级角色操作");
+        }
     }
 
     private void normalizeAndValidate(ReviewProject project, Long excludeProjectId)
@@ -656,25 +817,6 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
         // 引擎路径禁止混用项目级模型/模板，运行时使用平台默认模型注入 OCR
         project.setModelId(null);
         project.setTemplateId(null);
-    }
-
-    private void checkProjectAccess(ReviewProject project)
-    {
-        if (project == null)
-        {
-            throw new ServiceException("代码项目不存在");
-        }
-        if (SecurityUtils.isAdmin())
-        {
-            return;
-        }
-        deptService.checkDeptDataScope(project.getDeptId());
-        boolean isOwner = Objects.equals(project.getOwnerUserId(), SecurityUtils.getUserId());
-        boolean isSystemManager = businessSystemService.selectSysBusinessSystemById(project.getBusinessSystemId()) != null;
-        if (!isOwner && !isSystemManager)
-        {
-            throw new ServiceException("没有权限访问该代码项目");
-        }
     }
 
     private void readAndApplyRepositoryInfo(ReviewProject project)

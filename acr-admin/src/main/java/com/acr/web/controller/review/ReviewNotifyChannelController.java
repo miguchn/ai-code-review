@@ -31,7 +31,7 @@ public class ReviewNotifyChannelController extends BaseController
         this.channelService = channelService;
     }
 
-    @PreAuthorize("@ss.hasPermi('review:notify:list')")
+    @PreAuthorize("@ss.hasPlatformPermi('review:notify:list')")
     @GetMapping("/list")
     public TableDataInfo list(ReviewNotifyChannel channel)
     {
@@ -40,14 +40,14 @@ public class ReviewNotifyChannelController extends BaseController
         return getDataTable(list);
     }
 
-    @PreAuthorize("@ss.hasPermi('review:notify:query')")
+    @PreAuthorize("@ss.hasPlatformPermi('review:notify:query')")
     @GetMapping("/{channelId}")
     public AjaxResult getInfo(@PathVariable Long channelId)
     {
         return success(channelService.selectReviewNotifyChannelById(channelId));
     }
 
-    @PreAuthorize("@ss.hasPermi('review:notify:add')")
+    @PreAuthorize("@ss.hasPlatformPermi('review:notify:add')")
     @Log(title = "通知渠道", businessType = BusinessType.INSERT,
          excludeParamNames = { "webhookUrl", "secret", "webhookUrlCiphertext", "secretCiphertext" },
          isSaveResponseData = false)
@@ -57,7 +57,7 @@ public class ReviewNotifyChannelController extends BaseController
         return toAjax(channelService.insertReviewNotifyChannel(channel));
     }
 
-    @PreAuthorize("@ss.hasPermi('review:notify:edit')")
+    @PreAuthorize("@ss.hasPlatformPermi('review:notify:edit')")
     @Log(title = "通知渠道", businessType = BusinessType.UPDATE,
          excludeParamNames = { "webhookUrl", "secret", "webhookUrlCiphertext", "secretCiphertext" },
          isSaveResponseData = false)
@@ -67,7 +67,7 @@ public class ReviewNotifyChannelController extends BaseController
         return toAjax(channelService.updateReviewNotifyChannel(channel));
     }
 
-    @PreAuthorize("@ss.hasPermi('review:notify:status')")
+    @PreAuthorize("@ss.hasPlatformPermi('review:notify:status')")
     @Log(title = "通知渠道启停", businessType = BusinessType.UPDATE)
     @PutMapping("/changeStatus")
     public AjaxResult changeStatus(@RequestBody ReviewNotifyChannel channel)
@@ -75,7 +75,7 @@ public class ReviewNotifyChannelController extends BaseController
         return toAjax(channelService.changeStatus(channel.getChannelId(), channel.getStatus()));
     }
 
-    @PreAuthorize("@ss.hasPermi('review:notify:remove')")
+    @PreAuthorize("@ss.hasPlatformPermi('review:notify:remove')")
     @Log(title = "通知渠道", businessType = BusinessType.DELETE)
     @DeleteMapping("/{channelIds}")
     public AjaxResult remove(@PathVariable Long[] channelIds)
@@ -84,7 +84,7 @@ public class ReviewNotifyChannelController extends BaseController
         return success();
     }
 
-    @PreAuthorize("@ss.hasPermi('review:notify:test')")
+    @PreAuthorize("@ss.hasPlatformPermi('review:notify:test')")
     @Log(title = "通知渠道测试发送", isSaveResponseData = false)
     @PostMapping("/{channelId}/test")
     public AjaxResult testSend(@PathVariable Long channelId)

@@ -3,6 +3,16 @@
   "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.acr.review.mapper.ReviewStatsDailyMapper">
 
+    <sql id="projectMemberScope">
+        <if test="params.projectAccessUserId != null">
+            and (p.owner_user_id = #{params.projectAccessUserId}
+                 or exists (select 1 from review_project_member pm
+                            where pm.project_id = p.project_id
+                              and pm.user_id = #{params.projectAccessUserId}
+                              and pm.status = '0'))
+        </if>
+    </sql>
+
     <resultMap id="ReviewStatsDailyResult" type="com.acr.review.insight.ReviewStatsDaily">
         <id property="id" column="id" />
         <result property="projectId" column="project_id" />
@@ -104,6 +114,7 @@
             </foreach>
         </if>
         ${params.dataScope}
+        <include refid="projectMemberScope" />
         ORDER BY s.stat_date ASC, s.project_id ASC
     </select>
 

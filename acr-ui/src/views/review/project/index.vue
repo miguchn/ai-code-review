@@ -28,7 +28,12 @@
 
     <el-row :gutter="10" class="mb8">
       <el-col :span="1.5">
-        <el-button type="primary" plain icon="Plus" @click="handleAdd" v-hasPermi="['review:project:add']">新增</el-button>
+        <el-tooltip :disabled="options.credentialBindingEditable" content="新项目必须由可绑定平台凭据的平台角色创建" placement="top">
+          <span>
+            <el-button type="primary" plain icon="Plus" :disabled="!options.credentialBindingEditable"
+              @click="handleAdd" v-hasPermi="['review:project:add']">新增</el-button>
+          </span>
+        </el-tooltip>
       </el-col>
       <right-toolbar v-model:showSearch="showSearch" @queryTable="getList" />
     </el-row>
@@ -91,7 +96,7 @@
           <div v-if="scope.row.lastCheckTime" class="text-muted">{{ formatDateTime(scope.row.lastCheckTime) }}</div>
         </template>
       </el-table-column>
-      <el-table-column label="状态 / 操作" width="310" fixed="right" class-name="small-padding fixed-width">
+      <el-table-column label="状态 / 操作" width="350" fixed="right" class-name="small-padding fixed-width">
         <template #default="scope">
           <el-tag :type="scope.row.status === '0' ? 'success' : 'info'" size="small" class="mr8">
             {{ scope.row.status === '0' ? '启用' : '停用' }}
@@ -102,6 +107,7 @@
           <el-button link type="primary" :loading="testingId === scope.row.projectId"
             @click="handleTest(scope.row)" v-hasPermi="['review:project:test']">检测</el-button>
           <el-button link type="primary" @click="handleUpdate(scope.row)" v-hasPermi="['review:project:edit']">修改</el-button>
+          <el-button link type="primary" @click="handleMembers(scope.row)" v-hasPermi="['review:project:query']">成员</el-button>
           <el-button link type="primary" @click="handleDelete(scope.row)" v-hasPermi="['review:project:remove']">删除</el-button>
         </template>
       </el-table-column>
@@ -180,17 +186,20 @@
 
           <el-tab-pane label="仓库与分支" name="repository">
             <el-form-item label="仓库地址" prop="repositoryUrl">
-              <el-input v-model="form.repositoryUrl" :placeholder="repositoryUrlPlaceholder" @change="invalidateRepositoryInfo" />
+              <el-input v-model="form.repositoryUrl" :placeholder="repositoryUrlPlaceholder"
+                :disabled="!options.credentialBindingEditable" @change="invalidateRepositoryInfo" />
             </el-form-item>
             <el-form-item label="访问凭据" prop="credentialId">
               <div class="form-control-block">
-                <el-select v-model="form.credentialId" filterable :placeholder="credentialSelectPlaceholder" @change="invalidateRepositoryInfo">
+                <el-select v-model="form.credentialId" filterable :placeholder="credentialSelectPlaceholder"
+                  :disabled="!options.credentialBindingEditable" @change="invalidateRepositoryInfo">
                   <el-option v-for="item in filteredCredentials" :key="item.id" :label="item.label" :value="item.id" />
                 </el-select>
                 <div class="field-actions">
-                  <el-button link type="primary" icon="Plus" @click="openCredentialManagement"
+                  <el-button v-if="options.credentialBindingEditable" link type="primary" icon="Plus" @click="openCredentialManagement"
                     v-hasPermi="['review:credential:add']">新增凭据</el-button>
-                  <el-button link type="primary" icon="Refresh" @click="refreshCredentialOptions">刷新列表</el-button>
+                  <el-button v-if="options.credentialBindingEditable" link type="primary" icon="Refresh"
+                    @click="refreshCredentialOptions">刷新列表</el-button>
                   <el-button type="primary" plain icon="Download" :loading="repositoryReading" @click="handleReadRepositoryInfo"
                     v-hasPermi="['review:project:test']">
                     {{ form.repositoryOwner ? '刷新分支' : '读取仓库信息' }}
@@ -229,7 +238,7 @@
           <el-tab-pane label="Webhook" name="webhook">
             <el-form-item label="说明">
               <div class="inline-tip">
-                Webhook 用于接收合并请求事件并创建审查任务。Secret 加密保存，页面不回显明文。
+                Webhook 用于接收合并请求或 Push 事件并创建审查任务。Secret 加密保存，页面不回显明文。
               </div>
             </el-form-item>
             <el-form-item label="回调地址">
@@ -281,12 +290,13 @@
             <el-form-item label="通知渠道" prop="notifyChannelId">
               <div class="form-control-block">
                 <el-select v-model="form.notifyChannelId" filterable clearable placeholder="请选择已启用的通知渠道"
-                  :disabled="form.notifyEnabled !== 'Y'">
+                  :disabled="form.notifyEnabled !== 'Y' || !options.notifyBindingEditable">
                   <el-option v-for="item in notifyChannelOptions" :key="item.channelId"
                     :label="formatNotifyChannelLabel(item)" :value="item.channelId" />
                 </el-select>
                 <div class="field-actions">
-                  <el-button link type="primary" icon="Refresh" @click="refreshNotifyChannelOptions">刷新列表</el-button>
+                  <el-button v-if="options.notifyBindingEditable" link type="primary" icon="Refresh"
+                    @click="refreshNotifyChannelOptions">刷新列表</el-button>
                 </div>
                 <div v-if="form.notifyEnabled === 'Y' && !notifyChannelOptions.length" class="inline-tip">
                   暂无已启用渠道，请先到「通知渠道」配置。
@@ -439,19 +449,20 @@
             <template v-if="isLlmDirectMode">
               <el-form-item label="模型配置" prop="modelId">
                 <div class="form-control-block">
-                  <el-select v-model="form.modelId" filterable
+                  <el-select v-model="form.modelId" filterable :disabled="!options.modelBindingEditable"
                     :placeholder="options.models.length ? '请选择已启用的模型配置' : '暂无可用模型，请先到模型服务配置'">
                     <el-option v-for="item in options.models" :key="item.id" :label="item.label" :value="item.id" />
                   </el-select>
                   <div class="inline-tip">
                     必选。建单时冻结模型快照，后续修改不影响已创建任务。
-                    <el-button v-if="!options.models.length" link type="primary" @click="openModelService">前往模型服务</el-button>
+                    <el-button v-if="options.modelBindingEditable && !options.models.length" link type="primary"
+                      @click="openModelService">前往模型服务</el-button>
                   </div>
                 </div>
               </el-form-item>
               <el-form-item label="审查模板" prop="templateId">
                 <div class="form-control-block">
-                  <el-select v-model="form.templateId" filterable
+                  <el-select v-model="form.templateId" filterable :disabled="!options.templateBindingEditable"
                     :placeholder="filteredTemplates.length ? '请选择已启用的审查模板' : '暂无可用模板，请先到审查模板配置'">
                     <el-option v-for="item in filteredTemplates" :key="item.id"
                       :label="formatTemplateLabel(item)" :value="item.id" />
@@ -461,7 +472,8 @@
                     <el-button link type="primary" @click="showAllTemplates = !showAllTemplates">
                       {{ showAllTemplates ? '仅看同技术栈' : '显示全部模板' }}
                     </el-button>
-                    <el-button v-if="!options.templates.length" link type="primary" @click="openTemplateManagement">前往审查模板</el-button>
+                    <el-button v-if="options.templateBindingEditable && !options.templates.length" link type="primary"
+                      @click="openTemplateManagement">前往审查模板</el-button>
                   </div>
                 </div>
               </el-form-item>
@@ -496,6 +508,43 @@
       </template>
     </el-dialog>
 
+    <el-dialog :title="memberDialogTitle" v-model="memberDialogOpen" width="720px" append-to-body>
+      <el-alert type="info" :closable="false" show-icon class="mb16"
+        title="项目成员权限与原有功能权限、部门数据范围同时生效；负责人固定拥有 OWNER 权限。" />
+      <el-form :inline="true" :model="memberForm" class="member-add-form" v-hasPermi="['review:project:edit']">
+        <el-form-item label="成员">
+          <el-select v-model="memberForm.userId" filterable placeholder="请选择用户" style="width: 220px">
+            <el-option v-for="item in memberCandidates" :key="item.id" :label="item.label" :value="item.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="项目角色">
+          <el-select v-model="memberForm.projectRole" style="width: 140px">
+            <el-option label="项目管理员" value="ADMIN" />
+            <el-option label="审查员" value="REVIEWER" />
+            <el-option label="只读成员" value="VIEWER" />
+          </el-select>
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" :disabled="!memberForm.userId" :loading="memberSaving" @click="saveMember">授权</el-button>
+        </el-form-item>
+      </el-form>
+      <el-table v-loading="memberLoading" :data="projectMembers" empty-text="暂无项目成员">
+        <el-table-column label="姓名" prop="userName" min-width="140" />
+        <el-table-column label="部门" prop="deptName" min-width="160" />
+        <el-table-column label="项目角色" width="130">
+          <template #default="scope">{{ projectRoleLabel(scope.row.projectRole) }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="100" align="center">
+          <template #default="scope">
+            <el-button v-if="!scope.row.projectOwner" link type="danger" @click="removeMember(scope.row)"
+              v-hasPermi="['review:project:edit']">移除</el-button>
+            <el-tag v-else type="success" size="small">负责人</el-tag>
+          </template>
+        </el-table-column>
+      </el-table>
+      <template #footer><el-button @click="memberDialogOpen = false">关 闭</el-button></template>
+    </el-dialog>
+
     <el-dialog title="仓库分支" v-model="branchDialogOpen" width="620px" append-to-body>
       <el-input v-model="branchSearch" clearable prefix-icon="Search" placeholder="搜索分支名称" class="mb12" />
       <el-table :data="filteredBranches" height="360" empty-text="未找到匹配分支">
@@ -518,10 +567,9 @@
 <script setup name="ReviewProject">
 import {
   listReviewProject, getReviewProject, getReviewProjectOptions, readReviewProjectRepositoryInfo,
-  addReviewProject, updateReviewProject, delReviewProject, changeReviewProjectStatus, testReviewProject
+  addReviewProject, updateReviewProject, delReviewProject, changeReviewProjectStatus, testReviewProject,
+  listReviewProjectMembers, saveReviewProjectMember, delReviewProjectMember
 } from '@/api/review/project'
-import { listGitCredential } from '@/api/review/credential'
-import { listNotifyChannel } from '@/api/review/notifyChannel'
 import { GIT_PROVIDER_FALLBACK } from '@/constants/gitProviders'
 import useGuideStore from '@/store/modules/guide'
 import { findBranchIntersection } from '@/utils/reviewDisplay'
@@ -557,9 +605,18 @@ const activeTab = ref('basic')
 const tabOrder = ['basic', 'repository', 'webhook', 'notify', 'scope', 'execution']
 const notifyChannelOptions = ref([])
 const credentialOptions = ref([])
+const memberDialogOpen = ref(false)
+const memberDialogTitle = ref('')
+const memberProjectId = ref()
+const memberLoading = ref(false)
+const memberSaving = ref(false)
+const projectMembers = ref([])
+const memberForm = reactive({ userId: undefined, projectRole: 'REVIEWER' })
 const options = reactive({
-  businessSystems: [], departments: [], owners: [], credentials: [], models: [], templates: [],
-  longLivedBranches: [], robotBranchPrefixes: [], prEvents: [], webhookCallbackUrl: ''
+  businessSystems: [], departments: [], owners: [], credentials: [], models: [], templates: [], notifyChannels: [],
+  longLivedBranches: [], robotBranchPrefixes: [], prEvents: [], webhookCallbackUrl: '',
+  credentialBindingEditable: false, modelBindingEditable: false,
+  templateBindingEditable: false, notifyBindingEditable: false
 })
 
 function validateReviewTypes(rule, value, callback) {
@@ -637,6 +694,10 @@ const showAllTemplates = ref(false)
 const availableOwners = computed(() => form.value.deptId
   ? options.owners.filter(item => item.deptId === form.value.deptId)
   : options.owners)
+const memberCandidates = computed(() => {
+  const assigned = new Set(projectMembers.value.map(item => item.userId))
+  return options.owners.filter(item => !assigned.has(item.id))
+})
 const branchOptions = computed(() => Array.from(new Set([
   ...availableBranches.value,
   ...(Array.isArray(form.value.prTargetBranches) ? form.value.prTargetBranches : []),
@@ -689,16 +750,28 @@ const credentialSelectPlaceholder = computed(() => {
 })
 const webhookSetupHint = computed(() => {
   const code = (form.value.provider || 'GITHUB').toUpperCase()
+  const eventNames = {
+    GITHUB: { pr: 'Pull requests', push: 'Pushes' },
+    GITLAB: { pr: 'Merge request events', push: 'Push events' },
+    GITEE: { pr: 'Pull Request', push: 'Push' },
+    GITEA: { pr: 'Pull Request', push: 'Push' }
+  }[code] || { pr: '合并请求', push: 'Push' }
+  const enabledEvents = []
+  if (form.value.prReviewEnabled === '0') enabledEvents.push(eventNames.pr)
+  if (form.value.pushReviewEnabled === '0') enabledEvents.push(eventNames.push)
+  const eventHint = enabledEvents.length
+    ? `勾选 ${enabledEvents.join('、')} 事件`
+    : '保存前先启用至少一种审查类型，并勾选对应事件'
   if (code === 'GITLAB') {
-    return '在 GitLab 项目 Settings → Webhooks 中添加此地址，Secret Token 填写与下方 Webhook Secret 相同的值，勾选 Merge request events。'
+    return `在 GitLab 项目 Settings → Webhooks 中添加此地址，Secret Token 填写与下方 Webhook Secret 相同的值，${eventHint}。`
   }
   if (code === 'GITEE') {
-    return '在 Gitee 仓库「管理 → WebHooks」中添加此地址，密码/Secret 与下方 Webhook Secret 保持一致，勾选 Pull Request 相关事件。'
+    return `在 Gitee 仓库「管理 → WebHooks」中添加此地址，密码/Secret 与下方 Webhook Secret 保持一致，${eventHint}。`
   }
   if (code === 'GITEA') {
-    return '在 Gitea 仓库「设置 → Web 钩子」中添加此地址，Secret 与下方 Webhook Secret 保持一致，勾选 Pull Request 事件。'
+    return `在 Gitea 仓库「设置 → Web 钩子」中添加此地址，Secret 与下方 Webhook Secret 保持一致，${eventHint}。`
   }
-  return '在 GitHub 仓库 Settings → Webhooks 中按此地址添加，Content type 选择 application/json，勾选 Pull requests。'
+  return `在 GitHub 仓库 Settings → Webhooks 中按此地址添加，Content type 选择 application/json，${eventHint}。`
 })
 const webhookSecretPlaceholder = computed(() => {
   if (form.value.projectId) return '留空保持不变，输入则更新'
@@ -758,6 +831,35 @@ function getList() {
 function loadOptions() {
   return getReviewProjectOptions().then(response => {
     Object.assign(options, response.data || {})
+    credentialOptions.value = (options.credentials || []).map(item => ({ ...item }))
+    if (!options.credentialBindingEditable && form.value.credentialId && form.value.credentialName) {
+      credentialOptions.value.push({
+        id: form.value.credentialId,
+        label: form.value.credentialName,
+        provider: form.value.provider
+      })
+    }
+    if (!options.modelBindingEditable && form.value.modelId && form.value.modelName) {
+      options.models = [{ id: form.value.modelId, label: form.value.modelName }]
+    }
+    if (!options.templateBindingEditable && form.value.templateId && form.value.templateName) {
+      options.templates = [{
+        id: form.value.templateId,
+        label: form.value.templateName,
+        techStack: form.value.primaryStack
+      }]
+    }
+    notifyChannelOptions.value = (options.notifyChannels || []).map(item => ({
+      channelId: item.id,
+      channelName: item.label,
+      channelType: item.channelType
+    }))
+    if (!options.notifyBindingEditable && form.value.notifyChannelId && form.value.notifyChannelName) {
+      notifyChannelOptions.value.push({
+        channelId: form.value.notifyChannelId,
+        channelName: form.value.notifyChannelName
+      })
+    }
   })
 }
 
@@ -801,8 +903,7 @@ function scrollProjectFormToTop() {
 }
 function handleAdd() {
   reset()
-  loadNotifyChannelOptions()
-  loadCredentialOptions()
+  loadOptions()
   open.value = true
   title.value = '新增代码审查项目'
 }
@@ -833,11 +934,50 @@ function handleUpdate(row) {
     form.value = project
     availableBranches.value = [...project.prTargetBranches, ...project.pushTriggerBranches.filter(b => !b.includes('*'))]
     originalRepositorySignature.value = repositorySignature(project)
-    loadNotifyChannelOptions()
-    loadCredentialOptions()
+    loadOptions()
     open.value = true
     title.value = '修改代码审查项目'
   })
+}
+
+function handleMembers(row) {
+  memberProjectId.value = row.projectId
+  memberDialogTitle.value = `项目成员 - ${row.projectName}`
+  memberForm.userId = undefined
+  memberForm.projectRole = 'REVIEWER'
+  memberDialogOpen.value = true
+  loadProjectMembers()
+}
+
+function loadProjectMembers() {
+  if (!memberProjectId.value) return
+  memberLoading.value = true
+  listReviewProjectMembers(memberProjectId.value).then(response => {
+    projectMembers.value = response.data || []
+  }).finally(() => { memberLoading.value = false })
+}
+
+function saveMember() {
+  if (!memberForm.userId) return
+  memberSaving.value = true
+  saveReviewProjectMember(memberProjectId.value, { ...memberForm }).then(() => {
+    proxy.$modal.msgSuccess('项目成员授权成功')
+    memberForm.userId = undefined
+    loadProjectMembers()
+  }).finally(() => { memberSaving.value = false })
+}
+
+function removeMember(member) {
+  proxy.$modal.confirm(`确认移除项目成员“${member.userName}”吗？`).then(() =>
+    delReviewProjectMember(memberProjectId.value, member.memberId)
+  ).then(() => {
+    proxy.$modal.msgSuccess('已移除项目成员')
+    loadProjectMembers()
+  }).catch(() => {})
+}
+
+function projectRoleLabel(role) {
+  return { OWNER: '负责人', ADMIN: '项目管理员', REVIEWER: '审查员', VIEWER: '只读成员' }[role] || role
 }
 
 function normalizeReviewMode(mode) {
@@ -875,8 +1015,8 @@ function suggestTemplateByStack() {
 
 function formatTemplateLabel(item) {
   const stack = dictLabel(review_tech_stack.value, item.techStack)
-  const version = item.versionNo != null ? `v${item.versionNo}` : 'v1'
-  return `${item.label}（${stack} · ${version}）`
+  const version = item.versionNo != null ? `v${item.versionNo}` : ''
+  return `${item.label}（${[stack, version].filter(Boolean).join(' · ')}）`
 }
 
 function dictLabel(optionsList, value) {
@@ -920,18 +1060,11 @@ function handleProviderChange() {
   form.value.webhookCallbackUrl = undefined
   form.value.repositoryUrl = undefined
   invalidateRepositoryInfo()
-  loadCredentialOptions()
   proxy.$refs.projectRef?.clearValidate(['repositoryUrl'])
 }
 
 function loadCredentialOptions() {
-  const provider = form.value.provider || 'GITHUB'
-  return listGitCredential({ pageNum: 1, pageSize: 200, status: '0', provider }).then(response => {
-    credentialOptions.value = (response.rows || []).map(item => ({
-      id: item.credentialId,
-      label: item.credentialName,
-      provider: item.provider
-    }))
+  return loadOptions().then(() => {
     if (form.value.credentialId && !credentialOptions.value.some(item => item.id === form.value.credentialId)) {
       form.value.credentialId = undefined
     }
@@ -1029,9 +1162,7 @@ function openNotifyChannelManagement() {
 }
 
 function loadNotifyChannelOptions() {
-  return listNotifyChannel({ pageNum: 1, pageSize: 200, status: '0' }).then(response => {
-    notifyChannelOptions.value = response.rows || []
-  })
+  return loadOptions()
 }
 
 function refreshNotifyChannelOptions() {
@@ -1039,7 +1170,7 @@ function refreshNotifyChannelOptions() {
 }
 
 function formatNotifyChannelLabel(item) {
-  const typeLabel = dictLabel(review_notify_channel_type.value, item.channelType)
+  const typeLabel = item.channelType ? dictLabel(review_notify_channel_type.value, item.channelType) : ''
   return item.channelName + (typeLabel ? '（' + typeLabel + '）' : '')
 }
 
@@ -1167,7 +1298,7 @@ function openPlatformGuide() {
   guideStore.open(PLATFORM_GUIDE_DOC[(form.value.provider || '').toLowerCase()] || null)
 }
 
-Promise.all([loadOptions(), loadNotifyChannelOptions(), getList()])
+Promise.all([loadOptions(), getList()])
 </script>
 
 <style scoped>

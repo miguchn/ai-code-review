@@ -19,6 +19,7 @@ import com.acr.review.mapper.ReviewTaskRunMapper;
 import com.acr.review.service.IReviewDeliveryService;
 import com.acr.review.service.IReviewIssueService;
 import com.acr.review.service.IReviewTaskExecutionService;
+import com.acr.review.service.ReviewProjectAccessService;
 import com.acr.system.service.ISysDeptService;
 
 class ReviewTaskCancelServiceTest
@@ -32,7 +33,7 @@ class ReviewTaskCancelServiceTest
         ReviewTaskServiceImpl service = new ReviewTaskServiceImpl(
             taskMapper, mock(ReviewTaskRunMapper.class), projectMapper, deptService,
             mock(IReviewTaskExecutionService.class), mock(IReviewDeliveryService.class),
-            mock(IReviewIssueService.class));
+            mock(IReviewIssueService.class), mock(ReviewProjectAccessService.class));
 
         ReviewTask running = new ReviewTask();
         running.setTaskId(7L);

@@ -34,6 +34,12 @@
                />
             </el-select>
          </el-form-item>
+         <el-form-item label="角色层级" prop="roleScope">
+            <el-select v-model="queryParams.roleScope" placeholder="角色层级" clearable style="width: 180px">
+               <el-option label="平台级" value="PLATFORM" />
+               <el-option label="部门级" value="DEPARTMENT" />
+            </el-select>
+         </el-form-item>
          <el-form-item label="创建时间" style="width: 308px">
             <el-date-picker
                v-model="dateRange"
@@ -97,6 +103,13 @@
          <el-table-column label="角色编号" prop="roleId" width="120" />
          <el-table-column label="角色名称" prop="roleName" :show-overflow-tooltip="true" width="150" />
          <el-table-column label="权限字符" prop="roleKey" :show-overflow-tooltip="true" width="150" />
+         <el-table-column label="角色层级" prop="roleScope" width="100">
+            <template #default="scope">
+               <el-tag :type="scope.row.roleScope === 'PLATFORM' ? 'danger' : 'info'">
+                  {{ scope.row.roleScope === 'PLATFORM' ? '平台级' : '部门级' }}
+               </el-tag>
+            </template>
+         </el-table-column>
          <el-table-column label="显示顺序" prop="roleSort" width="100" />
          <el-table-column label="状态" align="center" width="100">
             <template #default="scope">
@@ -158,6 +171,13 @@
             </el-form-item>
             <el-form-item label="角色顺序" prop="roleSort">
                <el-input-number v-model="form.roleSort" controls-position="right" :min="0" />
+            </el-form-item>
+            <el-form-item label="角色层级" prop="roleScope">
+               <el-radio-group v-model="form.roleScope">
+                  <el-radio value="DEPARTMENT">部门级</el-radio>
+                  <el-radio value="PLATFORM">平台级</el-radio>
+               </el-radio-group>
+               <div class="el-form-item__tip">平台级角色可管理全局凭据、模型、模板和通知渠道，仅超级管理员可维护。</div>
             </el-form-item>
             <el-form-item label="状态">
                <el-radio-group v-model="form.status">
@@ -285,12 +305,14 @@ const data = reactive({
     pageSize: 10,
     roleName: undefined,
     roleKey: undefined,
+    roleScope: undefined,
     status: undefined
   },
   rules: {
     roleName: [{ required: true, message: "角色名称不能为空", trigger: "blur" }],
     roleKey: [{ required: true, message: "权限字符不能为空", trigger: "blur" }],
-    roleSort: [{ required: true, message: "角色顺序不能为空", trigger: "blur" }]
+    roleSort: [{ required: true, message: "角色顺序不能为空", trigger: "blur" }],
+    roleScope: [{ required: true, message: "角色层级不能为空", trigger: "change" }]
   },
 })
 
@@ -406,6 +428,7 @@ function reset() {
     roleName: undefined,
     roleKey: undefined,
     roleSort: 0,
+    roleScope: "DEPARTMENT",
     status: "0",
     menuIds: [],
     deptIds: [],

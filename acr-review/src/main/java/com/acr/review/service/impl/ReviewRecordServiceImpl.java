@@ -16,6 +16,7 @@ import com.acr.review.mapper.ReviewTaskRunMapper;
 import com.acr.review.service.IReviewDeliveryService;
 import com.acr.review.service.IReviewIssueService;
 import com.acr.review.service.IReviewRecordService;
+import com.acr.review.service.ReviewProjectAccessService;
 import com.acr.system.service.ISysDeptService;
 
 /** 审查记录查询：已结束任务（SUCCESS + FAILED），数据范围与审查任务一致。 */
@@ -28,13 +29,15 @@ public class ReviewRecordServiceImpl implements IReviewRecordService
     private final ISysDeptService deptService;
     private final IReviewDeliveryService deliveryService;
     private final IReviewIssueService issueService;
+    private final ReviewProjectAccessService projectAccessService;
 
     public ReviewRecordServiceImpl(ReviewTaskMapper taskMapper,
                                    ReviewTaskRunMapper runMapper,
                                    ReviewProjectMapper projectMapper,
                                    ISysDeptService deptService,
                                    IReviewDeliveryService deliveryService,
-                                   IReviewIssueService issueService)
+                                   IReviewIssueService issueService,
+                                   ReviewProjectAccessService projectAccessService)
     {
         this.taskMapper = taskMapper;
         this.runMapper = runMapper;
@@ -42,12 +45,14 @@ public class ReviewRecordServiceImpl implements IReviewRecordService
         this.deptService = deptService;
         this.deliveryService = deliveryService;
         this.issueService = issueService;
+        this.projectAccessService = projectAccessService;
     }
 
     @Override
     @DataScope(deptAlias = "d", userAlias = "owner", permission = "review:record:list")
     public List<ReviewTask> selectReviewRecordList(ReviewTask query)
     {
+        projectAccessService.applyQueryScope(query);
         return taskMapper.selectReviewRecordList(query);
     }
 
@@ -55,6 +60,7 @@ public class ReviewRecordServiceImpl implements IReviewRecordService
     @DataScope(deptAlias = "d", userAlias = "owner", permission = "review:record:list")
     public int countReviewRecordList(ReviewTask query)
     {
+        projectAccessService.applyQueryScope(query);
         return taskMapper.countReviewRecordList(query);
     }
 
@@ -62,6 +68,7 @@ public class ReviewRecordServiceImpl implements IReviewRecordService
     @DataScope(deptAlias = "d", userAlias = "owner", permission = "review:record:list")
     public List<ReviewConclusionDailyStat> selectReviewConclusionTrend(ReviewTask query)
     {
+        projectAccessService.applyQueryScope(query);
         return taskMapper.selectReviewConclusionTrend(query);
     }
 
@@ -77,7 +84,7 @@ public class ReviewRecordServiceImpl implements IReviewRecordService
         {
             throw new ServiceException("该任务尚未结束，请到审查任务中查看执行状态");
         }
-        checkTaskDataScope(task);
+        projectAccessService.requireView(task.getProjectId());
         List<ReviewTaskRun> runs = runMapper.selectRunsByTaskId(taskId);
         issueService.enrichRuns(runs, task.getProjectId(), task.getPrNumber(),
             ReviewIssueServiceImpl.resolveRefBranch(task));
@@ -85,13 +92,4 @@ public class ReviewRecordServiceImpl implements IReviewRecordService
         return new ReviewTaskDetail(task, runs, delivery);
     }
 
-    private void checkTaskDataScope(ReviewTask task)
-    {
-        ReviewProject project = projectMapper.selectReviewProjectById(task.getProjectId());
-        if (project == null)
-        {
-            throw new ServiceException("审查记录所属项目不存在");
-        }
-        deptService.checkDeptDataScope(project.getDeptId());
-    }
 }

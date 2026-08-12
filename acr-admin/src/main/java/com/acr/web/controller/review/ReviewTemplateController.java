@@ -31,7 +31,7 @@ public class ReviewTemplateController extends BaseController
         this.templateService = templateService;
     }
 
-    @PreAuthorize("@ss.hasPermi('review:template:list')")
+    @PreAuthorize("@ss.hasPlatformPermi('review:template:list')")
     @GetMapping("/list")
     public TableDataInfo list(ReviewTemplate template)
     {
@@ -41,21 +41,21 @@ public class ReviewTemplateController extends BaseController
     }
 
     /** 平台统一审查规则（只读；与执行 Prompt 共用评分数据源）。须放在 /{templateId} 之前。 */
-    @PreAuthorize("@ss.hasPermi('review:template:list')")
+    @PreAuthorize("@ss.hasPlatformPermi('review:template:list')")
     @GetMapping("/platform-rules")
     public AjaxResult platformRules()
     {
         return success(templateService.getPlatformRules());
     }
 
-    @PreAuthorize("@ss.hasPermi('review:template:query')")
+    @PreAuthorize("@ss.hasPlatformPermi('review:template:query')")
     @GetMapping("/{templateId}")
     public AjaxResult getInfo(@PathVariable Long templateId)
     {
         return success(templateService.selectReviewTemplateById(templateId));
     }
 
-    @PreAuthorize("@ss.hasPermi('review:template:add')")
+    @PreAuthorize("@ss.hasPlatformPermi('review:template:add')")
     @Log(title = "审查模板", businessType = BusinessType.INSERT)
     @PostMapping
     public AjaxResult add(@Validated @RequestBody ReviewTemplate template)
@@ -63,7 +63,7 @@ public class ReviewTemplateController extends BaseController
         return toAjax(templateService.insertReviewTemplate(template));
     }
 
-    @PreAuthorize("@ss.hasPermi('review:template:edit')")
+    @PreAuthorize("@ss.hasPlatformPermi('review:template:edit')")
     @Log(title = "审查模板", businessType = BusinessType.UPDATE)
     @PutMapping
     public AjaxResult edit(@Validated @RequestBody ReviewTemplate template)
@@ -71,7 +71,7 @@ public class ReviewTemplateController extends BaseController
         return toAjax(templateService.updateReviewTemplate(template));
     }
 
-    @PreAuthorize("@ss.hasPermi('review:template:remove')")
+    @PreAuthorize("@ss.hasPlatformPermi('review:template:remove')")
     @Log(title = "审查模板", businessType = BusinessType.DELETE)
     @DeleteMapping("/{templateIds}")
     public AjaxResult remove(@PathVariable Long[] templateIds)

@@ -153,6 +153,7 @@ public class SysUserController extends BaseController
     {
         userService.checkUserAllowed(user);
         userService.checkUserDataScope(user.getUserId());
+        checkExistingUserRoleScope(user.getUserId());
         deptService.checkDeptDataScope(user.getDeptId());
         roleService.checkRoleDataScope(user.getRoleIds());
         if (!userService.checkUserNameUnique(user))
@@ -183,6 +184,10 @@ public class SysUserController extends BaseController
         {
             return error("当前用户不能删除");
         }
+        for (Long userId : userIds)
+        {
+            checkExistingUserRoleScope(userId);
+        }
         return toAjax(userService.deleteUserByIds(userIds));
     }
 
@@ -196,6 +201,7 @@ public class SysUserController extends BaseController
     {
         userService.checkUserAllowed(user);
         userService.checkUserDataScope(user.getUserId());
+        checkExistingUserRoleScope(user.getUserId());
         user.setPassword(SecurityUtils.encryptPassword(user.getPassword()));
         user.setUpdateBy(getUsername());
         return toAjax(userService.resetPwd(user));
@@ -211,6 +217,7 @@ public class SysUserController extends BaseController
     {
         userService.checkUserAllowed(user);
         userService.checkUserDataScope(user.getUserId());
+        checkExistingUserRoleScope(user.getUserId());
         user.setUpdateBy(getUsername());
         return toAjax(userService.updateUserStatus(user));
     }
@@ -239,9 +246,16 @@ public class SysUserController extends BaseController
     public AjaxResult insertAuthRole(Long userId, Long[] roleIds)
     {
         userService.checkUserDataScope(userId);
+        checkExistingUserRoleScope(userId);
         roleService.checkRoleDataScope(roleIds);
         userService.insertUserAuth(userId, roleIds);
         return success();
+    }
+
+    private void checkExistingUserRoleScope(Long userId)
+    {
+        List<Long> roleIds = roleService.selectRoleListByUserId(userId);
+        roleService.checkRoleDataScope(roleIds.toArray(Long[]::new));
     }
 
     /**

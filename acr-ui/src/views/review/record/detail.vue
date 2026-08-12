@@ -91,7 +91,7 @@
                 <div class="score-total">
                   <span class="score-total-label">总分</span>
                   <span class="score-total-value">{{ scoreDisplay(detailTask, resultRun) }}</span>
-                  <span class="score-total-unit">/ 100</span>
+                  <span v-if="hasReviewScore(detailTask, resultRun)" class="score-total-unit">/ 100</span>
                   <el-tag :type="recordConclusionTagType(detailTask)" size="small" class="conclusion-tag">
                     {{ recordConclusionDisplay(detailTask) }}
                   </el-tag>
@@ -294,7 +294,11 @@ function recordConclusionDisplay(row) {
 function scoreDisplay(row, run) {
   if (row?.taskStatus === 'FAILED') return '未生成'
   const value = run?.totalScore ?? row?.totalScore
-  return value == null ? '暂无数据' : formatScore(value)
+  return value == null ? '未评分' : formatScore(value)
+}
+
+function hasReviewScore(row, run) {
+  return (run?.totalScore ?? row?.totalScore) != null
 }
 
 function changeMetricValue(value, prefix = '', row) {

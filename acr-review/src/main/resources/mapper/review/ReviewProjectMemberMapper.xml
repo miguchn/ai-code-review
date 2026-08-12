@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.acr.review.mapper.ReviewProjectMemberMapper">
+
+    <resultMap type="com.acr.review.domain.ReviewProjectMember" id="ReviewProjectMemberResult">
+        <id property="memberId" column="member_id" />
+        <result property="projectId" column="project_id" />
+        <result property="userId" column="user_id" />
+        <result property="userName" column="user_name" />
+        <result property="deptId" column="dept_id" />
+        <result property="deptName" column="dept_name" />
+        <result property="projectRole" column="project_role" />
+        <result property="status" column="status" />
+        <result property="createBy" column="create_by" />
+        <result property="createTime" column="create_time" />
+        <result property="updateBy" column="update_by" />
+        <result property="updateTime" column="update_time" />
+    </resultMap>
+
+    <sql id="memberSelect">
+        select pm.member_id, pm.project_id, pm.user_id, u.nick_name as user_name,
+               u.dept_id, d.dept_name, pm.project_role, pm.status,
+               pm.create_by, pm.create_time, pm.update_by, pm.update_time
+        from review_project_member pm
+        inner join sys_user u on u.user_id = pm.user_id
+        left join sys_dept d on d.dept_id = u.dept_id
+    </sql>
+
+    <select id="selectByProjectId" resultMap="ReviewProjectMemberResult">
+        <include refid="memberSelect" />
+        where pm.project_id = #{projectId}
+        order by field(pm.project_role, 'ADMIN', 'REVIEWER', 'VIEWER'), pm.member_id
+    </select>
+
+    <select id="selectByProjectAndUser" resultMap="ReviewProjectMemberResult">
+        <include refid="memberSelect" />
+        where pm.project_id = #{projectId} and pm.user_id = #{userId}
+        limit 1
+    </select>
+
+    <select id="selectByMemberId" resultMap="ReviewProjectMemberResult">
+        <include refid="memberSelect" />
+        where pm.member_id = #{memberId}
+    </select>
+
+    <insert id="insertReviewProjectMember" parameterType="com.acr.review.domain.ReviewProjectMember"
+            useGeneratedKeys="true" keyProperty="memberId">
+        insert into review_project_member
+            (project_id, user_id, project_role, status, create_by, create_time)
+        values
+            (#{projectId}, #{userId}, #{projectRole}, #{status}, #{createBy}, sysdate())
+    </insert>
+
+    <update id="updateReviewProjectMember" parameterType="com.acr.review.domain.ReviewProjectMember">
+        update review_project_member
+        set project_role = #{projectRole}, status = #{status},
+            update_by = #{updateBy}, update_time = sysdate()
+        where member_id = #{memberId}
+    </update>
+
+    <delete id="deleteReviewProjectMemberById">
+        delete from review_project_member where member_id = #{memberId}
+    </delete>
+</mapper>

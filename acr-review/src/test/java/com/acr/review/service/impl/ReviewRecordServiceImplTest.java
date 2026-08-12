@@ -18,6 +18,7 @@ import com.acr.review.mapper.ReviewTaskMapper;
 import com.acr.review.mapper.ReviewTaskRunMapper;
 import com.acr.review.service.IReviewDeliveryService;
 import com.acr.review.service.IReviewIssueService;
+import com.acr.review.service.ReviewProjectAccessService;
 import com.acr.system.service.ISysDeptService;
 
 class ReviewRecordServiceImplTest
@@ -28,8 +29,9 @@ class ReviewRecordServiceImplTest
     private final ISysDeptService deptService = mock(ISysDeptService.class);
     private final IReviewDeliveryService deliveryService = mock(IReviewDeliveryService.class);
     private final IReviewIssueService issueService = mock(IReviewIssueService.class);
+    private final ReviewProjectAccessService projectAccessService = mock(ReviewProjectAccessService.class);
     private final ReviewRecordServiceImpl service = new ReviewRecordServiceImpl(
-        taskMapper, runMapper, projectMapper, deptService, deliveryService, issueService);
+        taskMapper, runMapper, projectMapper, deptService, deliveryService, issueService, projectAccessService);
 
     @Test
     void returnsDetailForSuccessTaskWithinDataScope()
@@ -53,7 +55,7 @@ class ReviewRecordServiceImplTest
 
         assertEquals(9L, detail.getTask().getTaskId());
         assertEquals(1, detail.getRuns().size());
-        verify(deptService).checkDeptDataScope(88L);
+        verify(projectAccessService).requireView(3L);
     }
 
     @Test

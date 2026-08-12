@@ -17,6 +17,7 @@ import com.acr.review.mapper.ReviewTaskRunMapper;
 import com.acr.review.service.IReviewDeliveryService;
 import com.acr.review.service.IReviewIssueService;
 import com.acr.review.service.IReviewTaskExecutionService;
+import com.acr.review.service.ReviewProjectAccessService;
 import com.acr.system.service.ISysDeptService;
 
 /** 任务详情/重试必须按项目部门做数据范围校验，不能绕过列表的 @DataScope。 */
@@ -29,8 +30,10 @@ class ReviewTaskServiceImplTest
     private final IReviewTaskExecutionService executionService = mock(IReviewTaskExecutionService.class);
     private final IReviewDeliveryService deliveryService = mock(IReviewDeliveryService.class);
     private final IReviewIssueService issueService = mock(IReviewIssueService.class);
+    private final ReviewProjectAccessService projectAccessService = mock(ReviewProjectAccessService.class);
     private final ReviewTaskServiceImpl service = new ReviewTaskServiceImpl(
-        taskMapper, runMapper, projectMapper, deptService, executionService, deliveryService, issueService);
+        taskMapper, runMapper, projectMapper, deptService, executionService, deliveryService, issueService,
+        projectAccessService);
 
     @Test
     void detailChecksDeptDataScope()
@@ -42,7 +45,7 @@ class ReviewTaskServiceImplTest
 
         ReviewTaskDetail detail = service.selectReviewTaskDetail(9L);
 
-        verify(deptService).checkDeptDataScope(100L);
+        verify(projectAccessService).requireView(3L);
         org.junit.jupiter.api.Assertions.assertEquals(9L, detail.getTask().getTaskId());
     }
 
@@ -52,8 +55,8 @@ class ReviewTaskServiceImplTest
         ReviewTask task = task(9L, 3L);
         when(taskMapper.selectReviewTaskById(9L)).thenReturn(task);
         when(projectMapper.selectReviewProjectById(3L)).thenReturn(project(3L, 100L));
-        org.mockito.Mockito.doThrow(new ServiceException("没有权限访问部门数据"))
-            .when(deptService).checkDeptDataScope(100L);
+        org.mockito.Mockito.doThrow(new ServiceException("没有权限访问项目"))
+            .when(projectAccessService).requireView(3L);
 
         assertThrows(ServiceException.class, () -> service.selectReviewTaskDetail(9L));
         verify(runMapper, never()).selectRunsByTaskId(org.mockito.ArgumentMatchers.anyLong());
@@ -68,7 +71,7 @@ class ReviewTaskServiceImplTest
 
         service.retryTask(9L);
 
-        verify(deptService).checkDeptDataScope(100L);
+        verify(projectAccessService).requireOperate(3L);
         verify(executionService).retryTask(9L);
     }
 
@@ -78,8 +81,8 @@ class ReviewTaskServiceImplTest
         ReviewTask task = task(9L, 3L);
         when(taskMapper.selectReviewTaskById(9L)).thenReturn(task);
         when(projectMapper.selectReviewProjectById(3L)).thenReturn(project(3L, 100L));
-        org.mockito.Mockito.doThrow(new ServiceException("没有权限访问部门数据"))
-            .when(deptService).checkDeptDataScope(100L);
+        org.mockito.Mockito.doThrow(new ServiceException("没有权限操作项目"))
+            .when(projectAccessService).requireOperate(3L);
 
         assertThrows(ServiceException.class, () -> service.retryTask(9L));
         verify(executionService, never()).retryTask(org.mockito.ArgumentMatchers.anyLong());

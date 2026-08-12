@@ -12,10 +12,15 @@ public class ReviewProjectOptions
     private List<Option> credentials = new ArrayList<>();
     private List<Option> models = new ArrayList<>();
     private List<Option> templates = new ArrayList<>();
+    private List<Option> notifyChannels = new ArrayList<>();
     private List<String> longLivedBranches = new ArrayList<>();
     private List<String> robotBranchPrefixes = new ArrayList<>();
     private List<String> prEvents = new ArrayList<>();
     private String webhookCallbackUrl;
+    private boolean credentialBindingEditable;
+    private boolean modelBindingEditable;
+    private boolean templateBindingEditable;
+    private boolean notifyBindingEditable;
 
     public List<Option> getBusinessSystems()
     {
@@ -77,6 +82,16 @@ public class ReviewProjectOptions
         this.templates = templates;
     }
 
+    public List<Option> getNotifyChannels()
+    {
+        return notifyChannels;
+    }
+
+    public void setNotifyChannels(List<Option> notifyChannels)
+    {
+        this.notifyChannels = notifyChannels;
+    }
+
     public List<String> getLongLivedBranches()
     {
         return longLivedBranches;
@@ -117,6 +132,46 @@ public class ReviewProjectOptions
         this.webhookCallbackUrl = webhookCallbackUrl;
     }
 
+    public boolean isCredentialBindingEditable()
+    {
+        return credentialBindingEditable;
+    }
+
+    public void setCredentialBindingEditable(boolean credentialBindingEditable)
+    {
+        this.credentialBindingEditable = credentialBindingEditable;
+    }
+
+    public boolean isModelBindingEditable()
+    {
+        return modelBindingEditable;
+    }
+
+    public void setModelBindingEditable(boolean modelBindingEditable)
+    {
+        this.modelBindingEditable = modelBindingEditable;
+    }
+
+    public boolean isTemplateBindingEditable()
+    {
+        return templateBindingEditable;
+    }
+
+    public void setTemplateBindingEditable(boolean templateBindingEditable)
+    {
+        this.templateBindingEditable = templateBindingEditable;
+    }
+
+    public boolean isNotifyBindingEditable()
+    {
+        return notifyBindingEditable;
+    }
+
+    public void setNotifyBindingEditable(boolean notifyBindingEditable)
+    {
+        this.notifyBindingEditable = notifyBindingEditable;
+    }
+
     public static class Option
     {
         private Long id;
@@ -126,6 +181,8 @@ public class ReviewProjectOptions
         private String status;
         private String techStack;
         private Integer versionNo;
+        private String provider;
+        private String channelType;
 
         public Option()
         {
@@ -208,6 +265,26 @@ public class ReviewProjectOptions
         public void setVersionNo(Integer versionNo)
         {
             this.versionNo = versionNo;
+        }
+
+        public String getProvider()
+        {
+            return provider;
+        }
+
+        public void setProvider(String provider)
+        {
+            this.provider = provider;
+        }
+
+        public String getChannelType()
+        {
+            return channelType;
+        }
+
+        public void setChannelType(String channelType)
+        {
+            this.channelType = channelType;
         }
     }
 }

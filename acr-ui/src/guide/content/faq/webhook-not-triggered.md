@@ -1,6 +1,6 @@
 # Webhook 没触发怎么办
 
-这篇帮你排查「发起 PR/MR 后平台没有生成审查任务」的问题，按从 Git 平台到平台内部的顺序逐步定位。
+这篇帮你排查「发起 PR/MR 或 Push 后平台没有生成审查任务」的问题，按从 Git 平台到平台内部的顺序逐步定位。
 
 ## 第 1 步：确认 Git 平台是否发出了事件
 
@@ -13,7 +13,7 @@
 
 两种情况：
 
-- **完全没有投递记录**：事件订阅不对。确认 Webhook 勾选的是 PR/MR 事件（GitHub: Pull requests；GitLab: Merge request events；Gitee: Pull Request；Gitea: Pull Request），push 等其他事件不会创建审查任务；
+- **完全没有投递记录**：事件订阅不对。启用合并请求审查时确认 Webhook 已订阅 PR/MR 事件（GitHub: Pull requests；GitLab: Merge request events；Gitee/Gitea: Pull Request）；启用 Push 审查时还需订阅对应的 Push 事件；
 - **有投递但响应非 2xx 或超时**：多为回调地址不可达或配置错误，跳第 3、4 步；若响应状态码为 **413**，是 Webhook 载荷超过 256KB 上限，见第 2 步的「载荷超限」说明。
 
 ## 第 2 步：确认事件是否到达平台
@@ -28,8 +28,9 @@
 | 目标分支 X 不在审查范围 | PR 的目标分支不在项目「目标分支」列表，编辑项目补选 |
 | 合并请求动作 X 不在启用范围 | 平台动作白名单默认为 opened / reopened / synchronize，其他动作（如 closed）本就忽略 |
 | 项目未启用合并请求审查 | 编辑项目开启「启用合并请求审查」 |
+| 项目未启用 Push 审查 | 编辑项目开启「启用 Push 审查」，并配置触发分支 |
 | 项目已停用 | 启用项目 |
-| 非合并请求事件 | 订阅了多余事件（如 push/issue），被忽略属正常 |
+| 无关事件 | 订阅了平台不处理的事件（如 issue），被忽略属正常 |
 
 > 另有两种结果**不会**显示在「最近接收」中（发生在项目匹配之前），需管理员查看 Webhook 事件表：
 > - **Webhook 载荷超过大小限制**（平台返回 413）：默认上限 256KB，超大载荷需管理员调整后端参数 `review.webhook.max-payload-bytes`；

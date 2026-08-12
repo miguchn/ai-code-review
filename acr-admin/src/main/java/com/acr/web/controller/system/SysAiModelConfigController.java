@@ -31,7 +31,7 @@ public class SysAiModelConfigController extends BaseController
         this.aiModelConfigService = aiModelConfigService;
     }
 
-    @PreAuthorize("@ss.hasPermi('system:aimodelconfig:list')")
+    @PreAuthorize("@ss.hasPlatformPermi('system:aimodelconfig:list')")
     @GetMapping("/list")
     public TableDataInfo list(SysAiModelConfig sysAiModelConfig)
     {
@@ -40,7 +40,7 @@ public class SysAiModelConfigController extends BaseController
         return getDataTable(list);
     }
 
-    @PreAuthorize("@ss.hasPermi('system:aimodelconfig:query')")
+    @PreAuthorize("@ss.hasPlatformPermi('system:aimodelconfig:query')")
     @GetMapping("/providers")
     public AjaxResult providers()
     {
@@ -56,14 +56,14 @@ public class SysAiModelConfigController extends BaseController
         return success(providers);
     }
 
-    @PreAuthorize("@ss.hasPermi('system:aimodelconfig:query')")
+    @PreAuthorize("@ss.hasPlatformPermi('system:aimodelconfig:query')")
     @GetMapping(value = "/{modelId}")
     public AjaxResult getInfo(@PathVariable Long modelId)
     {
         return success(aiModelConfigService.selectSysAiModelConfigById(modelId));
     }
 
-    @PreAuthorize("@ss.hasPermi('system:aimodelconfig:add')")
+    @PreAuthorize("@ss.hasPlatformPermi('system:aimodelconfig:add')")
     @Log(title = "大模型配置", businessType = BusinessType.INSERT)
     @PostMapping
     public AjaxResult add(@Validated @RequestBody SysAiModelConfig sysAiModelConfig)
@@ -72,7 +72,7 @@ public class SysAiModelConfigController extends BaseController
         return toAjax(aiModelConfigService.insertSysAiModelConfig(sysAiModelConfig));
     }
 
-    @PreAuthorize("@ss.hasPermi('system:aimodelconfig:edit')")
+    @PreAuthorize("@ss.hasPlatformPermi('system:aimodelconfig:edit')")
     @Log(title = "大模型配置", businessType = BusinessType.UPDATE)
     @PutMapping
     public AjaxResult edit(@Validated @RequestBody SysAiModelConfig sysAiModelConfig)
@@ -81,7 +81,7 @@ public class SysAiModelConfigController extends BaseController
         return toAjax(aiModelConfigService.updateSysAiModelConfig(sysAiModelConfig));
     }
 
-    @PreAuthorize("@ss.hasPermi('system:aimodelconfig:remove')")
+    @PreAuthorize("@ss.hasPlatformPermi('system:aimodelconfig:remove')")
     @Log(title = "大模型配置", businessType = BusinessType.DELETE)
     @DeleteMapping("/{modelIds}")
     public AjaxResult remove(@PathVariable Long[] modelIds)
@@ -90,28 +90,28 @@ public class SysAiModelConfigController extends BaseController
         return success();
     }
 
-    @PreAuthorize("@ss.hasPermi('system:aimodelconfig:edit')")
+    @PreAuthorize("@ss.hasPlatformPermi('system:aimodelconfig:edit')")
     @PutMapping("/{modelId}/enable")
     public AjaxResult enable(@PathVariable Long modelId, @RequestParam String enabled)
     {
         return toAjax(aiModelConfigService.enableModel(modelId, enabled));
     }
 
-    @PreAuthorize("@ss.hasPermi('system:aimodelconfig:edit')")
+    @PreAuthorize("@ss.hasPlatformPermi('system:aimodelconfig:edit')")
     @PutMapping("/{modelId}/default")
     public AjaxResult setDefault(@PathVariable Long modelId)
     {
         return toAjax(aiModelConfigService.setDefaultModel(modelId));
     }
 
-    @PreAuthorize("@ss.hasAnyPermi('system:aimodelconfig:add,system:aimodelconfig:edit')")
+    @PreAuthorize("@ss.hasAnyPlatformPermi('system:aimodelconfig:add,system:aimodelconfig:edit')")
     @PostMapping("/test")
     public AjaxResult testConnection(@RequestBody SysAiModelConfig sysAiModelConfig)
     {
         return success(aiModelConfigService.testConnection(sysAiModelConfig));
     }
 
-    @PreAuthorize("@ss.hasAnyPermi('system:aimodelconfig:add,system:aimodelconfig:edit')")
+    @PreAuthorize("@ss.hasAnyPlatformPermi('system:aimodelconfig:add,system:aimodelconfig:edit')")
     @PostMapping("/test-call")
     public AjaxResult testModelCall(@RequestBody SysAiModelConfig sysAiModelConfig)
     {

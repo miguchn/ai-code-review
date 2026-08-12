@@ -24,14 +24,14 @@ public class ReviewEngineController extends BaseController
         this.reviewEngineService = reviewEngineService;
     }
 
-    @PreAuthorize("@ss.hasPermi('review:engine:query')")
+    @PreAuthorize("@ss.hasPlatformPermi('review:engine:query')")
     @GetMapping("/info")
     public AjaxResult info()
     {
         return success(reviewEngineService.getEngineInfo());
     }
 
-    @PreAuthorize("@ss.hasPermi('review:engine:detect')")
+    @PreAuthorize("@ss.hasPlatformPermi('review:engine:detect')")
     @Log(title = "审查引擎环境检测")
     @PostMapping("/detect")
     public AjaxResult detect()
@@ -39,7 +39,7 @@ public class ReviewEngineController extends BaseController
         return success(reviewEngineService.detectEnvironment());
     }
 
-    @PreAuthorize("@ss.hasPermi('review:engine:test')")
+    @PreAuthorize("@ss.hasPlatformPermi('review:engine:test')")
     @Log(title = "审查引擎测试调用")
     @PostMapping("/test")
     public AjaxResult test(@RequestBody(required = false) ReviewEngineTestRequest request)

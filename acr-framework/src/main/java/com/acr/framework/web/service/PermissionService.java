@@ -1,6 +1,7 @@
 package com.acr.framework.web.service;
 
 import java.util.Set;
+import java.util.Arrays;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
 import com.acr.common.constant.Constants;
@@ -48,6 +49,27 @@ public class PermissionService
     public boolean lacksPermi(String permission)
     {
         return hasPermi(permission) != true;
+    }
+
+    /**
+     * 平台敏感资产权限：权限字符串必须来自同一个平台级角色。
+     * 避免部门角色误勾菜单后获得全局凭据、模型或通知渠道管理能力。
+     */
+    public boolean hasPlatformPermi(String permission)
+    {
+        if (StringUtils.isEmpty(permission))
+        {
+            return false;
+        }
+        PermissionContextHolder.setContext(permission);
+        return SecurityUtils.hasPlatformPermi(permission);
+    }
+
+    public boolean hasAnyPlatformPermi(String permissions)
+    {
+        return StringUtils.isNotEmpty(permissions)
+            && Arrays.stream(permissions.split(Constants.PERMISSION_DELIMITER))
+                .anyMatch(this::hasPlatformPermi);
     }
 
     /**

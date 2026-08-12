@@ -175,6 +175,7 @@
               {{ detailSummaryDelivery.failureMessage || '—' }}
             </p>
           </template>
+          <span v-else-if="isPushIssue(detailIssue)" class="empty-tip">Push 审查不向代码平台发布总结评论；结果可在审查记录和通知投递中查看</span>
           <span v-else class="empty-tip">暂无该总结评论投递记录</span>
         </section>
 
@@ -205,6 +206,7 @@
               {{ inlineDeliveryReason }}
             </p>
           </template>
+          <span v-else-if="isPushIssue(detailIssue)" class="empty-tip">Push 审查不向代码平台发布行内评论</span>
           <span v-else class="empty-tip">未发布 · 未达严重度门槛或未启用行内评论</span>
         </section>
 

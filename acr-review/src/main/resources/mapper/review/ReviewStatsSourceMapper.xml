@@ -3,6 +3,16 @@
   "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.acr.review.mapper.ReviewStatsSourceMapper">
 
+    <sql id="projectMemberScope">
+        <if test="params.projectAccessUserId != null">
+            and (p.owner_user_id = #{params.projectAccessUserId}
+                 or exists (select 1 from review_project_member pm
+                            where pm.project_id = p.project_id
+                              and pm.user_id = #{params.projectAccessUserId}
+                              and pm.status = '0'))
+        </if>
+    </sql>
+
     <select id="selectActiveProjectIds" resultType="long">
         SELECT project_id FROM review_project ORDER BY project_id
     </select>
@@ -133,6 +143,7 @@
             </foreach>
         </if>
         ${params.dataScope}
+        <include refid="projectMemberScope" />
     </select>
 
     <select id="selectCategoryDistribution" parameterType="com.acr.review.domain.ReviewProject" resultType="map">
@@ -154,6 +165,7 @@
             AND i.project_id = #{projectId}
         </if>
         ${params.dataScope}
+        <include refid="projectMemberScope" />
         GROUP BY COALESCE(NULLIF(TRIM(i.category), ''), '未分类')
         ORDER BY cnt DESC
         LIMIT 20
@@ -178,6 +190,7 @@
             AND dr.project_id = #{projectId}
         </if>
         ${params.dataScope}
+        <include refid="projectMemberScope" />
         GROUP BY dr.channel
         ORDER BY delivery_total DESC
     </select>

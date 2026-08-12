@@ -44,6 +44,7 @@ import com.acr.review.notify.NotifyRobotClients;
 import com.acr.review.service.IGitCredentialService;
 import com.acr.review.service.IReviewIssueService;
 import com.acr.review.service.IReviewNotifyChannelService;
+import com.acr.review.service.ReviewProjectAccessService;
 import com.acr.system.service.ISysDeptService;
 
 @ExtendWith(MockitoExtension.class)
@@ -65,6 +66,7 @@ class ReviewDeliveryServiceImplTest
     @Mock private IReviewIssueService issueService;
     @Mock private ReviewDeliveryIntentService intentService;
     @Mock private ReviewDeliveryRuntimeSettings settings;
+    @Mock private ReviewProjectAccessService projectAccessService;
 
     private ReviewDeliveryServiceImpl service;
 
@@ -73,7 +75,8 @@ class ReviewDeliveryServiceImplTest
     {
         service = new ReviewDeliveryServiceImpl(deliveryMapper, taskMapper, runMapper, projectMapper,
             issueMapper, credentialService, notifyChannelService, robotClients, contentFactory,
-            deptService, adapterRegistry, credentialMapper, issueService, intentService, settings);
+            deptService, adapterRegistry, credentialMapper, issueService, intentService, settings,
+            projectAccessService);
     }
 
     @Test
@@ -204,7 +207,6 @@ class ReviewDeliveryServiceImplTest
         ReviewTask latest = successTask(21L);
         ReviewTaskRun run = successRun(201L);
         when(taskMapper.selectReviewTaskById(20L)).thenReturn(anchor);
-        when(projectMapper.selectReviewProjectById(3L)).thenReturn(project());
         when(taskMapper.selectLatestSuccessByProjectAndPr(3L, 8)).thenReturn(latest);
         when(runMapper.selectRunsByTaskId(21L)).thenReturn(List.of(run));
 
@@ -220,7 +222,6 @@ class ReviewDeliveryServiceImplTest
     {
         ReviewTask anchor = successTask(22L);
         when(taskMapper.selectReviewTaskById(22L)).thenReturn(anchor);
-        when(projectMapper.selectReviewProjectById(3L)).thenReturn(project());
 
         assertThrows(ServiceException.class, () -> service.retryDelivery(22L));
         verify(intentService, never()).enqueueSummary(any(), any(), anyString(), anyString());
@@ -231,7 +232,6 @@ class ReviewDeliveryServiceImplTest
     {
         ReviewDeliveryRecord record = claimedRecord(30L, ReviewDeliveryConstants.CHANNEL_FEISHU_BOT);
         when(deliveryMapper.selectDeliveryById(30L)).thenReturn(record);
-        when(projectMapper.selectReviewProjectById(3L)).thenReturn(project());
 
         service.retryDeliveryById(30L);
 
@@ -356,7 +356,6 @@ class ReviewDeliveryServiceImplTest
         record.setProjectName("示例项目");
         record.setBusinessSystemName("核心系统");
         when(deliveryMapper.selectDeliveryById(77L)).thenReturn(record);
-        when(projectMapper.selectReviewProjectById(3L)).thenReturn(project());
         when(deliveryMapper.selectContentSnapshotById(77L)).thenReturn(
             "{\"kind\":\"IM\",\"channelType\":\"FEISHU_BOT\",\"title\":\"t\",\"body\":\"b\"}");
 
@@ -364,7 +363,7 @@ class ReviewDeliveryServiceImplTest
 
         assertEquals("IM", content.get("kind"));
         assertEquals("核心系统", content.get("businessSystemName"));
-        verify(deptService).checkDeptDataScope(1L);
+        verify(projectAccessService).requireView(3L);
     }
 
     private void stubSummaryExecution(ReviewDeliveryRecord record, ReviewTask task, ReviewTaskRun run)

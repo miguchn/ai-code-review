@@ -19,6 +19,9 @@ public class SysRole extends BaseEntity
 {
     private static final long serialVersionUID = 1L;
 
+    public static final String ROLE_SCOPE_PLATFORM = "PLATFORM";
+    public static final String ROLE_SCOPE_DEPARTMENT = "DEPARTMENT";
+
     /** 角色ID */
     @Excel(name = "角色序号", cellType = ColumnType.NUMERIC)
     private Long roleId;
@@ -38,6 +41,9 @@ public class SysRole extends BaseEntity
     /** 数据范围（1：所有数据权限；2：自定义数据权限；3：本部门数据权限；4：本部门及以下数据权限；5：仅本人数据权限） */
     @Excel(name = "数据范围", readConverterExp = "1=所有数据权限,2=自定义数据权限,3=本部门数据权限,4=本部门及以下数据权限,5=仅本人数据权限")
     private String dataScope;
+
+    /** 角色层级（PLATFORM：平台级，DEPARTMENT：部门级）。 */
+    private String roleScope;
 
     /** 菜单树选择项是否关联显示（ 0：父子不互相关联显示 1：父子互相关联显示） */
     private boolean menuCheckStrictly;
@@ -139,6 +145,16 @@ public class SysRole extends BaseEntity
         this.dataScope = dataScope;
     }
 
+    public String getRoleScope()
+    {
+        return roleScope;
+    }
+
+    public void setRoleScope(String roleScope)
+    {
+        this.roleScope = roleScope;
+    }
+
     public boolean isMenuCheckStrictly()
     {
         return menuCheckStrictly;
@@ -227,6 +243,7 @@ public class SysRole extends BaseEntity
             .append("roleKey", getRoleKey())
             .append("roleSort", getRoleSort())
             .append("dataScope", getDataScope())
+            .append("roleScope", getRoleScope())
             .append("menuCheckStrictly", isMenuCheckStrictly())
             .append("deptCheckStrictly", isDeptCheckStrictly())
             .append("status", getStatus())

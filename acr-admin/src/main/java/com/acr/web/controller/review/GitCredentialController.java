@@ -31,7 +31,7 @@ public class GitCredentialController extends BaseController
         this.credentialService = credentialService;
     }
 
-    @PreAuthorize("@ss.hasPermi('review:credential:list')")
+    @PreAuthorize("@ss.hasPlatformPermi('review:credential:list')")
     @GetMapping("/list")
     public TableDataInfo list(GitCredential credential)
     {
@@ -40,14 +40,14 @@ public class GitCredentialController extends BaseController
         return getDataTable(list);
     }
 
-    @PreAuthorize("@ss.hasPermi('review:credential:query')")
+    @PreAuthorize("@ss.hasPlatformPermi('review:credential:query')")
     @GetMapping("/{credentialId}")
     public AjaxResult getInfo(@PathVariable Long credentialId)
     {
         return success(credentialService.selectGitCredentialById(credentialId));
     }
 
-    @PreAuthorize("@ss.hasPermi('review:credential:add')")
+    @PreAuthorize("@ss.hasPlatformPermi('review:credential:add')")
     @Log(title = "GitHub访问凭据", businessType = BusinessType.INSERT,
          excludeParamNames = { "token", "tokenCiphertext" }, isSaveResponseData = false)
     @PostMapping
@@ -56,7 +56,7 @@ public class GitCredentialController extends BaseController
         return toAjax(credentialService.insertGitCredential(credential));
     }
 
-    @PreAuthorize("@ss.hasPermi('review:credential:edit')")
+    @PreAuthorize("@ss.hasPlatformPermi('review:credential:edit')")
     @Log(title = "GitHub访问凭据", businessType = BusinessType.UPDATE,
          excludeParamNames = { "token", "tokenCiphertext" }, isSaveResponseData = false)
     @PutMapping
@@ -65,7 +65,7 @@ public class GitCredentialController extends BaseController
         return toAjax(credentialService.updateGitCredential(credential));
     }
 
-    @PreAuthorize("@ss.hasPermi('review:credential:remove')")
+    @PreAuthorize("@ss.hasPlatformPermi('review:credential:remove')")
     @Log(title = "GitHub访问凭据", businessType = BusinessType.DELETE)
     @DeleteMapping("/{credentialIds}")
     public AjaxResult remove(@PathVariable Long[] credentialIds)
@@ -74,7 +74,7 @@ public class GitCredentialController extends BaseController
         return success();
     }
 
-    @PreAuthorize("@ss.hasPermi('review:credential:test')")
+    @PreAuthorize("@ss.hasPlatformPermi('review:credential:test')")
     @Log(title = "GitHub凭据连接测试", isSaveResponseData = false)
     @PostMapping("/{credentialId}/test")
     public AjaxResult testConnection(@PathVariable Long credentialId)

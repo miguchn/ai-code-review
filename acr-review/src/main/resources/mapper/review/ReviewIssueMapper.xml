@@ -4,6 +4,16 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.acr.review.mapper.ReviewIssueMapper">
 
+    <sql id="projectMemberScope">
+        <if test="params.projectAccessUserId != null">
+            and (p.owner_user_id = #{params.projectAccessUserId}
+                 or exists (select 1 from review_project_member pm
+                            where pm.project_id = p.project_id
+                              and pm.user_id = #{params.projectAccessUserId}
+                              and pm.status = '0'))
+        </if>
+    </sql>
+
     <resultMap type="com.acr.review.domain.ReviewIssue" id="ReviewIssueResult">
         <id property="issueId" column="issue_id" />
         <result property="projectId" column="project_id" />
@@ -159,6 +169,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         where 1 = 1
         <include refid="issueFilters" />
         ${params.dataScope}
+        <include refid="projectMemberScope" />
         order by i.update_time desc, i.issue_id desc
     </select>
 
@@ -180,6 +191,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         where 1 = 1
         <include refid="issueFilters" />
         ${params.dataScope}
+        <include refid="projectMemberScope" />
     </select>
 
     <select id="countClosedToday" parameterType="com.acr.review.domain.ReviewIssue" resultType="int">
@@ -191,6 +203,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         where i.status = 'CLOSED'
           and date(i.closed_time) = curdate()
         ${params.dataScope}
+        <include refid="projectMemberScope" />
     </select>
 
     <select id="selectIssueStats" parameterType="com.acr.review.domain.ReviewIssue"
@@ -205,6 +218,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         left join sys_user owner on owner.user_id = p.owner_user_id
         where 1 = 1
         ${params.dataScope}
+        <include refid="projectMemberScope" />
     </select>
 
     <insert id="insertIssue" parameterType="com.acr.review.domain.ReviewIssue" useGeneratedKeys="true" keyProperty="issueId">

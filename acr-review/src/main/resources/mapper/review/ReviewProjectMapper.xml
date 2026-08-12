@@ -4,6 +4,16 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.acr.review.mapper.ReviewProjectMapper">
 
+    <sql id="projectMemberScope">
+        <if test="params.projectAccessUserId != null">
+            and (p.owner_user_id = #{params.projectAccessUserId}
+                 or exists (select 1 from review_project_member pm
+                            where pm.project_id = p.project_id
+                              and pm.user_id = #{params.projectAccessUserId}
+                              and pm.status = '0'))
+        </if>
+    </sql>
+
     <resultMap type="com.acr.review.domain.ReviewProject" id="ReviewProjectResult">
         <id property="projectId" column="project_id" />
         <result property="projectName" column="project_name" />
@@ -121,10 +131,8 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <if test="lastCheckStatus != null and lastCheckStatus != ''">
             and p.last_check_status = #{lastCheckStatus}
         </if>
-        <if test="accessUserId != null">
-            and (p.owner_user_id = #{accessUserId} or find_in_set(#{accessUserId}, bs.manager_ids))
-        </if>
         ${params.dataScope}
+        <include refid="projectMemberScope" />
         order by p.project_id desc
     </select>
 
@@ -160,10 +168,8 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <if test="lastCheckStatus != null and lastCheckStatus != ''">
             and p.last_check_status = #{lastCheckStatus}
         </if>
-        <if test="accessUserId != null">
-            and (p.owner_user_id = #{accessUserId} or find_in_set(#{accessUserId}, bs.manager_ids))
-        </if>
         ${params.dataScope}
+        <include refid="projectMemberScope" />
     </select>
 
     <select id="selectByRepository" resultMap="ReviewProjectResult">

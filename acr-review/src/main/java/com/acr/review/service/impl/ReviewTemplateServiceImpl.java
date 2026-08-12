@@ -1,7 +1,10 @@
 package com.acr.review.service.impl;
 
+import java.util.ArrayList;
 import java.util.List;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import com.acr.common.exception.ServiceException;
 import com.acr.common.utils.SecurityUtils;
 import com.acr.common.utils.StringUtils;
@@ -10,12 +13,18 @@ import com.acr.review.domain.ReviewTemplate;
 import com.acr.review.mapper.ReviewTemplateMapper;
 import com.acr.review.service.IReviewTemplateService;
 import com.acr.review.service.ReviewScoringConstants;
+import com.acr.system.domain.SysBusinessAudit;
+import com.acr.system.service.ISysBusinessAuditService;
+import com.alibaba.fastjson2.JSON;
 
 /** 项目审查模板管理。 */
 @Service
 public class ReviewTemplateServiceImpl implements IReviewTemplateService
 {
     private final ReviewTemplateMapper templateMapper;
+
+    @Autowired(required = false)
+    private ISysBusinessAuditService businessAuditService;
 
     public ReviewTemplateServiceImpl(ReviewTemplateMapper templateMapper)
     {
@@ -61,6 +70,7 @@ public class ReviewTemplateServiceImpl implements IReviewTemplateService
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public int insertReviewTemplate(ReviewTemplate template)
     {
         normalize(template);
@@ -68,10 +78,13 @@ public class ReviewTemplateServiceImpl implements IReviewTemplateService
         template.setVersionNo(1);
         checkCodeUnique(template);
         template.setCreateBy(currentUsername());
-        return templateMapper.insertReviewTemplate(template);
+        int rows = templateMapper.insertReviewTemplate(template);
+        recordTemplateAudit("CREATE", null, template, "审查模板创建");
+        return rows;
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public int updateReviewTemplate(ReviewTemplate template)
     {
         if (template.getTemplateId() == null)
@@ -94,19 +107,24 @@ public class ReviewTemplateServiceImpl implements IReviewTemplateService
             ? existing.getVersionNo() : (existing.getVersionNo() == null ? 2 : existing.getVersionNo() + 1));
         checkCodeUnique(template);
         template.setUpdateBy(currentUsername());
-        return templateMapper.updateReviewTemplate(template);
+        int rows = templateMapper.updateReviewTemplate(template);
+        recordTemplateAudit("UPDATE", existing, template, "审查模板策略变更");
+        return rows;
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void deleteReviewTemplateByIds(Long[] templateIds)
     {
         if (templateIds == null || templateIds.length == 0)
         {
             return;
         }
+        List<ReviewTemplate> templates = new ArrayList<>();
         for (Long templateId : templateIds)
         {
             ReviewTemplate template = selectReviewTemplateById(templateId);
+            templates.add(template);
             if ("1".equals(template.getBuiltinFlag()))
             {
                 throw new ServiceException("系统内置审查模板不能删除，可复制后修改");
@@ -119,6 +137,31 @@ public class ReviewTemplateServiceImpl implements IReviewTemplateService
             }
         }
         templateMapper.deleteReviewTemplateByIds(templateIds);
+        for (ReviewTemplate template : templates)
+        {
+            recordTemplateAudit("DELETE", template, null, "审查模板删除");
+        }
+    }
+
+    private void recordTemplateAudit(String action, ReviewTemplate before, ReviewTemplate after, String reason)
+    {
+        if (businessAuditService == null)
+        {
+            return;
+        }
+        ReviewTemplate target = after == null ? before : after;
+        SysBusinessAudit audit = new SysBusinessAudit();
+        audit.setEventKey("review-template-" + action + "-" + (target.getTemplateId() == null
+            ? java.util.UUID.randomUUID() : target.getTemplateId()) + "-" + java.util.UUID.randomUUID());
+        audit.setSource("acr-review");
+        audit.setAction("REVIEW_TEMPLATE_" + action);
+        audit.setObjectType("REVIEW_TEMPLATE");
+        audit.setObjectId(target.getTemplateId() == null ? null : String.valueOf(target.getTemplateId()));
+        audit.setObjectName(target.getTemplateName());
+        audit.setBeforeValue(before == null ? null : JSON.toJSONString(before));
+        audit.setAfterValue(after == null ? null : JSON.toJSONString(after));
+        audit.setReason(reason);
+        businessAuditService.record(audit);
     }
 
     private void normalize(ReviewTemplate template)

@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "AI Code Review · 智能代码审查平台前端",
   "author": "AI Code Review Team",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",

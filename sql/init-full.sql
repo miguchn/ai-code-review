@@ -1,7 +1,7 @@
 -- ============================================================================
 -- AI Code Review 一次性初始化脚本（仅适用于全新环境）
 --
--- 本脚本是 sql/01_core_schema.sql … sql/44_trigger_source_failed.sql
+-- 本脚本是 sql/01_core_schema.sql … sql/46_enterprise_roles_business_audit.sql
 -- 全部执行完成后的最终状态（表结构 + 初始化数据），新环境一条命令即可完成初始化：
 --
 --   mysql --default-character-set=utf8mb4 -u root -p < sql/init-full.sql
@@ -15,15 +15,15 @@
 -- 4. 初始管理员为 admin / admin123，首次登录后请立即修改密码。
 -- 5. 新增编号增量脚本后必须同步重新生成本脚本（生成方式见 sql/README.md）。
 --
--- 生成日期：2026-08-11；基线：企业级架构风险修复 S6 + M11 行内评论 + M12 数据洞察
--- （已含 01-44 全部增量：41 定时任务种子、42 身份关联、43 成员增删行数、44 触发来源 TASK_FAILED）
+-- 生成日期：2026-08-12；基线：企业级架构风险修复 S6 + M11 行内评论 + M12 数据洞察
+-- （已含 01-46 全部增量：45 项目权限治理、46 企业标准角色与业务审计事实）
 -- ============================================================================
 
 CREATE DATABASE IF NOT EXISTS `ai_code_review` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
 USE `ai_code_review`;
 
 -- ----------------------------------------------------------------------------
--- 第一部分：表结构最终态（01-44 增量合并后的最终状态）
+-- 第一部分：表结构最终态（01-46 增量合并后的最终状态）
 -- ----------------------------------------------------------------------------
 
 
@@ -465,6 +465,25 @@ CREATE TABLE `review_project` (
   KEY `idx_review_project_notify_channel` (`notify_channel_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='代码审查项目表';
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `review_project_member`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `review_project_member` (
+  `member_id` bigint NOT NULL AUTO_INCREMENT COMMENT '成员授权ID',
+  `project_id` bigint NOT NULL COMMENT '项目ID',
+  `user_id` bigint NOT NULL COMMENT '用户ID',
+  `project_role` varchar(20) COLLATE utf8mb4_general_ci NOT NULL COMMENT '项目角色(ADMIN/REVIEWER/VIEWER)',
+  `status` char(1) COLLATE utf8mb4_general_ci NOT NULL DEFAULT '0' COMMENT '状态(0正常 1停用)',
+  `create_by` varchar(64) COLLATE utf8mb4_general_ci DEFAULT '' COMMENT '创建者',
+  `create_time` datetime DEFAULT NULL COMMENT '创建时间',
+  `update_by` varchar(64) COLLATE utf8mb4_general_ci DEFAULT '' COMMENT '更新者',
+  `update_time` datetime DEFAULT NULL COMMENT '更新时间',
+  PRIMARY KEY (`member_id`),
+  UNIQUE KEY `uk_project_member` (`project_id`,`user_id`),
+  KEY `idx_project_member_user` (`user_id`,`status`),
+  KEY `idx_project_member_project` (`project_id`,`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='代码审查项目成员授权';
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `review_stats_daily`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
@@ -732,6 +751,30 @@ CREATE TABLE `sys_ai_model_config` (
   UNIQUE KEY `uk_ai_model_default_slot` (`default_slot`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='AI 大模型配置表';
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `sys_business_audit`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `sys_business_audit` (
+  `audit_id` bigint NOT NULL AUTO_INCREMENT COMMENT '业务审计ID',
+  `event_key` varchar(160) COLLATE utf8mb4_general_ci NOT NULL COMMENT '事件幂等标识',
+  `source` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '来源模块',
+  `action` varchar(64) COLLATE utf8mb4_general_ci NOT NULL COMMENT '业务动作',
+  `object_type` varchar(64) COLLATE utf8mb4_general_ci NOT NULL COMMENT '操作对象类型',
+  `object_id` varchar(128) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '操作对象ID',
+  `object_name` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '操作对象名称',
+  `before_value` mediumtext COLLATE utf8mb4_general_ci COMMENT '关键前值快照（不含凭据）',
+  `after_value` mediumtext COLLATE utf8mb4_general_ci COMMENT '关键后值快照（不含凭据）',
+  `reason` varchar(1000) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '操作原因或系统依据',
+  `related_object` mediumtext COLLATE utf8mb4_general_ci COMMENT '关联项目、任务、运行或授权对象',
+  `operator` varchar(64) COLLATE utf8mb4_general_ci NOT NULL COMMENT '操作人',
+  `audit_time` datetime NOT NULL COMMENT '审计时间',
+  PRIMARY KEY (`audit_id`),
+  UNIQUE KEY `uk_business_audit_event` (`event_key`),
+  KEY `idx_business_audit_time` (`audit_time`),
+  KEY `idx_business_audit_object` (`object_type`,`object_id`),
+  KEY `idx_business_audit_operator` (`operator`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='业务审计事实（仅新增）';
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `sys_business_system`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
@@ -991,6 +1034,7 @@ CREATE TABLE `sys_role` (
   `role_key` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '角色权限字符串',
   `role_sort` int NOT NULL COMMENT '显示顺序',
   `data_scope` char(1) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT '1' COMMENT '数据范围（1：全部数据权限 2：自定数据权限 3：本部门数据权限 4：本部门及以下数据权限）',
+  `role_scope` varchar(20) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'DEPARTMENT' COMMENT '角色层级(PLATFORM平台级 DEPARTMENT部门级)',
   `menu_check_strictly` tinyint(1) DEFAULT '1' COMMENT '菜单树选择项是否关联显示',
   `dept_check_strictly` tinyint(1) DEFAULT '1' COMMENT '部门树选择项是否关联显示',
   `status` char(1) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '角色状态（0正常 1停用）',
@@ -1112,7 +1156,7 @@ CREATE TABLE `sys_user_role` (
 
 LOCK TABLES `sys_user` WRITE;
 /*!40000 ALTER TABLE `sys_user` DISABLE KEYS */;
-INSERT INTO `sys_user` (`user_id`, `dept_id`, `user_name`, `nick_name`, `user_type`, `email`, `phonenumber`, `sex`, `avatar`, `password`, `status`, `del_flag`, `login_ip`, `login_date`, `pwd_update_date`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (1,100,'admin','系统管理员','00','','','2','','$2a$10$7JB720yubVSZvUI0rEqK/.VqGOZTH.ulu33dHOiBE8ByOhJIrdAu2','0','0','127.0.0.1','2026-08-11 15:22:32','2026-07-30 17:15:00','admin','2026-07-30 17:15:00','',NULL,'初始管理员');
+INSERT INTO `sys_user` (`user_id`, `dept_id`, `user_name`, `nick_name`, `user_type`, `email`, `phonenumber`, `sex`, `avatar`, `password`, `status`, `del_flag`, `login_ip`, `login_date`, `pwd_update_date`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (1,100,'admin','系统管理员','00','','','2','','$2a$10$7JB720yubVSZvUI0rEqK/.VqGOZTH.ulu33dHOiBE8ByOhJIrdAu2','0','0','127.0.0.1','2026-08-12 16:01:48','2026-07-30 17:15:00','admin','2026-07-30 17:15:00','',NULL,'初始管理员');
 /*!40000 ALTER TABLE `sys_user` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -1124,12 +1168,18 @@ UNLOCK TABLES;
 
 LOCK TABLES `sys_role` WRITE;
 /*!40000 ALTER TABLE `sys_role` DISABLE KEYS */;
-INSERT INTO `sys_role` (`role_id`, `role_name`, `role_key`, `role_sort`, `data_scope`, `menu_check_strictly`, `dept_check_strictly`, `status`, `del_flag`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (1,'超级管理员','admin',1,'1',1,1,'0','0','admin','2026-07-30 17:15:00','',NULL,'超级管理员');
+INSERT INTO `sys_role` (`role_id`, `role_name`, `role_key`, `role_sort`, `data_scope`, `role_scope`, `menu_check_strictly`, `dept_check_strictly`, `status`, `del_flag`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (1,'超级管理员','admin',1,'1','PLATFORM',1,1,'0','0','admin','2026-07-30 17:15:00','',NULL,'超级管理员');
+INSERT INTO `sys_role` (`role_id`, `role_name`, `role_key`, `role_sort`, `data_scope`, `role_scope`, `menu_check_strictly`, `dept_check_strictly`, `status`, `del_flag`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (2,'审查平台管理员','acr_platform_admin',2,'1','PLATFORM',1,1,'0','0','admin','2026-08-12 08:08:31','',NULL,'平台运行与审查配置管理员；不含用户、角色、菜单等超级管理员权限');
+INSERT INTO `sys_role` (`role_id`, `role_name`, `role_key`, `role_sort`, `data_scope`, `role_scope`, `menu_check_strictly`, `dept_check_strictly`, `status`, `del_flag`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (3,'开发人员','acr_developer',10,'3','DEPARTMENT',1,1,'0','0','admin','2026-08-12 08:08:31','',NULL,'查看授权项目、任务、记录和问题；可确认及处置授权范围内问题');
+INSERT INTO `sys_role` (`role_id`, `role_name`, `role_key`, `role_sort`, `data_scope`, `role_scope`, `menu_check_strictly`, `dept_check_strictly`, `status`, `del_flag`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (4,'项目负责人','acr_project_owner',20,'2','DEPARTMENT',1,1,'0','0','admin','2026-08-12 08:08:31','',NULL,'负责授权项目接入、任务处置和项目级审查策略使用');
+INSERT INTO `sys_role` (`role_id`, `role_name`, `role_key`, `role_sort`, `data_scope`, `role_scope`, `menu_check_strictly`, `dept_check_strictly`, `status`, `del_flag`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (5,'质量/安全人员','acr_quality_security',30,'2','PLATFORM',1,1,'0','0','admin','2026-08-12 08:08:31','',NULL,'平台级维护审查模板和引擎策略；仅在加入项目后复核授权范围内高风险问题');
+INSERT INTO `sys_role` (`role_id`, `role_name`, `role_key`, `role_sort`, `data_scope`, `role_scope`, `menu_check_strictly`, `dept_check_strictly`, `status`, `del_flag`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (6,'审计人员','acr_auditor',40,'2','DEPARTMENT',1,1,'0','0','admin','2026-08-12 08:08:31','',NULL,'只读查询业务审计、操作日志、审查结果和权限相关证据');
 /*!40000 ALTER TABLE `sys_role` ENABLE KEYS */;
 UNLOCK TABLES;
 
 LOCK TABLES `sys_role_menu` WRITE;
 /*!40000 ALTER TABLE `sys_role_menu` DISABLE KEYS */;
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,1);
 INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,4);
 INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,5);
 INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,6);
@@ -1149,6 +1199,7 @@ INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,133);
 INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,134);
 INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,135);
 INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,136);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,137);
 INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,1116);
 INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,1117);
 INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,1118);
@@ -1192,6 +1243,112 @@ INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,1173);
 INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,1174);
 INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,1175);
 INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (2,1176);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (3,3);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (3,6);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (3,122);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (3,125);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (3,128);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (3,131);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (3,1124);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (3,1135);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (3,1149);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (3,1160);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (3,1161);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (3,1162);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (3,1163);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (4,3);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (4,5);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (4,6);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (4,7);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (4,122);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (4,125);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (4,127);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (4,128);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (4,130);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (4,131);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (4,133);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (4,1124);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (4,1125);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (4,1126);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (4,1128);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (4,1129);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (4,1135);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (4,1139);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (4,1144);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (4,1149);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (4,1150);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (4,1158);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (4,1159);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (4,1160);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (4,1161);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (4,1162);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (4,1163);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (4,1171);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (5,3);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (5,4);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (5,5);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (5,6);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (5,7);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (5,122);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (5,125);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (5,127);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (5,128);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (5,130);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (5,131);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (5,132);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (5,133);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (5,135);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (5,1124);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (5,1135);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (5,1144);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (5,1145);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (5,1146);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (5,1147);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (5,1149);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (5,1158);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (5,1159);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (5,1160);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (5,1161);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (5,1162);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (5,1163);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (5,1170);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (5,1171);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (5,1172);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (6,1);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (6,2);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (6,3);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (6,5);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (6,6);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (6,7);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (6,108);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (6,122);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (6,125);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (6,128);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (6,130);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (6,131);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (6,132);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (6,133);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (6,134);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (6,135);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (6,136);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (6,137);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (6,500);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (6,501);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (6,1039);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (6,1042);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (6,1124);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (6,1135);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (6,1136);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (6,1149);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (6,1151);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (6,1158);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (6,1159);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (6,1160);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (6,1161);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (6,1170);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (6,1171);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (6,1172);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES (6,1173);
 /*!40000 ALTER TABLE `sys_role_menu` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -1242,6 +1399,7 @@ INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`
 INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (134,'报告中心',7,4,'report','insight/report/placeholder','','InsightReport',1,0,'C','0','0','insight:overview:view','documentation','admin','2026-08-10 09:28:50','admin','2026-08-10 09:28:50','三期占位：周/月快照与导出');
 INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (135,'成员分析',7,3,'member','insight/member/index','','InsightMember',1,0,'C','0','0','insight:team:view','peoples','admin','2026-08-10 09:28:50','',NULL,'本人自查 + 授权团队聚合（非绩效评价输入）');
 INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (136,'运行概览',2,7,'runtime','monitor/runtime/index','','ReviewRuntimeOverview',1,0,'C','0','0','review:runtime:view','dashboard','admin','2026-08-10 09:28:50','',NULL,'审查调度/资源预算/投递队列运行态与告警处置');
+INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (137,'业务审计',1,10,'audit','system/audit/index','','BusinessAudit',1,0,'C','0','0','system:audit:list','document','admin','2026-08-12 08:08:31','',NULL,'问题处置、策略和授权变更的不可覆盖业务事实');
 INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (500,'操作日志',108,1,'operlog','monitor/operlog/index','','',1,0,'C','0','0','monitor:operlog:list','form','admin','2026-07-30 17:15:00','',NULL,'操作日志菜单');
 INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (501,'登录日志',108,2,'logininfor','monitor/logininfor/index','','',1,0,'C','0','0','monitor:logininfor:list','logininfor','admin','2026-07-30 17:15:00','',NULL,'登录日志菜单');
 INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (1000,'用户查询',100,1,'','','','',1,0,'F','0','0','system:user:query','#','admin','2026-07-30 17:15:00','',NULL,'');

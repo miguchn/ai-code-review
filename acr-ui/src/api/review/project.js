@@ -35,3 +35,15 @@ export function changeReviewProjectStatus(projectId, status) {
 export function testReviewProject(projectId) {
   return request({ url: '/review/project/' + projectId + '/test', method: 'post' })
 }
+
+export function listReviewProjectMembers(projectId) {
+  return request({ url: `/review/project/${projectId}/members`, method: 'get' })
+}
+
+export function saveReviewProjectMember(projectId, data) {
+  return request({ url: `/review/project/${projectId}/members`, method: 'put', data })
+}
+
+export function delReviewProjectMember(projectId, memberId) {
+  return request({ url: `/review/project/${projectId}/members/${memberId}`, method: 'delete' })
+}

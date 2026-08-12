@@ -159,6 +159,31 @@ public class SecurityUtils
                 .anyMatch(x -> Constants.ALL_PERMISSION.equals(x) || PatternMatchUtils.simpleMatch(x, permission));
     }
 
+    /** 权限必须由同一个平台级角色授予；超级管理员保持全权限。 */
+    public static boolean hasPlatformPermi(String permission)
+    {
+        LoginUser loginUser = getLoginUser();
+        if (loginUser == null || loginUser.getUser() == null)
+        {
+            return false;
+        }
+        if (loginUser.getUser().isAdmin())
+        {
+            return true;
+        }
+        List<SysRole> roles = loginUser.getUser().getRoles();
+        if (roles == null)
+        {
+            return false;
+        }
+        return roles.stream()
+            .filter(role -> role != null
+                && SysRole.ROLE_SCOPE_PLATFORM.equals(role.getRoleScope())
+                && "0".equals(role.getStatus())
+                && role.getPermissions() != null)
+            .anyMatch(role -> hasPermi(role.getPermissions(), permission));
+    }
+
     /**
      * 验证用户是否拥有某个角色
      * 

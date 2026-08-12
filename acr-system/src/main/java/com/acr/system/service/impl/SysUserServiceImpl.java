@@ -21,6 +21,7 @@ import com.acr.common.utils.StringUtils;
 import com.acr.common.utils.bean.BeanValidators;
 import com.acr.common.utils.spring.SpringUtils;
 import com.acr.system.domain.SysPost;
+import com.acr.system.domain.SysBusinessAudit;
 import com.acr.system.domain.SysUserPost;
 import com.acr.system.domain.SysUserRole;
 import com.acr.system.mapper.SysPostMapper;
@@ -29,8 +30,11 @@ import com.acr.system.mapper.SysUserMapper;
 import com.acr.system.mapper.SysUserPostMapper;
 import com.acr.system.mapper.SysUserRoleMapper;
 import com.acr.system.service.ISysConfigService;
+import com.acr.system.service.ISysBusinessAuditService;
 import com.acr.system.service.ISysDeptService;
 import com.acr.system.service.ISysUserService;
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
 
 /**
  * 用户 业务层处理
@@ -62,6 +66,9 @@ public class SysUserServiceImpl implements ISysUserService
 
     @Autowired
     private ISysDeptService deptService;
+
+    @Autowired(required = false)
+    private ISysBusinessAuditService businessAuditService;
 
     @Autowired
     protected Validator validator;
@@ -267,6 +274,7 @@ public class SysUserServiceImpl implements ISysUserService
         insertUserPost(user);
         // 新增用户与角色管理
         insertUserRole(user);
+        recordUserRoleAudit(user.getUserId(), null, user.getRoleIds(), "用户创建并分配角色");
         return rows;
     }
 
@@ -293,10 +301,12 @@ public class SysUserServiceImpl implements ISysUserService
     public int updateUser(SysUser user)
     {
         Long userId = user.getUserId();
+        List<Long> beforeRoles = roleMapper.selectRoleListByUserId(userId);
         // 删除用户与角色关联
         userRoleMapper.deleteUserRoleByUserId(userId);
         // 新增用户与角色管理
         insertUserRole(user);
+        recordUserRoleAudit(userId, beforeRoles, user.getRoleIds(), "用户角色授权变更");
         // 删除用户与岗位关联
         userPostMapper.deleteUserPostByUserId(userId);
         // 新增用户与岗位管理
@@ -314,8 +324,10 @@ public class SysUserServiceImpl implements ISysUserService
     @Transactional
     public void insertUserAuth(Long userId, Long[] roleIds)
     {
+        List<Long> beforeRoles = roleMapper.selectRoleListByUserId(userId);
         userRoleMapper.deleteUserRoleByUserId(userId);
         insertUserRole(userId, roleIds);
+        recordUserRoleAudit(userId, beforeRoles, roleIds, "用户角色授权变更");
     }
 
     /**
@@ -447,6 +459,29 @@ public class SysUserServiceImpl implements ISysUserService
             }
             userRoleMapper.batchUserRole(list);
         }
+    }
+
+    private void recordUserRoleAudit(Long userId, Object beforeRoles, Object afterRoles, String reason)
+    {
+        if (businessAuditService == null)
+        {
+            return;
+        }
+        JSONObject relation = new JSONObject();
+        relation.put("userId", userId);
+        relation.put("beforeRoles", beforeRoles);
+        relation.put("afterRoles", afterRoles);
+        SysBusinessAudit audit = new SysBusinessAudit();
+        audit.setEventKey("system-user-role-" + userId + "-" + java.util.UUID.randomUUID());
+        audit.setSource("acr-system");
+        audit.setAction("SYSTEM_USER_ROLE_UPDATE");
+        audit.setObjectType("SYS_USER_ROLE");
+        audit.setObjectId(String.valueOf(userId));
+        audit.setBeforeValue(beforeRoles == null ? null : JSON.toJSONString(beforeRoles));
+        audit.setAfterValue(afterRoles == null ? null : JSON.toJSONString(afterRoles));
+        audit.setRelatedObject(relation.toJSONString());
+        audit.setReason(reason);
+        businessAuditService.record(audit);
     }
 
     /**

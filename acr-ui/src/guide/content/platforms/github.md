@@ -1,6 +1,6 @@
 # GitHub 接入
 
-这篇帮你完成 GitHub 仓库接入：创建访问令牌 → 在平台建凭据与项目 → 配置 Webhook → 验证 PR 能自动触发审查。
+这篇帮你完成 GitHub 仓库接入：创建访问令牌 → 在平台建凭据与项目 → 配置 Webhook → 验证 PR 或 Push 能自动触发审查。
 
 ## 第 1 步：创建访问令牌
 
@@ -33,7 +33,7 @@ Settings → Developer settings → Personal access tokens → **Tokens (classic
 
 ## 第 3 步：接入项目并配置 Webhook
 
-**平台侧**：进入「项目接入 → 代码项目」新增项目（Git 平台选 GitHub，填仓库地址如 `https://github.com/your-org/your-repo`，选择上一步的凭据，启用合并请求审查并选目标分支与审查方式）。保存后再次编辑该项目，切换到 **Webhook** 页签：
+**平台侧**：进入「项目接入 → 代码项目」新增项目（Git 平台选 GitHub，填仓库地址如 `https://github.com/your-org/your-repo`，选择上一步的凭据，按需启用合并请求审查、Push 审查并配置对应分支与审查方式）。保存后再次编辑该项目，切换到 **Webhook** 页签：
 
 1. 回调地址：复制「回调地址」输入框中的值，形如 `https://acr.example.com/webhook/github`；
 2. Webhook Secret：点击「随机生成」生成一个并**另行记录**（保存后页面不回显明文），然后保存项目；
@@ -45,10 +45,10 @@ Settings → Developer settings → Personal access tokens → **Tokens (classic
 1. Payload URL：粘贴平台回调地址；
 2. Content type：选择 `application/json`（必须）；
 3. Secret：填入平台的 Webhook Secret；
-4. Which events would you like to trigger?：选 **Let me select individual events**，只勾选 **Pull requests**；
+4. Which events would you like to trigger?：选 **Let me select individual events**。平台启用合并请求审查时勾选 **Pull requests**；启用 Push 审查时同时勾选 **Pushes**；
 5. 点击 **Add webhook** 保存。
 
-> PR 的具体动作（opened / synchronize / reopened）由平台侧动作白名单控制，默认三者都触发审查，无需在 GitHub 单独配置；closed、labeled 等其他动作即使投递过来也会被平台自动忽略。
+> PR 的具体动作（opened / synchronize / reopened）由平台侧动作白名单控制，默认三者都触发审查，无需在 GitHub 单独配置；Push 是否受理还会按项目的触发分支过滤。
 
 ## 第 4 步：验证连通
 

@@ -3,6 +3,7 @@ package com.acr.system.service.impl;
 import java.util.List;
 import java.util.Objects;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,8 +15,11 @@ import com.acr.common.security.ApiKeyMaskUtils;
 import com.acr.common.security.LlmApiKeyCryptoService;
 import com.acr.common.utils.StringUtils;
 import com.acr.system.domain.SysAiModelConfig;
+import com.acr.system.domain.SysBusinessAudit;
 import com.acr.system.mapper.SysAiModelConfigMapper;
 import com.acr.system.service.ISysAiModelConfigService;
+import com.acr.system.service.ISysBusinessAuditService;
+import com.alibaba.fastjson2.JSONObject;
 
 /**
  * 大模型配置 服务层实现
@@ -26,6 +30,9 @@ public class SysAiModelConfigServiceImpl implements ISysAiModelConfigService
     private final SysAiModelConfigMapper aiModelConfigMapper;
     private final LlmApiKeyCryptoService apiKeyCryptoService;
     private final LlmCallService llmCallService;
+
+    @Autowired(required = false)
+    private ISysBusinessAuditService businessAuditService;
 
     public SysAiModelConfigServiceImpl(SysAiModelConfigMapper aiModelConfigMapper,
         LlmApiKeyCryptoService apiKeyCryptoService, LlmCallService llmCallService)
@@ -94,7 +101,9 @@ public class SysAiModelConfigServiceImpl implements ISysAiModelConfigService
         {
             aiModelConfigMapper.clearDefaultModel();
         }
-        return aiModelConfigMapper.insertSysAiModelConfig(sysAiModelConfig);
+        int rows = aiModelConfigMapper.insertSysAiModelConfig(sysAiModelConfig);
+        recordModelAudit("CREATE", null, sysAiModelConfig, "大模型配置创建");
+        return rows;
     }
 
     @Override
@@ -142,6 +151,8 @@ public class SysAiModelConfigServiceImpl implements ISysAiModelConfigService
                 throw new ServiceException("模型状态已变化，请刷新后重试");
             }
         }
+        SysAiModelConfig after = aiModelConfigMapper.selectSysAiModelConfigById(sysAiModelConfig.getModelId());
+        recordModelAudit("UPDATE", existing, after, "大模型配置变更");
         return updated;
     }
 
@@ -149,14 +160,28 @@ public class SysAiModelConfigServiceImpl implements ISysAiModelConfigService
     @Transactional
     public void deleteSysAiModelConfigByIds(Long[] modelIds)
     {
+        List<SysAiModelConfig> before = new java.util.ArrayList<>();
+        for (Long modelId : modelIds)
+        {
+            SysAiModelConfig config = aiModelConfigMapper.selectSysAiModelConfigById(modelId);
+            if (config != null)
+            {
+                before.add(config);
+            }
+        }
         int deleted = aiModelConfigMapper.deleteSysAiModelConfigByIds(modelIds);
         if (deleted != modelIds.length)
         {
             throw new ServiceException("默认模型不能删除，请先切换默认模型");
         }
+        for (SysAiModelConfig config : before)
+        {
+            recordModelAudit("DELETE", config, null, "大模型配置删除");
+        }
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public int enableModel(Long modelId, String enabled)
     {
         if (!"0".equals(enabled) && !"1".equals(enabled))
@@ -177,6 +202,8 @@ public class SysAiModelConfigServiceImpl implements ISysAiModelConfigService
         {
             throw new ServiceException("模型状态已变化，请刷新后重试");
         }
+        recordModelAudit("STATUS", existing, aiModelConfigMapper.selectSysAiModelConfigById(modelId),
+            "大模型启用状态变更");
         return updated;
     }
 
@@ -199,7 +226,60 @@ public class SysAiModelConfigServiceImpl implements ISysAiModelConfigService
         {
             throw new ServiceException("模型状态已变化，请刷新后重试");
         }
+        recordModelAudit("DEFAULT", existing, aiModelConfigMapper.selectSysAiModelConfigById(modelId),
+            "大模型默认配置变更");
         return updated;
+    }
+
+    private void recordModelAudit(String action, SysAiModelConfig before, SysAiModelConfig after, String reason)
+    {
+        if (businessAuditService == null)
+        {
+            return;
+        }
+        SysAiModelConfig target = after == null ? before : after;
+        if (target == null)
+        {
+            return;
+        }
+        SysBusinessAudit audit = new SysBusinessAudit();
+        audit.setEventKey("system-ai-model-" + action + "-" + target.getModelId() + "-" + java.util.UUID.randomUUID());
+        audit.setSource("acr-system");
+        audit.setAction("SYSTEM_AI_MODEL_" + action);
+        audit.setObjectType("SYS_AI_MODEL");
+        audit.setObjectId(String.valueOf(target.getModelId()));
+        audit.setObjectName(target.getModelName());
+        audit.setBeforeValue(modelSnapshot(before));
+        audit.setAfterValue(modelSnapshot(after));
+        audit.setReason(reason);
+        businessAuditService.record(audit);
+    }
+
+    /** 审计快照明确排除 API Key，避免密文或明文进入业务审计表。 */
+    private String modelSnapshot(SysAiModelConfig config)
+    {
+        if (config == null)
+        {
+            return null;
+        }
+        JSONObject value = new JSONObject();
+        value.put("modelId", config.getModelId());
+        value.put("modelName", config.getModelName());
+        value.put("provider", config.getProvider());
+        value.put("customProviderName", config.getCustomProviderName());
+        value.put("apiUrl", config.getApiUrl());
+        value.put("model", config.getModel());
+        value.put("embeddingModel", config.getEmbeddingModel());
+        value.put("embeddingApiUrl", config.getEmbeddingApiUrl());
+        value.put("enabled", config.getEnabled());
+        value.put("isDefault", config.getIsDefault());
+        value.put("timeout", config.getTimeout());
+        value.put("maxTokens", config.getMaxTokens());
+        value.put("sortOrder", config.getSortOrder());
+        value.put("temperature", config.getTemperature());
+        value.put("contextLength", config.getContextLength());
+        value.put("remark", config.getRemark());
+        return value.toJSONString();
     }
 
     @Override
