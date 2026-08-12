@@ -80,6 +80,8 @@
 
 ### 缺陷修复
 
+- 数据洞察图表与筛选健壮性（对抗式审查两路修复）：① 三页图表渲染发生在 loading 翻转前、容器未挂载致图表恒空白，改为数据就绪后先翻转 loading 再渲染；② 总览页 keep-alive 缓存期窗口 resize 把画布打成 0×0 不自愈，监听改激活重绑 + resize 自愈、停用摘除，成员/项目详情补齐同款 resize 跟随；③ 成员页快速切视图/连续查询请求竞态，加请求序号守卫丢弃过期响应；④ 项目详情自定义区间下钻失效（`rangePreset` 恒真吞掉 beginDate/endDate），改为识别合法 query 区间并沿用；⑤ echarts 按需注册补 LineChart（趋势折线渲染前提）
+- 修复洞察页筛选参数污染：localStorage 历史污染值（字符串 "undefined"、非法日期、非数组筛选）曾导致参数类型不匹配与首屏加载失败；`insightFilter.js` 新增 toIdParam/toDateRangeParam/toRangePreset/toStringArrayParam 净化器，成员/总览/项目三页恢复点与请求边界全量接入
 - 修复成员提交趋势数据稀疏期视觉空白：趋势原只返回有数据的日期，仅 1 天数据时整图退化为一个不可见点；改按查询区间全日期补零（`commitCount=0`），对齐工作台趋势「缺失日期补零」口径，mine/团队/未关联/堆叠四处统一
 - 修复失败简讯投递触发来源错标「任务回写」：任务失败后的 IM 失败简讯在投递记录中 `trigger_source` 被硬编码为 `TASK_SUCCESS`，误导排查与按触发来源的统计；改按任务终态分流（SUCCESS→TASK_SUCCESS / FAILED→TASK_FAILED），字典增「任务失败通知」（脚本 `sql/44_trigger_source_failed.sql`），历史数据不回填
 - 修复项目管理中 Webhook Secret 配置状态恒显示"未配置"：列表/详情 SQL 按安全设计不读取密文列，原 `fillWebhookView` 却用恒为空的密文字段判断配置状态；改为 `projectSelect` 直接输出布尔列 `webhook_secret_configured`（列表与详情同步修正），密文不出服务端的边界不变
