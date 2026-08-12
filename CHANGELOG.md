@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### 项目级权限治理（sql/45–46）
+
+- 授权模型升级为交集语义：**有效权限 = 功能权限（RBAC）× 组织数据范围（DataScope）× 项目成员角色**，超级管理员保留全局旁路；同部门非成员不再默认可见项目数据（fail-close，需负责人补录成员），项目成员关系不成为跨部门提权通道
+- 项目角色四级：OWNER（负责人，`owner_user_id` 固定）/ ADMIN / REVIEWER / VIEWER，`review_project_member` 显式成员表（项目+用户唯一约束）；列表接口叠加「负责人或有效成员」范围，按 ID 接口集中走 `ReviewProjectAccessService` 校验（项目/任务/记录/问题/投递/洞察 46 个接入点）
+- 平台敏感资产角色边界：`sys_role.role_scope` 区分 PLATFORM/DEPARTMENT；凭据、通知渠道、审查模板、模型配置、审查引擎接口改按「同一平台级角色同时满足层级与权限串」校验（`hasPlatformPermi`），部门角色误勾权限串不再获得平台能力；非超管不可见、不可维护 PLATFORM 角色与其持有者
+- 项目表单不再枚举平台敏感资产清单：仅持有对应平台权限者收到脱敏选项（ID/名称/类型），普通项目成员只能在项目详情看到当前已绑定项
+- 业务审计事实表 `sys_business_audit`（仅追加、event_key 幂等、前后值快照不含凭据）与只读「业务审计」菜单；角色变更等敏感动作写入审计
+- 企业标准角色模板：平台管理员（补全历史 role_id=2 缺失记录）、开发人员、项目负责人、质量/安全、审计人员最小权限授权；设计事实源 `docs/planning/project-permission-governance.md`
+
 ### 数据洞察补充：成员增删行数、身份关联与定时任务种子（M12 补充）
 
 - 成员分析新增代码增删行数：任务级 additions/deletions 按「SUCCESS 且行数非空」口径回填聚合（`review_member_stats_daily` 增 `additions_sum`/`deletions_sum`，脚本 `sql/43_member_stats_lines.sql`）；本人视图 KPI 卡与团队表新增新增/删减行数（绿/红、可排序）
