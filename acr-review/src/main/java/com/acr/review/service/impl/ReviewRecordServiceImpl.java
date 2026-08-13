@@ -17,6 +17,9 @@ import com.acr.review.service.IReviewDeliveryService;
 import com.acr.review.service.IReviewIssueService;
 import com.acr.review.service.IReviewRecordService;
 import com.acr.review.service.ReviewProjectAccessService;
+import com.acr.review.insight.TokenCostCalculator;
+import com.acr.system.domain.SysAiModelConfig;
+import com.acr.system.service.ISysAiModelConfigService;
 import com.acr.system.service.ISysDeptService;
 
 /** 审查记录查询：已结束任务（SUCCESS + FAILED），数据范围与审查任务一致。 */
@@ -30,6 +33,7 @@ public class ReviewRecordServiceImpl implements IReviewRecordService
     private final IReviewDeliveryService deliveryService;
     private final IReviewIssueService issueService;
     private final ReviewProjectAccessService projectAccessService;
+    private final ISysAiModelConfigService modelConfigService;
 
     public ReviewRecordServiceImpl(ReviewTaskMapper taskMapper,
                                    ReviewTaskRunMapper runMapper,
@@ -37,7 +41,8 @@ public class ReviewRecordServiceImpl implements IReviewRecordService
                                    ISysDeptService deptService,
                                    IReviewDeliveryService deliveryService,
                                    IReviewIssueService issueService,
-                                   ReviewProjectAccessService projectAccessService)
+                                   ReviewProjectAccessService projectAccessService,
+                                   ISysAiModelConfigService modelConfigService)
     {
         this.taskMapper = taskMapper;
         this.runMapper = runMapper;
@@ -46,6 +51,7 @@ public class ReviewRecordServiceImpl implements IReviewRecordService
         this.deliveryService = deliveryService;
         this.issueService = issueService;
         this.projectAccessService = projectAccessService;
+        this.modelConfigService = modelConfigService;
     }
 
     @Override
@@ -88,8 +94,28 @@ public class ReviewRecordServiceImpl implements IReviewRecordService
         List<ReviewTaskRun> runs = runMapper.selectRunsByTaskId(taskId);
         issueService.enrichRuns(runs, task.getProjectId(), task.getPrNumber(),
             ReviewIssueServiceImpl.resolveRefBranch(task));
+        enrichTokenCost(runs);
         ReviewDeliveryRecord delivery = deliveryService.selectSummaryDelivery(task.getProjectId(), task.getPrNumber());
         return new ReviewTaskDetail(task, runs, delivery);
     }
 
+    private void enrichTokenCost(List<ReviewTaskRun> runs)
+    {
+        if (runs == null || runs.isEmpty())
+        {
+            return;
+        }
+        for (ReviewTaskRun run : runs)
+        {
+            if (run.getSnapshotModelId() == null)
+            {
+                continue;
+            }
+            SysAiModelConfig config = modelConfigService.selectSysAiModelConfigById(run.getSnapshotModelId());
+            run.setEstimatedCost(TokenCostCalculator.toDouble(TokenCostCalculator.estimate(
+                run.getInputTokens(), run.getOutputTokens(),
+                config == null ? null : config.getInputPricePer1k(),
+                config == null ? null : config.getOutputPricePer1k())));
+        }
+    }
 }

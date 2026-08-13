@@ -37,6 +37,7 @@ import com.acr.review.engine.ReviewEngineRequest;
 import com.acr.review.engine.ReviewEngineResult;
 import com.acr.review.engine.ReviewEngineResultMapper;
 import com.acr.review.engine.ReviewEngineWorkspaceManager;
+import com.acr.review.engine.TokenUsage;
 import com.acr.review.engine.config.ReviewEngineProperties;
 import com.acr.review.git.GitAccessContext;
 import com.acr.review.git.GitAdapterRegistry;
@@ -432,6 +433,7 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
             }
             if (!engineResult.isSuccess())
             {
+                applyEngineTokenUsage(run, engineResult.getStructuredResult());
                 fail(task, run, beginMs, mapEngineFailure(engineResult.getFailureType()),
                     ReviewPipelineConstants.STEP_INVOKE_ENGINE,
                     StringUtils.defaultIfEmpty(engineResult.getFailureReason(), "审查引擎执行失败"));
@@ -512,6 +514,7 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         try
         {
             LlmCallResult llmResult = llmCallService.chat(plan.modelId(), finalPrompt, llmTimeoutMillis());
+            applyLlmTokenUsage(run, llmResult);
             if (!llmResult.isSuccess())
             {
                 fail(task, run, beginMs, mapLlmFailure(llmResult.getErrorType()),
@@ -1096,6 +1099,7 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         }
         String summary = conclusionResolver.summarize(structured, conclusion);
         List<ReviewTopIssue> topIssues = engineResultMapper.mapTopIssues(structured);
+        applyEngineTokenUsage(run, structured);
         int focusIssueCount = ReviewScoreResultParser.countFocusIssues(topIssues);
         String hasCriticalSecurity = hasCriticalSecurityIssue(topIssues) ? "1" : "0";
         long duration = Math.max(durationHint, System.currentTimeMillis() - beginMs);
@@ -1427,6 +1431,33 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
     {
         Integer max = runMapper.selectMaxAttemptNo(taskId);
         return max == null ? 1 : max + 1;
+    }
+
+    private static void applyLlmTokenUsage(ReviewTaskRun run, LlmCallResult result)
+    {
+        if (run == null || result == null)
+        {
+            return;
+        }
+        run.setInputTokens(result.getPromptTokens());
+        run.setOutputTokens(result.getCompletionTokens());
+        run.setTotalTokens(result.getTotalTokens());
+    }
+
+    private void applyEngineTokenUsage(ReviewTaskRun run, Map<String, Object> structured)
+    {
+        if (run == null)
+        {
+            return;
+        }
+        TokenUsage usage = engineResultMapper.mapTokenUsage(structured);
+        if (usage == null || !usage.isPresent())
+        {
+            return;
+        }
+        run.setInputTokens(usage.inputTokens());
+        run.setOutputTokens(usage.outputTokens());
+        run.setTotalTokens(usage.totalTokens());
     }
 
     private String mapEngineFailure(ReviewEngineFailureType failureType)

@@ -74,5 +74,19 @@ export function formatKpiValue(card) {
   if (!card) return '--'
   if (card.unit === 'ratio') return formatRatio(card.value)
   if (card.unit === 'ms') return formatDuration(card.value)
+  if (card.unit === 'yuan') {
+    if (card.value == null || Number.isNaN(card.value)) return '—'
+    return Number(card.value).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 4 })
+  }
   return card.value == null ? '--' : String(Math.round(card.value))
+}
+
+export function formatTokenCount(value) {
+  if (value == null || Number.isNaN(value)) return '—'
+  return String(value)
+}
+
+export function formatYuan(value) {
+  if (value == null || Number.isNaN(value)) return '—'
+  return Number(value).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 4 })
 }

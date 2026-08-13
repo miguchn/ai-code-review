@@ -1,6 +1,7 @@
 package com.acr.system.service.impl;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
@@ -159,5 +160,89 @@ class LlmCallServiceImplTest
         assertTrue(!result.isSuccess());
         assertEquals(LlmCallErrorType.TIMEOUT, result.getErrorType());
         assertTrue(durationMs < 1_500, "调用级 deadline 应限制总时长，实际 " + durationMs + "ms");
+    }
+
+    @Test
+    void chatParsesUsageFromSuccessfulResponse()
+    {
+        stubEnabledModel(11L);
+        server.enqueue(new MockResponse()
+            .setResponseCode(200)
+            .setBody("{\"choices\":[{\"message\":{\"content\":\"OK\"}}],"
+                + "\"usage\":{\"prompt_tokens\":12,\"completion_tokens\":3,\"total_tokens\":15}}")
+            .addHeader("Content-Type", "application/json"));
+
+        LlmCallResult result = llmCallService.chat(11L, "review");
+
+        assertTrue(result.isSuccess());
+        assertEquals(12, result.getPromptTokens());
+        assertEquals(3, result.getCompletionTokens());
+        assertEquals(15, result.getTotalTokens());
+    }
+
+    @Test
+    void chatLeavesUsageNullWhenUsageNodeMissing()
+    {
+        stubEnabledModel(12L);
+        server.enqueue(new MockResponse()
+            .setResponseCode(200)
+            .setBody("{\"choices\":[{\"message\":{\"content\":\"OK\"}}]}")
+            .addHeader("Content-Type", "application/json"));
+
+        LlmCallResult result = llmCallService.chat(12L, "review");
+
+        assertTrue(result.isSuccess());
+        assertNull(result.getPromptTokens());
+        assertNull(result.getCompletionTokens());
+        assertNull(result.getTotalTokens());
+    }
+
+    @Test
+    void chatStillSucceedsWhenUsageNodeMalformed()
+    {
+        stubEnabledModel(13L);
+        server.enqueue(new MockResponse()
+            .setResponseCode(200)
+            .setBody("{\"choices\":[{\"message\":{\"content\":\"OK\"}}],\"usage\":\"not-an-object\"}")
+            .addHeader("Content-Type", "application/json"));
+
+        LlmCallResult result = llmCallService.chat(13L, "review");
+
+        assertTrue(result.isSuccess());
+        assertEquals("OK", result.getContent());
+        assertNull(result.getPromptTokens());
+        assertNull(result.getTotalTokens());
+    }
+
+    @Test
+    void chatAttachesUsageOnEmptyContentFailure()
+    {
+        stubEnabledModel(14L);
+        server.enqueue(new MockResponse()
+            .setResponseCode(200)
+            .setBody("{\"choices\":[{\"message\":{\"content\":\"\"}}],"
+                + "\"usage\":{\"prompt_tokens\":8,\"completion_tokens\":0,\"total_tokens\":8}}")
+            .addHeader("Content-Type", "application/json"));
+
+        LlmCallResult result = llmCallService.chat(14L, "review");
+
+        assertTrue(!result.isSuccess());
+        assertEquals(8, result.getPromptTokens());
+        assertEquals(0, result.getCompletionTokens());
+        assertEquals(8, result.getTotalTokens());
+    }
+
+    private void stubEnabledModel(long modelId)
+    {
+        SysAiModelConfig stored = new SysAiModelConfig();
+        stored.setApiUrl(server.url("/v1/chat/completions").toString());
+        stored.setApiKey("v1:stored");
+        stored.setModel("demo-model");
+        stored.setTimeout(5000);
+        stored.setMaxTokens(32);
+        stored.setEnabled("1");
+        when(aiModelConfigMapper.selectSysAiModelConfigById(modelId)).thenReturn(stored);
+        when(apiKeyCryptoService.isEncrypted("v1:stored")).thenReturn(true);
+        when(apiKeyCryptoService.decrypt("v1:stored")).thenReturn("sk-real");
     }
 }

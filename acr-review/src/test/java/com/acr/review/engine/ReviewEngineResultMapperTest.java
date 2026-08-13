@@ -201,6 +201,38 @@ class ReviewEngineResultMapperTest
         assertTrue(mapper.mapTopIssues(Map.of("comments", List.of())).isEmpty());
     }
 
+    @Test
+    void mapTokenUsageReadsOpenAiStyleUsageNode()
+    {
+        TokenUsage usage = mapper.mapTokenUsage(Map.of(
+            "comments", List.of(),
+            "usage", Map.of("prompt_tokens", 120, "completion_tokens", 40, "total_tokens", 160)));
+
+        assertEquals(120, usage.inputTokens());
+        assertEquals(40, usage.outputTokens());
+        assertEquals(160, usage.totalTokens());
+    }
+
+    @Test
+    void mapTokenUsageReadsTokensNodeAliases()
+    {
+        TokenUsage usage = mapper.mapTokenUsage(Map.of(
+            "tokens", Map.of("input", 10, "output", 4, "total", 14)));
+
+        assertEquals(10, usage.inputTokens());
+        assertEquals(4, usage.outputTokens());
+        assertEquals(14, usage.totalTokens());
+    }
+
+    @Test
+    void mapTokenUsageReturnsEmptyWhenAbsentOrMalformed()
+    {
+        assertTrue(!mapper.mapTokenUsage(null).isPresent());
+        assertTrue(!mapper.mapTokenUsage(Map.of()).isPresent());
+        assertTrue(!mapper.mapTokenUsage(Map.of("usage", "bad")).isPresent());
+        assertTrue(!mapper.mapTokenUsage(Map.of("comments", List.of())).isPresent());
+    }
+
     private static Map<String, Object> comment(String path, String content, String existingCode,
                                                String suggestionCode, Integer startLine, Integer endLine,
                                                String category, String severity)

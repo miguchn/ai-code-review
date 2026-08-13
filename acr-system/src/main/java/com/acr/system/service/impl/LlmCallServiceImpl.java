@@ -135,24 +135,36 @@ public class LlmCallServiceImpl implements LlmCallService
         {
             LlmCallErrorType errorType = LlmErrorClassifier.classify(http.getStatusCode(), http.getBody(), null);
             String message = LlmErrorClassifier.message(errorType, http.getStatusCode(), null);
-            return LlmCallResult.failure(errorType, message, http.getLatencyMs(), null);
+            LlmCallResult failed = LlmCallResult.failure(errorType, message, http.getLatencyMs(), null);
+            attachUsageQuietly(failed, http.getBody());
+            return failed;
         }
         String content = parseContent(http.getBody());
         if (connectionOnly)
         {
             if (StringUtils.isNotEmpty(content))
             {
-                return LlmCallResult.success(http.getLatencyMs(), content, LlmErrorClassifier.snippet(http.getBody(), 120));
+                LlmCallResult ok = LlmCallResult.success(http.getLatencyMs(), content,
+                    LlmErrorClassifier.snippet(http.getBody(), 120));
+                attachUsageQuietly(ok, http.getBody());
+                return ok;
             }
-            return LlmCallResult.failure(LlmCallErrorType.UNKNOWN, "连接失败: 响应格式不正确", http.getLatencyMs(),
-                LlmErrorClassifier.snippet(http.getBody(), 120));
+            LlmCallResult failed = LlmCallResult.failure(LlmCallErrorType.UNKNOWN, "连接失败: 响应格式不正确",
+                http.getLatencyMs(), LlmErrorClassifier.snippet(http.getBody(), 120));
+            attachUsageQuietly(failed, http.getBody());
+            return failed;
         }
         if (StringUtils.isEmpty(content))
         {
-            return LlmCallResult.failure(LlmCallErrorType.UNKNOWN, "模型返回内容为空", http.getLatencyMs(),
-                LlmErrorClassifier.snippet(http.getBody(), 120));
+            LlmCallResult failed = LlmCallResult.failure(LlmCallErrorType.UNKNOWN, "模型返回内容为空",
+                http.getLatencyMs(), LlmErrorClassifier.snippet(http.getBody(), 120));
+            attachUsageQuietly(failed, http.getBody());
+            return failed;
         }
-        return LlmCallResult.success(http.getLatencyMs(), content, LlmErrorClassifier.snippet(http.getBody(), 120));
+        LlmCallResult ok = LlmCallResult.success(http.getLatencyMs(), content,
+            LlmErrorClassifier.snippet(http.getBody(), 120));
+        attachUsageQuietly(ok, http.getBody());
+        return ok;
     }
 
     private SysAiModelConfig buildTransientConfig(Long modelConfigId, String apiUrl, String apiKey, String model,
@@ -316,5 +328,47 @@ public class LlmCallServiceImpl implements LlmCallService
             return "";
         }
         return "";
+    }
+
+    /** 用量采集是旁路：解析失败静默置空，不得影响审查主流程。 */
+    static void attachUsageQuietly(LlmCallResult result, String response)
+    {
+        if (result == null || StringUtils.isEmpty(response))
+        {
+            return;
+        }
+        try
+        {
+            JSONObject json = JSON.parseObject(response);
+            if (json == null)
+            {
+                return;
+            }
+            JSONObject usage = json.getJSONObject("usage");
+            if (usage == null)
+            {
+                return;
+            }
+            result.setPromptTokens(firstInteger(usage, "prompt_tokens", "input_tokens", "promptTokens"));
+            result.setCompletionTokens(firstInteger(usage, "completion_tokens", "output_tokens", "completionTokens"));
+            result.setTotalTokens(firstInteger(usage, "total_tokens", "totalTokens"));
+        }
+        catch (Exception ignored)
+        {
+            /* 用量缺失不影响调用结果 */
+        }
+    }
+
+    private static Integer firstInteger(JSONObject usage, String... keys)
+    {
+        for (String key : keys)
+        {
+            Integer value = usage.getInteger(key);
+            if (value != null)
+            {
+                return value;
+            }
+        }
+        return null;
     }
 }

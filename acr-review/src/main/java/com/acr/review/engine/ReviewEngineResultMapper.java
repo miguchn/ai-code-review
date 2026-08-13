@@ -70,6 +70,38 @@ public class ReviewEngineResultMapper
         return issues;
     }
 
+    /**
+     * 尽力读取 OCR 输出 JSON 的 usage / tokens 节点。字段缺失或形态未知时返回空用量，不抛异常。
+     */
+    public TokenUsage mapTokenUsage(Map<String, Object> structured)
+    {
+        if (structured == null || structured.isEmpty())
+        {
+            return new TokenUsage(null, null, null);
+        }
+        try
+        {
+            Map<String, Object> usage = asMap(structured.get("usage"));
+            if (usage == null)
+            {
+                usage = asMap(structured.get("tokens"));
+            }
+            if (usage == null)
+            {
+                return new TokenUsage(null, null, null);
+            }
+            Integer input = firstInteger(usage, "prompt_tokens", "input_tokens", "promptTokens", "input", "prompt");
+            Integer output = firstInteger(usage, "completion_tokens", "output_tokens", "completionTokens", "output",
+                "completion");
+            Integer total = firstInteger(usage, "total_tokens", "totalTokens", "total");
+            return new TokenUsage(input, output, total);
+        }
+        catch (RuntimeException ignored)
+        {
+            return new TokenUsage(null, null, null);
+        }
+    }
+
     private ReviewTopIssue mapComment(Map<String, Object> comment)
     {
         String content = stringValue(comment.get("content"));
@@ -217,6 +249,51 @@ public class ReviewEngineResultMapper
             {
                 int line = Integer.parseInt(text.trim());
                 return line > 0 ? line : null;
+            }
+            catch (NumberFormatException ignored)
+            {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> asMap(Object value)
+    {
+        if (value instanceof Map<?, ?> raw)
+        {
+            return (Map<String, Object>) raw;
+        }
+        return null;
+    }
+
+    private static Integer firstInteger(Map<String, Object> source, String... keys)
+    {
+        for (String key : keys)
+        {
+            Integer parsed = toNonNegativeInt(source.get(key));
+            if (parsed != null)
+            {
+                return parsed;
+            }
+        }
+        return null;
+    }
+
+    private static Integer toNonNegativeInt(Object value)
+    {
+        if (value instanceof Number number)
+        {
+            long n = number.longValue();
+            return n >= 0 && n <= Integer.MAX_VALUE ? (int) n : null;
+        }
+        if (value instanceof String text && StringUtils.isNotEmpty(text))
+        {
+            try
+            {
+                int n = Integer.parseInt(text.trim());
+                return n >= 0 ? n : null;
             }
             catch (NumberFormatException ignored)
             {

@@ -52,6 +52,9 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="prDescription" column="pr_description" />
         <result property="commitMessages" column="commit_messages" />
         <result property="durationMs" column="duration_ms" />
+        <result property="inputTokens" column="input_tokens" />
+        <result property="outputTokens" column="output_tokens" />
+        <result property="totalTokens" column="total_tokens" />
         <result property="startedTime" column="started_time" />
         <result property="finishedTime" column="finished_time" />
         <result property="createBy" column="create_by" />
@@ -71,7 +74,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
          total_score, score_correctness, score_security, score_practice, score_performance, score_commit_quality,
          protocol_version, score_weights_json, score_threshold, focus_issue_count, has_critical_security,
          top_issues_json, parse_status, parse_error, raw_response_excerpt, rendered_prompt,
-         pr_description, commit_messages, duration_ms,
+         pr_description, commit_messages, duration_ms, input_tokens, output_tokens, total_tokens,
          started_time, finished_time, create_by, create_time)
         values
         (#{taskId}, #{attemptNo}, #{runStatus}, #{currentStep}, #{failureStep}, #{failureType}, #{failureMessage},
@@ -83,7 +86,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
          #{totalScore}, #{scoreCorrectness}, #{scoreSecurity}, #{scorePractice}, #{scorePerformance}, #{scoreCommitQuality},
          #{protocolVersion}, #{scoreWeightsJson}, #{scoreThreshold}, #{focusIssueCount}, #{hasCriticalSecurity},
          #{topIssuesJson}, #{parseStatus}, #{parseError}, #{rawResponseExcerpt}, #{renderedPrompt},
-         #{prDescription}, #{commitMessages}, #{durationMs},
+         #{prDescription}, #{commitMessages}, #{durationMs}, #{inputTokens}, #{outputTokens}, #{totalTokens},
          #{startedTime}, #{finishedTime}, #{createBy}, sysdate())
     </insert>
 
@@ -131,6 +134,9 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             pr_description = #{prDescription},
             commit_messages = #{commitMessages},
             duration_ms = #{durationMs},
+            input_tokens = #{inputTokens},
+            output_tokens = #{outputTokens},
+            total_tokens = #{totalTokens},
             finished_time = #{finishedTime},
             update_by = #{updateBy},
             update_time = sysdate()
