@@ -1,6 +1,6 @@
 <template>
   <div class="app-container insight-page">
-    <el-form :inline="true" :model="query" class="insight-filters">
+    <el-form :inline="true" :model="query" class="insight-filters" v-show="showSearch" label-width="84px">
       <el-form-item label="时间范围">
         <el-radio-group v-model="rangePreset" @change="onPresetChange">
           <el-radio-button :value="7">近 7 天</el-radio-button>
@@ -30,8 +30,13 @@
       </el-form-item>
       <el-form-item>
         <el-button type="primary" icon="Search" @click="loadData">查询</el-button>
+        <el-button icon="Refresh" @click="resetQuery">重置</el-button>
       </el-form-item>
     </el-form>
+
+    <el-row :gutter="10" class="mb8">
+      <right-toolbar v-model:showSearch="showSearch" @queryTable="loadData" />
+    </el-row>
 
     <div v-if="loading">
       <el-skeleton :rows="6" animated />
@@ -84,6 +89,7 @@ const router = useRouter()
 
 const loading = ref(false)
 const error = ref(false)
+const showSearch = ref(true)
 const rows = ref([])
 const businessSystems = ref([])
 const projectOptions = ref([])
@@ -97,6 +103,15 @@ const query = reactive({
 
 function onPresetChange() {
   /* handled in buildParams */
+}
+
+function resetQuery() {
+  rangePreset.value = 7
+  customRange.value = []
+  query.businessSystemId = undefined
+  query.projectId = undefined
+  orderBy.value = '-taskTotal'
+  loadData()
 }
 
 function buildParams() {

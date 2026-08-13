@@ -1,104 +1,25 @@
 <template>
   <div class="app-container insight-page">
-    <el-alert
-      type="warning"
-      :closable="false"
-      show-icon
-      class="mb16"
-      title="用于团队管理与辅导，不作为绩效评价直接输入"
-    />
-
-    <div class="toolbar">
-      <el-radio-group v-model="viewMode" class="mr16">
-        <el-radio-button value="mine">本人视图</el-radio-button>
-        <el-radio-button v-hasPermi="['insight:team:view']" value="team">团队视图</el-radio-button>
-      </el-radio-group>
-      <span class="toolbar-hint">本人视图仅展示已关联的提交身份；团队视图按授权范围统计</span>
-    </div>
-
-    <div v-if="loading"><el-skeleton :rows="6" animated /></div>
-    <div v-else-if="error" class="insight-state">
-      <span>加载失败</span>
-      <el-button type="primary" link @click="reload">重试</el-button>
-    </div>
-
-    <template v-else-if="viewMode === 'mine'">
-      <div class="toolbar">
-        <span class="filter-label">时间范围</span>
+    <el-form :inline="true" :model="teamQuery" class="insight-filters" v-show="showSearch" label-width="84px">
+      <el-form-item label="时间范围">
         <el-radio-group v-model="rangePreset" @change="onRangeChange">
           <el-radio-button :value="7">近 7 天</el-radio-button>
           <el-radio-button :value="30">近 30 天</el-radio-button>
           <el-radio-button value="custom">自定义</el-radio-button>
         </el-radio-group>
+      </el-form-item>
+      <el-form-item v-if="rangePreset === 'custom'" label="自定义">
         <el-date-picker
-          v-if="rangePreset === 'custom'"
           v-model="customRange"
           type="daterange"
           value-format="YYYY-MM-DD"
           start-placeholder="开始"
           end-placeholder="结束"
           :clearable="false"
-          @change="reload"
+          @change="onCustomRangeChange"
         />
-      </div>
-      <template v-if="!mine?.claimed">
-        <el-empty>
-          <template #description>
-            <p class="empty-guide">
-              关联你的提交邮箱后，这里会展示你的提交趋势、被审查情况和关联问题
-            </p>
-          </template>
-          <el-button type="primary" @click="goBindEmail">去关联</el-button>
-        </el-empty>
-      </template>
-      <template v-else>
-        <div class="meta mb16">
-          已关联：
-          <span v-for="(c, idx) in mine.claimedIdentities" :key="c.authorKey">
-            {{ c.authorName || c.authorEmail || c.authorKey }}<span v-if="idx < mine.claimedIdentities.length - 1">、</span>
-          </span>
-          <span v-if="mine.dataSince"> · 数据自 {{ mine.dataSince }} 起积累</span>
-        </div>
-        <el-row :gutter="16">
-          <el-col :xs="12" :sm="8" :md="4"><div class="kpi-card"><div class="kpi-name">被审任务</div><div class="kpi-value">{{ mine.tasksReviewed ?? 0 }}</div></div></el-col>
-          <el-col :xs="12" :sm="8" :md="5"><div class="kpi-card"><div class="kpi-name">新增行数</div><div class="kpi-value kpi-add">{{ mine.additionsSum ?? 0 }}</div></div></el-col>
-          <el-col :xs="12" :sm="8" :md="5"><div class="kpi-card"><div class="kpi-name">删减行数</div><div class="kpi-value kpi-del">{{ mine.deletionsSum ?? 0 }}</div></div></el-col>
-          <el-col :xs="12" :sm="8" :md="5"><div class="kpi-card"><div class="kpi-name">关联新增问题</div><div class="kpi-value">{{ mine.issuesNew ?? 0 }}</div></div></el-col>
-          <el-col :xs="12" :sm="8" :md="5"><div class="kpi-card"><div class="kpi-name">未关闭问题</div><div class="kpi-value">{{ mine.issuesOpen ?? 0 }}</div></div></el-col>
-        </el-row>
-        <section class="chart-panel mt16">
-          <header class="panel-head"><h3>我的提交趋势</h3></header>
-          <div ref="mineChartRef" class="chart-box" />
-        </section>
-        <section class="chart-panel mt16">
-          <header class="panel-head"><h3>我的未关闭问题</h3></header>
-          <el-table :data="mine.openIssueTitles || []" size="small" empty-text="暂无未关闭问题">
-            <el-table-column label="标题" prop="name" min-width="220" :show-overflow-tooltip="true" />
-            <el-table-column label="数量" prop="count" width="80" />
-          </el-table>
-        </section>
-      </template>
-    </template>
-
-    <template v-else>
-      <el-form :inline="true" :model="teamQuery" class="insight-filters">
-        <el-form-item label="时间范围">
-          <el-radio-group v-model="rangePreset">
-            <el-radio-button :value="7">近 7 天</el-radio-button>
-            <el-radio-button :value="30">近 30 天</el-radio-button>
-            <el-radio-button value="custom">自定义</el-radio-button>
-          </el-radio-group>
-        </el-form-item>
-        <el-form-item v-if="rangePreset === 'custom'" label="自定义">
-          <el-date-picker
-            v-model="customRange"
-            type="daterange"
-            value-format="YYYY-MM-DD"
-            start-placeholder="开始"
-            end-placeholder="结束"
-            :clearable="false"
-          />
-        </el-form-item>
+      </el-form-item>
+      <template v-if="viewMode === 'team'">
         <el-form-item label="业务系统">
           <el-select
             v-model="teamQuery.businessSystemId"
@@ -145,11 +66,77 @@
             />
           </el-select>
         </el-form-item>
-        <el-form-item>
-          <el-button type="primary" icon="Search" @click="reload">查询</el-button>
-          <el-button @click="resetTeamFilters">重置</el-button>
-        </el-form-item>
-      </el-form>
+      </template>
+      <el-form-item>
+        <el-button type="primary" icon="Search" @click="reload">查询</el-button>
+        <el-button icon="Refresh" @click="resetTeamFilters">重置</el-button>
+      </el-form-item>
+    </el-form>
+
+    <el-row :gutter="10" class="mb8 insight-action-row">
+      <el-radio-group v-model="viewMode">
+        <el-radio-button value="mine">本人视图</el-radio-button>
+        <el-radio-button v-hasPermi="['insight:team:view']" value="team">团队视图</el-radio-button>
+      </el-radio-group>
+      <span class="toolbar-hint">本人视图仅展示已关联的提交身份；团队视图按授权范围统计</span>
+      <right-toolbar v-model:showSearch="showSearch" @queryTable="reload" />
+    </el-row>
+
+    <el-alert
+      type="info"
+      :closable="false"
+      show-icon
+      class="mb16"
+      title="用于团队管理与辅导，不作为绩效评价直接输入"
+    />
+
+    <div v-if="loading"><el-skeleton :rows="6" animated /></div>
+    <div v-else-if="error" class="insight-state">
+      <span>加载失败</span>
+      <el-button type="primary" link @click="reload">重试</el-button>
+    </div>
+
+    <template v-else-if="viewMode === 'mine'">
+      <template v-if="!mine?.claimed">
+        <el-empty>
+          <template #description>
+            <p class="empty-guide">
+              关联你的提交邮箱后，这里会展示你的提交趋势、被审查情况和关联问题
+            </p>
+          </template>
+          <el-button type="primary" @click="goBindEmail">去关联</el-button>
+        </el-empty>
+      </template>
+      <template v-else>
+        <div class="meta mb16">
+          已关联：
+          <span v-for="(c, idx) in mine.claimedIdentities" :key="c.authorKey">
+            {{ c.authorName || c.authorEmail || c.authorKey }}<span v-if="idx < mine.claimedIdentities.length - 1">、</span>
+          </span>
+          <span v-if="mine.dataSince"> · 数据自 {{ mine.dataSince }} 起积累</span>
+        </div>
+        <el-row :gutter="16">
+          <el-col :xs="12" :sm="8" :md="4"><div class="kpi-card"><div class="kpi-name">被审任务</div><div class="kpi-value">{{ mine.tasksReviewed ?? 0 }}</div></div></el-col>
+          <el-col :xs="12" :sm="8" :md="5"><div class="kpi-card"><div class="kpi-name">新增行数</div><div class="kpi-value kpi-add">{{ mine.additionsSum ?? 0 }}</div></div></el-col>
+          <el-col :xs="12" :sm="8" :md="5"><div class="kpi-card"><div class="kpi-name">删减行数</div><div class="kpi-value kpi-del">{{ mine.deletionsSum ?? 0 }}</div></div></el-col>
+          <el-col :xs="12" :sm="8" :md="5"><div class="kpi-card"><div class="kpi-name">关联新增问题</div><div class="kpi-value">{{ mine.issuesNew ?? 0 }}</div></div></el-col>
+          <el-col :xs="12" :sm="8" :md="5"><div class="kpi-card"><div class="kpi-name">未关闭问题</div><div class="kpi-value">{{ mine.issuesOpen ?? 0 }}</div></div></el-col>
+        </el-row>
+        <section class="chart-panel mt16">
+          <header class="panel-head"><h3>我的提交趋势</h3></header>
+          <div ref="mineChartRef" class="chart-box" />
+        </section>
+        <section class="chart-panel mt16">
+          <header class="panel-head"><h3>我的未关闭问题</h3></header>
+          <el-table :data="mine.openIssueTitles || []" size="small" empty-text="暂无未关闭问题">
+            <el-table-column label="标题" prop="name" min-width="220" :show-overflow-tooltip="true" />
+            <el-table-column label="数量" prop="count" width="80" />
+          </el-table>
+        </section>
+      </template>
+    </template>
+
+    <template v-else>
       <div class="scope-meta">
         {{ teamScopeLabel }}<span v-if="team?.dataSince"> · 数据自 {{ team.dataSince }} 起积累</span>
       </div>
@@ -268,6 +255,7 @@ import { loadInsightFilters, saveInsightFilters, toIdParam, toRangePreset, toDat
 const router = useRouter()
 const loading = ref(false)
 const error = ref(false)
+const showSearch = ref(true)
 const viewMode = ref('mine')
 const rangePreset = ref(7)
 const customRange = ref([])
@@ -367,6 +355,11 @@ function teamParams() {
 
 function onRangeChange() {
   if (viewMode.value === 'mine' && rangePreset.value !== 'custom') reload()
+}
+
+/** 自定义区间变更：本人视图保持原有的即时刷新行为，团队视图沿用「点查询生效」 */
+function onCustomRangeChange() {
+  if (viewMode.value === 'mine') reload()
 }
 
 function onTeamSystemChange() {
@@ -557,13 +550,12 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped lang="scss">
-.toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 16px; }
-.toolbar-hint { color: var(--text-secondary, #64748b); font-size: 13px; }
-.filter-label { color: var(--text-regular, #334155); font-size: 13px; }
+.insight-action-row { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.insight-action-row :deep(.top-right-btn) { margin-left: auto; }
+.toolbar-hint { margin-left: 12px; color: var(--text-secondary, #64748b); font-size: 13px; }
 .insight-filters { margin-bottom: 16px; }
 .scope-meta { color: var(--text-secondary, #64748b); font-size: 13px; margin: 0 0 16px; }
 .kpi-row { margin-bottom: 4px; }
-.mr16 { margin-right: 16px; }
 .mb16 { margin-bottom: 16px; }
 .mt16 { margin-top: 16px; }
 .empty-guide {
