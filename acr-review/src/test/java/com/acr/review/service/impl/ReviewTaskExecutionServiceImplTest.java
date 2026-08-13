@@ -375,6 +375,59 @@ class ReviewTaskExecutionServiceImplTest
     }
 
     @Test
+    void llmPathPersistsTokenUsageOnFailure()
+    {
+        ReviewTask task = llmTask(40L);
+        task.setRetryCount(0);
+        stubLlmPathPrerequisites(task);
+        when(diffFetcher.fetchDiff(any(), any(), eq("abc1234"), eq("def5678")))
+            .thenReturn(GitPullRequestDiffResult.ok(
+                "diff --git a/A.java b/A.java\n--- a/A.java\n+++ b/A.java\n@@ -1 +1 @@\n-old\n+new\n"));
+        com.acr.common.ai.LlmCallResult failed = com.acr.common.ai.LlmCallResult.failure(
+            com.acr.common.enums.LlmCallErrorType.TIMEOUT, "模型调用超时", 120_000L, null);
+        failed.setPromptTokens(80);
+        failed.setCompletionTokens(0);
+        failed.setTotalTokens(80);
+        when(llmCallService.chat(eq(3L), any(), anyInt())).thenReturn(failed);
+
+        service.executeTask(40L);
+
+        org.mockito.ArgumentCaptor<ReviewTaskRun> runCaptor = org.mockito.ArgumentCaptor.forClass(ReviewTaskRun.class);
+        verify(runMapper, org.mockito.Mockito.atLeastOnce()).updateReviewTaskRun(runCaptor.capture());
+        ReviewTaskRun run = runCaptor.getAllValues().get(runCaptor.getAllValues().size() - 1);
+        assertEquals(Integer.valueOf(80), run.getInputTokens());
+        assertEquals(Integer.valueOf(0), run.getOutputTokens());
+        assertEquals(Integer.valueOf(80), run.getTotalTokens());
+    }
+
+    @Test
+    void llmPathPersistsTokenUsageOnSuccess()
+    {
+        ReviewTask task = llmTask(41L);
+        stubLlmPathPrerequisites(task);
+        when(diffFetcher.fetchDiff(any(), any(), eq("abc1234"), eq("def5678")))
+            .thenReturn(GitPullRequestDiffResult.ok(
+                "diff --git a/A.java b/A.java\n--- a/A.java\n+++ b/A.java\n@@ -1 +1 @@\n-old\n+new\n"));
+        com.acr.common.ai.LlmCallResult ok = com.acr.common.ai.LlmCallResult.success(8L, originModelResponse(), null);
+        ok.setPromptTokens(200);
+        ok.setCompletionTokens(50);
+        ok.setTotalTokens(250);
+        when(llmCallService.chat(eq(3L), any(), anyInt())).thenReturn(ok);
+        when(issueService.reconcileAfterSuccess(any(), any()))
+            .thenReturn(com.acr.review.domain.ReviewRoundReconcileResult.empty());
+
+        service.executeTask(41L);
+
+        org.mockito.ArgumentCaptor<ReviewTaskRun> runCaptor = org.mockito.ArgumentCaptor.forClass(ReviewTaskRun.class);
+        verify(runMapper, org.mockito.Mockito.atLeastOnce()).updateReviewTaskRun(runCaptor.capture());
+        ReviewTaskRun run = runCaptor.getAllValues().get(runCaptor.getAllValues().size() - 1);
+        assertEquals(ReviewPipelineConstants.RUN_SUCCESS, run.getRunStatus());
+        assertEquals(Integer.valueOf(200), run.getInputTokens());
+        assertEquals(Integer.valueOf(50), run.getOutputTokens());
+        assertEquals(Integer.valueOf(250), run.getTotalTokens());
+    }
+
+    @Test
     void llmPathAppliesScopeDecisionAndExpansion()
     {
         // 锁文件排除、依赖清单扩展拉取失败降级保留 L0、配置文件扩展成功追加全文
@@ -686,7 +739,10 @@ class ReviewTaskExecutionServiceImplTest
         comment.put("severity", "critical");
         when(reviewEngine.execute(any())).thenReturn(com.acr.review.engine.ReviewEngineResult.success(
             "open-code-review", "1.8.3", 5L, "{}", "",
-            java.util.Map.of("comments", java.util.List.of(comment)), 0));
+            java.util.Map.of(
+                "comments", java.util.List.of(comment),
+                "usage", java.util.Map.of("prompt_tokens", 90, "completion_tokens", 30, "total_tokens", 120)),
+            0));
         when(issueService.reconcileAfterSuccess(any(), any()))
             .thenReturn(com.acr.review.domain.ReviewRoundReconcileResult.empty());
 
@@ -703,6 +759,9 @@ class ReviewTaskExecutionServiceImplTest
         org.junit.jupiter.api.Assertions.assertEquals("1", run.getHasCriticalSecurity());
         org.junit.jupiter.api.Assertions.assertEquals(
             com.acr.review.service.ReviewScoringConstants.PARSE_SUCCESS, run.getParseStatus());
+        org.junit.jupiter.api.Assertions.assertEquals(Integer.valueOf(90), run.getInputTokens());
+        org.junit.jupiter.api.Assertions.assertEquals(Integer.valueOf(30), run.getOutputTokens());
+        org.junit.jupiter.api.Assertions.assertEquals(Integer.valueOf(120), run.getTotalTokens());
 
         org.mockito.ArgumentCaptor<ReviewTask> taskCaptor = org.mockito.ArgumentCaptor.forClass(ReviewTask.class);
         verify(taskMapper, org.mockito.Mockito.atLeastOnce()).updateTaskExecution(taskCaptor.capture());

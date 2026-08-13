@@ -1,5 +1,6 @@
 package com.acr.system.domain;
 
+import java.math.BigDecimal;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import org.apache.commons.lang3.builder.ToStringBuilder;
@@ -74,6 +75,12 @@ public class SysAiModelConfig extends BaseEntity
 
     /** 上下文长度 */
     private Integer contextLength;
+
+    /** 输入单价（元/千 token） */
+    private BigDecimal inputPricePer1k;
+
+    /** 输出单价（元/千 token） */
+    private BigDecimal outputPricePer1k;
 
     /** 最近检测结果 */
     private String lastCheckResult;
@@ -250,6 +257,26 @@ public class SysAiModelConfig extends BaseEntity
         this.contextLength = contextLength;
     }
 
+    public BigDecimal getInputPricePer1k()
+    {
+        return inputPricePer1k;
+    }
+
+    public void setInputPricePer1k(BigDecimal inputPricePer1k)
+    {
+        this.inputPricePer1k = inputPricePer1k;
+    }
+
+    public BigDecimal getOutputPricePer1k()
+    {
+        return outputPricePer1k;
+    }
+
+    public void setOutputPricePer1k(BigDecimal outputPricePer1k)
+    {
+        this.outputPricePer1k = outputPricePer1k;
+    }
+
     public String getLastCheckResult()
     {
         return lastCheckResult;
@@ -289,6 +316,8 @@ public class SysAiModelConfig extends BaseEntity
             .append("sortOrder", getSortOrder())
             .append("temperature", getTemperature())
             .append("contextLength", getContextLength())
+            .append("inputPricePer1k", getInputPricePer1k())
+            .append("outputPricePer1k", getOutputPricePer1k())
             .append("lastCheckResult", getLastCheckResult())
             .append("lastCheckTime", getLastCheckTime())
             .append("remark", getRemark())

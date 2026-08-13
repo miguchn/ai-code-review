@@ -19,6 +19,7 @@ import com.acr.review.mapper.ReviewTaskRunMapper;
 import com.acr.review.service.IReviewDeliveryService;
 import com.acr.review.service.IReviewIssueService;
 import com.acr.review.service.ReviewProjectAccessService;
+import com.acr.system.service.ISysAiModelConfigService;
 import com.acr.system.service.ISysDeptService;
 
 class ReviewRecordServiceImplTest
@@ -30,8 +31,10 @@ class ReviewRecordServiceImplTest
     private final IReviewDeliveryService deliveryService = mock(IReviewDeliveryService.class);
     private final IReviewIssueService issueService = mock(IReviewIssueService.class);
     private final ReviewProjectAccessService projectAccessService = mock(ReviewProjectAccessService.class);
+    private final ISysAiModelConfigService modelConfigService = mock(ISysAiModelConfigService.class);
     private final ReviewRecordServiceImpl service = new ReviewRecordServiceImpl(
-        taskMapper, runMapper, projectMapper, deptService, deliveryService, issueService, projectAccessService);
+        taskMapper, runMapper, projectMapper, deptService, deliveryService, issueService, projectAccessService,
+        modelConfigService);
 
     @Test
     void returnsDetailForSuccessTaskWithinDataScope()

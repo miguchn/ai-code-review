@@ -14,10 +14,13 @@ import com.acr.common.annotation.Log;
 import com.acr.common.core.controller.BaseController;
 import com.acr.common.core.domain.AjaxResult;
 import com.acr.common.enums.BusinessType;
+import com.acr.common.core.page.TableDataInfo;
 import com.acr.review.insight.IReviewInsightService;
+import com.acr.review.insight.ITokenUsageInsightService;
 import com.acr.review.insight.InsightConstants;
 import com.acr.review.insight.dto.InsightIdentityBindRequest;
 import com.acr.review.insight.dto.InsightProjectRow;
+import com.acr.review.insight.dto.InsightTokenRunRow;
 import com.acr.system.domain.SysOperLog;
 import com.acr.system.service.ISysOperLogService;
 
@@ -27,11 +30,15 @@ import com.acr.system.service.ISysOperLogService;
 public class InsightController extends BaseController
 {
     private final IReviewInsightService insightService;
+    private final ITokenUsageInsightService tokenUsageInsightService;
     private final ISysOperLogService operLogService;
 
-    public InsightController(IReviewInsightService insightService, ISysOperLogService operLogService)
+    public InsightController(IReviewInsightService insightService,
+                             ITokenUsageInsightService tokenUsageInsightService,
+                             ISysOperLogService operLogService)
     {
         this.insightService = insightService;
+        this.tokenUsageInsightService = tokenUsageInsightService;
         this.operLogService = operLogService;
     }
 
@@ -147,5 +154,62 @@ public class InsightController extends BaseController
     {
         insightService.unbindTeamIdentity(id);
         return success();
+    }
+
+    @PreAuthorize("@ss.hasPermi('" + InsightConstants.PERM_TOKEN_VIEW + "')")
+    @GetMapping("/token/overview")
+    public AjaxResult tokenOverview(@RequestParam(required = false) String beginDate,
+                                    @RequestParam(required = false) String endDate,
+                                    @RequestParam(required = false) Integer days,
+                                    @RequestParam(required = false) Long projectId,
+                                    @RequestParam(required = false) Long modelId)
+    {
+        return success(tokenUsageInsightService.getOverview(beginDate, endDate, days, projectId, modelId));
+    }
+
+    @PreAuthorize("@ss.hasPermi('" + InsightConstants.PERM_TOKEN_VIEW + "')")
+    @GetMapping("/token/trend")
+    public AjaxResult tokenTrend(@RequestParam(required = false) String beginDate,
+                                 @RequestParam(required = false) String endDate,
+                                 @RequestParam(required = false) Integer days,
+                                 @RequestParam(required = false) Long projectId,
+                                 @RequestParam(required = false) Long modelId)
+    {
+        return success(tokenUsageInsightService.getTrend(beginDate, endDate, days, projectId, modelId));
+    }
+
+    @PreAuthorize("@ss.hasPermi('" + InsightConstants.PERM_TOKEN_VIEW + "')")
+    @GetMapping("/token/models")
+    public AjaxResult tokenModels(@RequestParam(required = false) String beginDate,
+                                  @RequestParam(required = false) String endDate,
+                                  @RequestParam(required = false) Integer days,
+                                  @RequestParam(required = false) Long projectId,
+                                  @RequestParam(required = false) Long modelId)
+    {
+        return success(tokenUsageInsightService.listModels(beginDate, endDate, days, projectId, modelId));
+    }
+
+    @PreAuthorize("@ss.hasPermi('" + InsightConstants.PERM_TOKEN_VIEW + "')")
+    @GetMapping("/token/projects")
+    public AjaxResult tokenProjects(@RequestParam(required = false) String beginDate,
+                                    @RequestParam(required = false) String endDate,
+                                    @RequestParam(required = false) Integer days,
+                                    @RequestParam(required = false) Long projectId,
+                                    @RequestParam(required = false) Long modelId)
+    {
+        return success(tokenUsageInsightService.listProjects(beginDate, endDate, days, projectId, modelId));
+    }
+
+    @PreAuthorize("@ss.hasPermi('" + InsightConstants.PERM_TOKEN_VIEW + "')")
+    @GetMapping("/token/runs")
+    public TableDataInfo tokenRuns(@RequestParam(required = false) String beginDate,
+                                   @RequestParam(required = false) String endDate,
+                                   @RequestParam(required = false) Integer days,
+                                   @RequestParam(required = false) Long projectId,
+                                   @RequestParam(required = false) Long modelId)
+    {
+        startPage();
+        List<InsightTokenRunRow> rows = tokenUsageInsightService.listRuns(beginDate, endDate, days, projectId, modelId);
+        return getDataTable(rows);
     }
 }

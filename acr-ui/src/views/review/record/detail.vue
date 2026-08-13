@@ -112,6 +112,11 @@
                   <p class="result-summary">{{ getReviewSummary(resultRun) || '暂无审查摘要' }}</p>
                 </div>
 
+                <div class="result-block">
+                  <div class="result-block-title">Token 用量</div>
+                  <p class="result-summary">{{ tokenUsageLine(tokenRun) }}</p>
+                </div>
+
                 <div id="focus-issues" class="result-block">
                   <div class="result-block-title">重点问题</div>
                   <el-empty v-if="!newIssues.length" description="暂无重点问题" :image-size="48" />
@@ -188,10 +193,16 @@
               </div>
             </div>
             <el-empty v-else-if="detailTask.taskStatus !== 'FAILED'" description="暂无可用的审查结果" :image-size="64" />
-            <div v-else id="focus-issues" class="result-block">
-              <div class="result-block-title">重点问题</div>
-              <p class="result-summary">执行失败，评分与重点问题未生成。</p>
-            </div>
+            <template v-else>
+              <div class="result-block">
+                <div class="result-block-title">Token 用量</div>
+                <p class="result-summary">{{ tokenUsageLine(tokenRun) }}</p>
+              </div>
+              <div id="focus-issues" class="result-block">
+                <div class="result-block-title">重点问题</div>
+                <p class="result-summary">执行失败，评分与重点问题未生成。</p>
+              </div>
+            </template>
           </el-tab-pane>
 
           <el-tab-pane label="执行记录" name="runs">
@@ -271,12 +282,34 @@ const activeTab = ref('result')
 
 const taskId = computed(() => route.params.taskId)
 const resultRun = computed(() => pickLatestSuccessRun(detailRuns.value))
+const tokenRun = computed(() => pickTokenRun(detailRuns.value, resultRun.value))
 const topIssues = computed(() => getTopIssues(resultRun.value))
 const newIssues = computed(() => topIssues.value.filter(issue => (issue?.origin || '').toUpperCase() !== 'EXISTING'))
 const displayedNewIssues = computed(() => newIssues.value.slice(0, 3))
 const existingIssues = computed(() => topIssues.value.filter(issue => (issue?.origin || '').toUpperCase() === 'EXISTING'))
 const mergeRequestLink = computed(() => buildMergeRequestUrl(detailTask.value || {}))
 const mergeRequestLinkLabel = computed(() => mergeRequestLabel(detailTask.value?.provider))
+
+function pickTokenRun(runs, fallback) {
+  if (!Array.isArray(runs) || !runs.length) return fallback || null
+  const withToken = runs.filter(run => run?.inputTokens != null || run?.outputTokens != null || run?.totalTokens != null)
+  if (!withToken.length) return fallback || runs[0]
+  return withToken.reduce((best, cur) => ((cur?.attemptNo ?? 0) >= (best?.attemptNo ?? 0) ? cur : best), withToken[0])
+}
+
+function formatTokenCount(value) {
+  return value == null || Number.isNaN(value) ? '—' : String(value)
+}
+
+function formatYuan(value) {
+  if (value == null || Number.isNaN(value)) return '—'
+  return Number(value).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 4 })
+}
+
+function tokenUsageLine(run) {
+  if (!run) return '输入 — · 输出 — · 总 — · 估算成本 —'
+  return `输入 ${formatTokenCount(run.inputTokens)} · 输出 ${formatTokenCount(run.outputTokens)} · 总 ${formatTokenCount(run.totalTokens)} · 估算成本 ${formatYuan(run.estimatedCost)}`
+}
 
 function metricUnavailableLabel(row) {
   return row?.taskStatus === 'FAILED' ? '未生成' : '暂无数据'

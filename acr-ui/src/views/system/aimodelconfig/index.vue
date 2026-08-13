@@ -174,6 +174,16 @@
                         </el-form-item>
                      </el-col>
                      <el-col :span="12">
+                        <el-form-item label="输入单价" prop="inputPricePer1k">
+                           <el-input-number v-model="form.inputPricePer1k" :min="0" :precision="4" :step="0.001" controls-position="right" style="width: 100%" placeholder="元/千 Token" />
+                        </el-form-item>
+                     </el-col>
+                     <el-col :span="12">
+                        <el-form-item label="输出单价" prop="outputPricePer1k">
+                           <el-input-number v-model="form.outputPricePer1k" :min="0" :precision="4" :step="0.001" controls-position="right" style="width: 100%" placeholder="元/千 Token" />
+                        </el-form-item>
+                     </el-col>
+                     <el-col :span="12">
                         <el-form-item label="排序" prop="sortOrder">
                            <el-input-number v-model="form.sortOrder" :min="0" :max="999" controls-position="right" style="width: 100%" />
                         </el-form-item>
@@ -319,6 +329,8 @@ function reset() {
       maxTokens: LLM_ADVANCED_DEFAULTS.maxTokens,
       temperature: LLM_ADVANCED_DEFAULTS.temperature,
       contextLength: LLM_ADVANCED_DEFAULTS.contextLength,
+      inputPricePer1k: undefined,
+      outputPricePer1k: undefined,
       sortOrder: LLM_ADVANCED_DEFAULTS.sortOrder,
       remark: undefined
    }

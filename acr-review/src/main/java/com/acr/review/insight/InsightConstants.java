@@ -7,6 +7,7 @@ public final class InsightConstants
     public static final String PERM_PROJECT_VIEW = "insight:project:view";
     public static final String PERM_TEAM_VIEW = "insight:team:view";
     public static final String PERM_IDENTITY_MANAGE = "insight:identity:manage";
+    public static final String PERM_TOKEN_VIEW = "insight:token:view";
 
     public static final String CONFIG_METRICS_VERSION = "insight.metrics.dict.version";
     public static final String DEFAULT_METRICS_VERSION = "m12-v1";

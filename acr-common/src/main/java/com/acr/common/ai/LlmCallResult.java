@@ -13,6 +13,9 @@ public class LlmCallResult
     private String rawSnippet;
     private LlmCallErrorType errorType;
     private String errorMessage;
+    private Integer promptTokens;
+    private Integer completionTokens;
+    private Integer totalTokens;
 
     public static LlmCallResult success(long latencyMs, String content, String rawSnippet)
     {
@@ -63,5 +66,35 @@ public class LlmCallResult
     public String getErrorMessage()
     {
         return errorMessage;
+    }
+
+    public Integer getPromptTokens()
+    {
+        return promptTokens;
+    }
+
+    public void setPromptTokens(Integer promptTokens)
+    {
+        this.promptTokens = promptTokens;
+    }
+
+    public Integer getCompletionTokens()
+    {
+        return completionTokens;
+    }
+
+    public void setCompletionTokens(Integer completionTokens)
+    {
+        this.completionTokens = completionTokens;
+    }
+
+    public Integer getTotalTokens()
+    {
+        return totalTokens;
+    }
+
+    public void setTotalTokens(Integer totalTokens)
+    {
+        this.totalTokens = totalTokens;
     }
 }

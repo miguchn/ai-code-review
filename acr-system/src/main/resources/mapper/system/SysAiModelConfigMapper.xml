@@ -21,6 +21,8 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="sortOrder"   column="sort_order"   />
         <result property="temperature" column="temperature"  />
         <result property="contextLength" column="context_length" />
+        <result property="inputPricePer1k" column="input_price_per_1k" />
+        <result property="outputPricePer1k" column="output_price_per_1k" />
         <result property="lastCheckResult" column="last_check_result" />
         <result property="lastCheckTime" column="last_check_time" />
         <result property="remark"      column="remark"       />
@@ -34,6 +36,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         select model_id, model_name, provider, custom_provider_name, api_url, api_key, model,
                embedding_model, embedding_api_url,
                enabled, is_default, timeout, max_tokens, sort_order, temperature, context_length,
+               input_price_per_1k, output_price_per_1k,
                last_check_result, last_check_time,
                remark, create_by, create_time, update_by, update_time
         from sys_ai_model_config
@@ -78,6 +81,8 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="sortOrder != null">sort_order,</if>
             <if test="temperature != null">temperature,</if>
             <if test="contextLength != null">context_length,</if>
+            <if test="inputPricePer1k != null">input_price_per_1k,</if>
+            <if test="outputPricePer1k != null">output_price_per_1k,</if>
             <if test="lastCheckResult != null">last_check_result,</if>
             <if test="lastCheckTime != null">last_check_time,</if>
             <if test="remark != null">remark,</if>
@@ -100,6 +105,8 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="sortOrder != null">#{sortOrder},</if>
             <if test="temperature != null">#{temperature},</if>
             <if test="contextLength != null">#{contextLength},</if>
+            <if test="inputPricePer1k != null">#{inputPricePer1k},</if>
+            <if test="outputPricePer1k != null">#{outputPricePer1k},</if>
             <if test="lastCheckResult != null">#{lastCheckResult},</if>
             <if test="lastCheckTime != null">#{lastCheckTime},</if>
             <if test="remark != null">#{remark},</if>
@@ -126,6 +133,8 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="sortOrder != null">sort_order = #{sortOrder},</if>
             <if test="temperature != null">temperature = #{temperature},</if>
             <if test="contextLength != null">context_length = #{contextLength},</if>
+            <if test="inputPricePer1k != null">input_price_per_1k = #{inputPricePer1k},</if>
+            <if test="outputPricePer1k != null">output_price_per_1k = #{outputPricePer1k},</if>
             <if test="lastCheckResult != null">last_check_result = #{lastCheckResult},</if>
             <if test="lastCheckTime != null">last_check_time = #{lastCheckTime},</if>
             <if test="remark != null">remark = #{remark},</if>

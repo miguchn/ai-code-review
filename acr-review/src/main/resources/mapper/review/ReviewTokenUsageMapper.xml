@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.acr.review.mapper.ReviewTokenUsageMapper">
+
+    <sql id="projectMemberScope">
+        <if test="params.projectAccessUserId != null">
+            and (p.owner_user_id = #{params.projectAccessUserId}
+                 or exists (select 1 from review_project_member pm
+                            where pm.project_id = p.project_id
+                              and pm.user_id = #{params.projectAccessUserId}
+                              and pm.status = '0'))
+        </if>
+    </sql>
+
+    <sql id="tokenScopeJoin">
+        FROM review_task_run r
+        INNER JOIN review_task t ON t.task_id = r.task_id
+        INNER JOIN review_project p ON p.project_id = t.project_id
+        INNER JOIN sys_business_system bs ON bs.system_id = p.business_system_id
+        INNER JOIN sys_dept d ON d.dept_id = p.dept_id
+        INNER JOIN sys_user owner ON owner.user_id = p.owner_user_id
+    </sql>
+
+    <sql id="tokenFilters">
+        <if test="params.beginDate != null">
+            AND r.create_time &gt;= #{params.beginDate}
+        </if>
+        <if test="params.endDateExclusive != null">
+            AND r.create_time &lt; #{params.endDateExclusive}
+        </if>
+        <if test="projectId != null">
+            AND p.project_id = #{projectId}
+        </if>
+        <if test="modelId != null">
+            AND r.snapshot_model_id = #{modelId}
+        </if>
+        ${params.dataScope}
+        <include refid="projectMemberScope" />
+    </sql>
+
+    <select id="selectTotals" parameterType="com.acr.review.insight.TokenUsageQuery"
+            resultType="com.acr.review.insight.dto.TokenUsageTotals">
+        SELECT COALESCE(SUM(r.input_tokens), 0) AS inputTokens,
+               COALESCE(SUM(r.output_tokens), 0) AS outputTokens,
+               COALESCE(SUM(r.total_tokens), 0) AS totalTokens,
+               SUM(CASE WHEN r.total_tokens IS NOT NULL THEN 1 ELSE 0 END) AS callCount,
+               SUM(CASE WHEN r.run_status = 'SUCCESS' THEN 1 ELSE 0 END) AS successCount,
+               SUM(CASE WHEN r.run_status = 'SUCCESS' AND r.total_tokens IS NULL THEN 1 ELSE 0 END) AS successMissingTokens
+        <include refid="tokenScopeJoin" />
+        WHERE 1 = 1
+        <include refid="tokenFilters" />
+    </select>
+
+    <select id="selectEarliestTokenTime" parameterType="com.acr.review.insight.TokenUsageQuery"
+            resultType="java.util.Date">
+        SELECT MIN(r.create_time)
+        <include refid="tokenScopeJoin" />
+        WHERE r.total_tokens IS NOT NULL
+        ${params.dataScope}
+        <include refid="projectMemberScope" />
+    </select>
+
+    <select id="selectTrend" parameterType="com.acr.review.insight.TokenUsageQuery"
+            resultType="com.acr.review.insight.dto.InsightTokenTrendPoint">
+        SELECT DATE(r.create_time) AS date,
+               COALESCE(SUM(r.input_tokens), 0) AS inputTokens,
+               COALESCE(SUM(r.output_tokens), 0) AS outputTokens
+        <include refid="tokenScopeJoin" />
+        WHERE 1 = 1
+        <include refid="tokenFilters" />
+        GROUP BY DATE(r.create_time)
+        ORDER BY date ASC
+    </select>
+
+    <select id="selectModels" parameterType="com.acr.review.insight.TokenUsageQuery"
+            resultType="com.acr.review.insight.dto.InsightTokenModelRow">
+        SELECT r.snapshot_model_id AS modelId,
+               COALESCE(MAX(r.snapshot_model_name), '未命名模型') AS modelName,
+               MAX(r.snapshot_model_provider) AS provider,
+               SUM(CASE WHEN r.total_tokens IS NOT NULL THEN 1 ELSE 0 END) AS callCount,
+               COALESCE(SUM(r.input_tokens), 0) AS inputTokens,
+               COALESCE(SUM(r.output_tokens), 0) AS outputTokens,
+               COALESCE(SUM(r.total_tokens), 0) AS totalTokens
+        <include refid="tokenScopeJoin" />
+        WHERE 1 = 1
+        <include refid="tokenFilters" />
+        GROUP BY r.snapshot_model_id
+        HAVING callCount &gt; 0
+        ORDER BY totalTokens DESC
+    </select>
+
+    <select id="selectModelOptions" parameterType="com.acr.review.insight.TokenUsageQuery"
+            resultType="com.acr.review.insight.dto.InsightTokenModelOption">
+        SELECT r.snapshot_model_id AS modelId,
+               COALESCE(MAX(r.snapshot_model_name), '未命名模型') AS modelName,
+               MAX(r.snapshot_model_provider) AS provider
+        <include refid="tokenScopeJoin" />
+        WHERE r.snapshot_model_id IS NOT NULL
+        <include refid="tokenFilters" />
+        GROUP BY r.snapshot_model_id
+        ORDER BY modelName ASC
+    </select>
+
+    <select id="selectProjects" parameterType="com.acr.review.insight.TokenUsageQuery"
+            resultType="com.acr.review.insight.dto.InsightTokenProjectRow">
+        SELECT p.project_id AS projectId,
+               p.project_name AS projectName,
+               bs.system_name AS businessSystemName,
+               owner.nick_name AS ownerName,
+               SUM(CASE WHEN r.total_tokens IS NOT NULL THEN 1 ELSE 0 END) AS callCount,
+               COALESCE(SUM(r.total_tokens), 0) AS totalTokens,
+               COALESCE(SUM(r.input_tokens), 0) AS inputTokens,
+               COALESCE(SUM(r.output_tokens), 0) AS outputTokens
+        <include refid="tokenScopeJoin" />
+        WHERE 1 = 1
+        <include refid="tokenFilters" />
+        GROUP BY p.project_id, p.project_name, bs.system_name, owner.nick_name
+        HAVING callCount &gt; 0
+        ORDER BY totalTokens DESC
+    </select>
+
+    <select id="selectProjectModels" parameterType="com.acr.review.insight.TokenUsageQuery"
+            resultType="com.acr.review.insight.dto.TokenUsageProjectModelRow">
+        SELECT p.project_id AS projectId,
+               r.snapshot_model_id AS modelId,
+               COALESCE(SUM(r.input_tokens), 0) AS inputTokens,
+               COALESCE(SUM(r.output_tokens), 0) AS outputTokens
+        <include refid="tokenScopeJoin" />
+        WHERE r.total_tokens IS NOT NULL
+        <include refid="tokenFilters" />
+        GROUP BY p.project_id, r.snapshot_model_id
+    </select>
+
+    <select id="selectRuns" parameterType="com.acr.review.insight.TokenUsageQuery"
+            resultType="com.acr.review.insight.dto.InsightTokenRunRow">
+        SELECT r.run_id AS runId,
+               r.task_id AS taskId,
+               p.project_name AS projectName,
+               p.project_id AS projectId,
+               r.snapshot_model_id AS modelId,
+               r.snapshot_model_name AS modelName,
+               r.snapshot_review_mode AS reviewMode,
+               r.create_time AS triggerTime,
+               r.input_tokens AS inputTokens,
+               r.output_tokens AS outputTokens,
+               r.total_tokens AS totalTokens
+        <include refid="tokenScopeJoin" />
+        WHERE 1 = 1
+        <include refid="tokenFilters" />
+        ORDER BY r.create_time DESC, r.run_id DESC
+    </select>
+</mapper>

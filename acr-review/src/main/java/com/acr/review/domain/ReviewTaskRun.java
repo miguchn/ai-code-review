@@ -59,6 +59,11 @@ public class ReviewTaskRun extends BaseEntity
     private String prDescription;
     private String commitMessages;
     private Long durationMs;
+    private Integer inputTokens;
+    private Integer outputTokens;
+    private Integer totalTokens;
+    /** 读取时按当前单价估算，不落库。 */
+    private Double estimatedCost;
 
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private Date startedTime;
@@ -541,6 +546,46 @@ public class ReviewTaskRun extends BaseEntity
     public void setDurationMs(Long durationMs)
     {
         this.durationMs = durationMs;
+    }
+
+    public Integer getInputTokens()
+    {
+        return inputTokens;
+    }
+
+    public void setInputTokens(Integer inputTokens)
+    {
+        this.inputTokens = inputTokens;
+    }
+
+    public Integer getOutputTokens()
+    {
+        return outputTokens;
+    }
+
+    public void setOutputTokens(Integer outputTokens)
+    {
+        this.outputTokens = outputTokens;
+    }
+
+    public Integer getTotalTokens()
+    {
+        return totalTokens;
+    }
+
+    public void setTotalTokens(Integer totalTokens)
+    {
+        this.totalTokens = totalTokens;
+    }
+
+    public Double getEstimatedCost()
+    {
+        return estimatedCost;
+    }
+
+    public void setEstimatedCost(Double estimatedCost)
+    {
+        this.estimatedCost = estimatedCost;
     }
 
     public Date getStartedTime()
