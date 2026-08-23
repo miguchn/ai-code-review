@@ -12,6 +12,9 @@ import java.util.concurrent.ScheduledExecutorService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import com.acr.review.mapper.ReviewRuntimeStatsMapper;
+import com.acr.review.mapper.ReviewProjectMapper;
+import com.acr.review.engine.OcrEngineAvailability;
+import com.acr.review.engine.OcrEngineAvailabilityService;
 import com.acr.review.scheduling.IReviewRuntimeStatusService;
 import com.acr.review.scheduling.ReviewResourceBudgetStatus;
 import com.acr.review.scheduling.ReviewRuntimeStatus;
@@ -22,6 +25,8 @@ class ReviewRuntimeAlertServiceTest
     private ReviewRuntimeStatsMapper statsMapper;
     private IReviewRuntimeStatusService runtimeStatusService;
     private ReviewRuntimeAlertService service;
+    private OcrEngineAvailabilityService ocrAvailabilityService;
+    private ReviewProjectMapper projectMapper;
 
     @BeforeEach
     void setUp()
@@ -29,14 +34,18 @@ class ReviewRuntimeAlertServiceTest
         settings = mock(ReviewRuntimeAlertSettings.class);
         statsMapper = mock(ReviewRuntimeStatsMapper.class);
         runtimeStatusService = mock(IReviewRuntimeStatusService.class);
+        ocrAvailabilityService = mock(OcrEngineAvailabilityService.class);
+        projectMapper = mock(ReviewProjectMapper.class);
         when(settings.pendingAgeMinutes()).thenReturn(30);
         when(settings.deliveryPendingAgeMinutes()).thenReturn(20);
         when(settings.budgetSaturatedMinutes()).thenReturn(10);
         when(settings.failureRateWindowMinutes()).thenReturn(60);
         when(settings.failureRatePercent()).thenReturn(40);
         when(settings.alertScanIntervalSeconds()).thenReturn(30);
+        when(ocrAvailabilityService.probe()).thenReturn(
+            new OcrEngineAvailability(true, "ocr", "open-code-review v1", "OCR 引擎可用", new Date()));
         service = new ReviewRuntimeAlertService(settings, statsMapper, runtimeStatusService,
-            mock(ScheduledExecutorService.class));
+            mock(ScheduledExecutorService.class), ocrAvailabilityService, projectMapper);
     }
 
     @Test
@@ -92,6 +101,33 @@ class ReviewRuntimeAlertServiceTest
         assertEquals(1, alerts.size());
         assertEquals(ReviewRuntimeConstants.ALERT_BUDGET_SATURATED, alerts.get(0).getCode());
         assertFalse(alerts.get(0).getAction().isBlank());
+    }
+
+    @Test
+    void unavailableOcrWithEnabledProjectsProducesWarning()
+    {
+        when(ocrAvailabilityService.probe()).thenReturn(new OcrEngineAvailability(
+            false, "ocr", null,
+            "未检测到 OCR 引擎（命令：ocr），请安装 open-code-review 或检查 ACR_OCR_EXECUTABLE 配置",
+            new Date()));
+        when(projectMapper.countEnabledOcrProjects()).thenReturn(2);
+
+        List<ReviewRuntimeAlert> alerts = service.evaluate(emptyStatus(), new Date());
+
+        assertEquals(1, alerts.size());
+        assertEquals(ReviewRuntimeConstants.ALERT_OCR_ENGINE_UNAVAILABLE, alerts.get(0).getCode());
+        assertEquals("warning", alerts.get(0).getSeverity());
+        assertTrue(alerts.get(0).getMessage().contains("2 个"));
+    }
+
+    @Test
+    void unavailableOcrWithoutEnabledProjectsDoesNotAlert()
+    {
+        when(ocrAvailabilityService.probe()).thenReturn(new OcrEngineAvailability(
+            false, "ocr", null, "未检测到 OCR 引擎", new Date()));
+        when(projectMapper.countEnabledOcrProjects()).thenReturn(0);
+
+        assertTrue(service.evaluate(emptyStatus(), new Date()).isEmpty());
     }
 
     private static ReviewRuntimeStatus emptyStatus()

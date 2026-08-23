@@ -98,8 +98,10 @@ public class OpenCodeReviewCliAdapter implements ReviewEngine
         catch (IOException ex)
         {
             ReviewEngineFailureType failureType = ReviewEngineProcessRunner.classifyStartupFailure(ex);
-            return ReviewEngineResult.failure(engineName, null, 0, "", ex.getMessage(), null,
-                failureType, failureType.getLabel());
+            String failureReason = ReviewEngineProcessRunner.describeStartupFailure(
+                failureType, properties.getExecutablePath());
+            return ReviewEngineResult.failure(engineName, null, 0, "", failureReason, null,
+                failureType, failureReason);
         }
         catch (InterruptedException ex)
         {

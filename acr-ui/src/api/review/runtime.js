@@ -4,6 +4,10 @@ export function getRuntimeOverview() {
   return request({ url: '/review/runtime/overview', method: 'get' })
 }
 
+export function getOcrEngineAvailability() {
+  return request({ url: '/review/runtime/engine/ocr', method: 'get' })
+}
+
 export function listOverduePendingTasks(limit) {
   return request({ url: '/review/runtime/backlog/overdue-pending', method: 'get', params: { limit } })
 }

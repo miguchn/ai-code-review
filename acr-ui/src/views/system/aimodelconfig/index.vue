@@ -203,9 +203,10 @@
                   <div v-if="testResult.errorType">错误类型: {{ testResult.errorType }}</div>
                   <div v-if="testResult.errorMessage">{{ testResult.errorMessage }}</div>
                   <div v-if="testResult.content">响应: {{ testResult.content }}</div>
-                  <div v-if="testResult.rawSnippet" class="raw-snippet">摘要: {{ testResult.rawSnippet }}</div>
+                  <div v-if="testResult.rawSnippet && !testResult.success" class="raw-snippet">摘要: {{ testResult.rawSnippet }}</div>
                </template>
             </el-alert>
+            <div class="test-hint">连接测试会发起一次最小模型请求，可能产生少量 Token；模型调用测试用于验证实际内容输出。</div>
          </el-form>
          <template #footer>
             <div class="dialog-footer">
@@ -511,6 +512,11 @@ getList()
 }
 .test-result-alert {
    margin-top: 8px;
+}
+.test-hint {
+   margin: 6px 0 2px;
+   font-size: 12px;
+   color: var(--el-text-color-secondary);
 }
 .raw-snippet {
    word-break: break-all;

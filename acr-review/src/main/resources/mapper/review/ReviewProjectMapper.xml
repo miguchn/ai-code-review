@@ -175,6 +175,13 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <include refid="projectMemberScope" />
     </select>
 
+    <select id="countEnabledOcrProjects" resultType="int">
+        select count(1)
+        from review_project
+        where status = '0'
+          and review_mode in ('OCR_ENGINE', 'OCR_PR_DIFF')
+    </select>
+
     <select id="selectByRepository" resultMap="ReviewProjectResult">
         select project_id, project_name, provider, repository_owner, repository_name, repository_full_path,
                status, pr_review_enabled, pr_target_branches, push_review_enabled, push_trigger_branches, inline_comment_enabled, inline_severities,

@@ -111,7 +111,7 @@
         <el-radio-button value="active">当前活跃</el-radio-button>
         <el-radio-button value="all">全部</el-radio-button>
       </el-radio-group>
-      <div v-if="!recordModeRequested" class="issue-stats-bar" aria-label="问题状态总览">
+      <div v-if="!recordModeRequested" class="issue-stats-bar" aria-label="问题状态总览" data-tour="issue-stats">
         <button
           type="button"
           class="stats-item"
@@ -174,6 +174,7 @@
     />
 
     <el-table
+      data-tour="issue-table"
       ref="tableRef"
       v-loading="loading"
       :data="issueList"
@@ -299,7 +300,13 @@
       </el-table-column>
       <el-table-column label="操作" width="140" fixed="right" class-name="small-padding fixed-width">
         <template #default="scope">
-          <el-button link type="primary" v-hasPermi="['review:issue:query']" @click="openDetail(scope.row.issueId)">详情</el-button>
+          <el-button
+            link
+            type="primary"
+            :data-tour="scope.$index === 0 ? 'issue-detail-trigger' : undefined"
+            v-hasPermi="['review:issue:query']"
+            @click="openDetail(scope.row.issueId)"
+          >详情</el-button>
           <el-button
             v-if="scope.row.status === 'RECHECKING'"
             link

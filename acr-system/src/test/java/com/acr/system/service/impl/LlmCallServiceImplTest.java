@@ -71,6 +71,7 @@ class LlmCallServiceImplTest
         assertTrue(result.isSuccess());
         assertTrue(result.getLatencyMs() >= 0);
         assertEquals("OK", result.getContent());
+        assertNull(result.getRawSnippet());
     }
 
     @Test

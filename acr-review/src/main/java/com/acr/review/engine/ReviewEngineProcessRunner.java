@@ -48,6 +48,16 @@ public class ReviewEngineProcessRunner
         return ReviewEngineFailureType.UNKNOWN;
     }
 
+    public static String describeStartupFailure(ReviewEngineFailureType failureType, String executable)
+    {
+        if (failureType == ReviewEngineFailureType.CLI_NOT_FOUND)
+        {
+            return "未检测到 OCR 引擎（命令：" + executable
+                + "），请安装 open-code-review 或检查 ACR_OCR_EXECUTABLE 配置";
+        }
+        return failureType == null ? ReviewEngineFailureType.UNKNOWN.getLabel() : failureType.getLabel();
+    }
+
     public static ReviewEngineFailureType classifyExitFailure(int exitCode, String stdout, String stderr,
         ReviewEngineInvocationType invocationType)
     {

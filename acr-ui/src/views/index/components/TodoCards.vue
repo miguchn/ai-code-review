@@ -1,5 +1,5 @@
 <template>
-  <section class="wb-panel">
+  <section class="wb-panel" data-tour="workbench-todos">
     <header class="wb-panel-head">
       <h3 class="wb-panel-title">今日待办</h3>
       <span class="wb-panel-extra">点击卡片直达对应列表</span>
@@ -16,6 +16,7 @@
         :key="card.type"
         class="wb-todo-card"
         :class="[`is-${tone(card.type)}`, { 'is-zero': card.count === 0 }]"
+        :data-tour="card.type === 'ISSUE_AWAITING_CONFIRM' ? 'workbench-awaiting-confirm' : undefined"
         role="button"
         tabindex="0"
         @click="$emit('open', card)"

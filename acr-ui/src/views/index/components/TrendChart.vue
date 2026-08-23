@@ -1,5 +1,5 @@
 <template>
-  <section class="wb-panel">
+  <section class="wb-panel" data-tour="workbench-trend">
     <header class="wb-panel-head">
       <h3 class="wb-panel-title">项目风险趋势</h3>
       <span v-if="trend" class="wb-panel-extra">近 {{ trend.days }} 天 · 按审查完成日期</span>

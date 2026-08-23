@@ -6,6 +6,8 @@ import java.util.Map;
 import org.springframework.stereotype.Service;
 import com.acr.review.delivery.ReviewDeliveryConstants;
 import com.acr.review.domain.ReviewPipelineConstants;
+import com.acr.review.engine.OcrEngineAvailability;
+import com.acr.review.engine.OcrEngineAvailabilityService;
 import com.acr.review.mapper.ReviewRuntimeStatsMapper;
 import com.acr.review.scheduling.IReviewRuntimeStatusService;
 
@@ -18,16 +20,19 @@ public class ReviewRuntimeOpsServiceImpl implements IReviewRuntimeOpsService
     private final IReviewRuntimeStatusService runtimeStatusService;
     private final ReviewRuntimeAlertService alertService;
     private final ReviewRuntimeAlertSettings settings;
+    private final OcrEngineAvailabilityService ocrAvailabilityService;
 
     public ReviewRuntimeOpsServiceImpl(ReviewRuntimeStatsMapper statsMapper,
                                        IReviewRuntimeStatusService runtimeStatusService,
                                        ReviewRuntimeAlertService alertService,
-                                       ReviewRuntimeAlertSettings settings)
+                                       ReviewRuntimeAlertSettings settings,
+                                       OcrEngineAvailabilityService ocrAvailabilityService)
     {
         this.statsMapper = statsMapper;
         this.runtimeStatusService = runtimeStatusService;
         this.alertService = alertService;
         this.settings = settings;
+        this.ocrAvailabilityService = ocrAvailabilityService;
     }
 
     @Override
@@ -37,9 +42,16 @@ public class ReviewRuntimeOpsServiceImpl implements IReviewRuntimeOpsService
         overview.setTask(buildTaskSurface());
         overview.setResource(ReviewRuntimeOverview.ResourceSurface.from(runtimeStatusService.snapshot()));
         overview.setDelivery(buildDeliverySurface());
+        overview.setEngineAvailability(getOcrEngineAvailability());
         overview.setAlerts(alertService.evaluateNow());
         overview.setAlertThresholds(currentAlertThresholds());
         return overview;
+    }
+
+    @Override
+    public OcrEngineAvailability getOcrEngineAvailability()
+    {
+        return ocrAvailabilityService.probe();
     }
 
     @Override

@@ -23,12 +23,12 @@
 
     <el-row :gutter="10" class="mb8">
       <el-col :span="1.5">
-        <el-button type="primary" plain icon="Plus" @click="handleAdd" v-hasPermi="['review:credential:add']">新增</el-button>
+        <el-button data-tour="credential-add" type="primary" plain icon="Plus" @click="handleAdd" v-hasPermi="['review:credential:add']">新增</el-button>
       </el-col>
       <right-toolbar v-model:showSearch="showSearch" @queryTable="getList" />
     </el-row>
 
-    <el-table v-loading="loading" :data="credentialList" empty-text="暂无访问凭据">
+    <el-table data-tour="credential-list" v-loading="loading" :data="credentialList" empty-text="暂无访问凭据">
       <el-table-column label="凭据名称" prop="credentialName" min-width="170" :show-overflow-tooltip="true" />
       <el-table-column label="Git 平台" width="130">
         <template #default="scope">

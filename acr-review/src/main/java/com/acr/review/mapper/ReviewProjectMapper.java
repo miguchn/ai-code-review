@@ -14,6 +14,9 @@ public interface ReviewProjectMapper
     /** 与 selectReviewProjectList 同筛选、同 DataScope 的计数。 */
     int countReviewProjectList(ReviewProject project);
 
+    /** 启用且使用 OCR 审查方式的项目数（含历史兼容值）。 */
+    int countEnabledOcrProjects();
+
     ReviewProject selectByRepository(@Param("provider") String provider,
                                      @Param("repositoryOwner") String repositoryOwner,
                                      @Param("repositoryName") String repositoryName,

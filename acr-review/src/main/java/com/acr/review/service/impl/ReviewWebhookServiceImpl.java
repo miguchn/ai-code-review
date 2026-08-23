@@ -85,9 +85,7 @@ public class ReviewWebhookServiceImpl implements IReviewWebhookService
         int payloadSize = payload == null ? 0 : payload.length;
         if (payloadSize > maxPayloadBytes)
         {
-            String eventType = webhookAdapter.resolveEventType(safeHeaders);
-            String deliveryId = webhookAdapter.resolveDeliveryId(safeHeaders, payload);
-            recordPayloadTooLarge(provider, eventType, deliveryId, payloadSize);
+            log.warn("拒绝超限 Webhook 载荷, provider={}, payloadSize={}", provider, payloadSize);
             return WebhookHandleResult.payloadTooLarge("Webhook 载荷超过大小限制");
         }
 
@@ -103,16 +101,6 @@ public class ReviewWebhookServiceImpl implements IReviewWebhookService
         }
 
         ReviewWebhookEvent event = buildReceivedEvent(provider, eventType, deliveryId, payloadSize);
-        try
-        {
-            eventMapper.insertEvent(event);
-        }
-        catch (DuplicateKeyException e)
-        {
-            eventMapper.incrementDuplicate(provider, deliveryId);
-            return WebhookHandleResult.ok("重复投递，已忽略");
-        }
-
         try
         {
             return process(event, webhookAdapter, safeHeaders, payload);
@@ -161,31 +149,33 @@ public class ReviewWebhookServiceImpl implements IReviewWebhookService
         event.setRepositoryFullPath(repository.fullPath());
 
         // fullPath 是唯一匹配键（owner/name 仅为展示字段）：不做模糊兜底，避免把事件绑到错误项目。
-        // 未命中时事件记录已含载荷 fullPath，可在平台事件列表直接对照项目配置排障。
         ReviewProject project = projectMapper.selectByFullPath(
             event.getProvider(), repository.fullPath(), null);
         if (project == null)
         {
-            finishEvent(event, "IGNORED", "未匹配到已接入的代码项目（仓库 " + repository.fullPath() + " 未接入）");
             return WebhookHandleResult.ok("未匹配到已接入项目，已忽略");
         }
         event.setProjectId(project.getProjectId());
-        if (!"0".equals(project.getStatus()))
-        {
-            finishEventWithProject(event, project, "IGNORED", "项目已停用，事件忽略");
-            return WebhookHandleResult.ok("项目已停用，事件忽略");
-        }
 
         if (project.getWebhookSecretCiphertext() == null || project.getWebhookSecretCiphertext().isBlank())
         {
-            finishEventWithProject(event, project, "FAILED", "项目未配置 Webhook Secret");
             return WebhookHandleResult.unauthorized("Webhook 签名校验失败");
         }
         String secret = cryptoService.decryptWebhookSecret(project.getWebhookSecretCiphertext());
         if (!webhookAdapter.verify(secret, payload, headers))
         {
-            finishEventWithProject(event, project, "FAILED", "Webhook 签名校验失败");
             return WebhookHandleResult.unauthorized("Webhook 签名校验失败");
+        }
+
+        // 安全顺序不可颠倒：只有验签通过的事件才能占用 deliveryId 去重键。
+        if (!persistVerifiedEvent(event))
+        {
+            return WebhookHandleResult.ok("重复投递，已忽略");
+        }
+        if (!"0".equals(project.getStatus()))
+        {
+            finishEventWithProject(event, project, "IGNORED", "项目已停用，事件忽略");
+            return WebhookHandleResult.ok("项目已停用，事件忽略");
         }
 
         if (webhookAdapter.isPullRequestEventType(event.getEventType()))
@@ -317,23 +307,17 @@ public class ReviewWebhookServiceImpl implements IReviewWebhookService
         return WebhookHandleResult.ok(message);
     }
 
-    private void recordPayloadTooLarge(String provider, String eventType, String deliveryId, int payloadSize)
+    private boolean persistVerifiedEvent(ReviewWebhookEvent event)
     {
-        if (deliveryId == null || deliveryId.isBlank() || eventType == null || eventType.isBlank())
-        {
-            return;
-        }
-        ReviewWebhookEvent event = buildReceivedEvent(provider, eventType, deliveryId, payloadSize);
-        event.setProcessStatus("FAILED");
-        event.setProcessMessage("Webhook 载荷超过大小限制");
-        event.setProcessTime(new Date());
         try
         {
             eventMapper.insertEvent(event);
+            return true;
         }
         catch (DuplicateKeyException e)
         {
-            eventMapper.incrementDuplicate(provider, deliveryId);
+            eventMapper.incrementDuplicate(event.getProvider(), event.getDeliveryId());
+            return false;
         }
     }
 

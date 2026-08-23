@@ -13,6 +13,23 @@
         <el-icon class="guide-drawer__close" @click="guideStore.close()"><Close /></el-icon>
       </header>
 
+      <section class="guide-drawer__tours">
+        <div class="guide-drawer__tour-head">
+          <strong>任务式指引</strong>
+          <span>可随时重新开始</span>
+        </div>
+        <button
+          v-for="tour in TOUR_MANIFEST"
+          :key="tour.id"
+          type="button"
+          class="guide-drawer__tour"
+          @click="startTour(tour.id)"
+        >
+          <span>{{ tour.title }}</span>
+          <small>{{ tour.description }}</small>
+        </button>
+      </section>
+
       <el-input
         v-model="keyword"
         class="guide-drawer__search"
@@ -66,11 +83,14 @@
 import { Search, ArrowDown } from '@element-plus/icons-vue'
 import { GUIDE_GROUPS, GUIDE_DOCS, DEFAULT_DOC_ID, findDoc } from '../manifest'
 import useGuideStore from '@/store/modules/guide'
+import useTourStore from '@/store/modules/tour'
+import { TOUR_MANIFEST } from '@/tour/manifest'
 import GuideContent from './GuideContent.vue'
 import useAppStore from '@/store/modules/app'
 import { useRoute } from 'vue-router'
 
 const guideStore = useGuideStore()
+const tourStore = useTourStore()
 const appStore = useAppStore()
 const route = useRoute()
 
@@ -116,6 +136,11 @@ function selectDoc(id) {
   nextTick(() => { contentScrollRef.value && (contentScrollRef.value.scrollTop = 0) })
 }
 
+function startTour(id) {
+  guideStore.close()
+  nextTick(() => tourStore.start(id))
+}
+
 function onClosed() {
   keyword.value = ''
 }
@@ -149,6 +174,66 @@ function onClosed() {
 
   &:hover {
     color: var(--text-primary);
+  }
+}
+
+.guide-drawer__tours {
+  flex-shrink: 0;
+  margin: 0 20px 14px;
+  padding: 12px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-card, 10px);
+  background: var(--neutral-content);
+}
+
+.guide-drawer__tour-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  color: var(--text-primary);
+  font-size: 13px;
+
+  span {
+    color: var(--text-assist);
+    font-size: 12px;
+  }
+}
+
+.guide-drawer__tour {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--radius-control, 6px);
+  background: transparent;
+  color: var(--text-regular);
+  text-align: left;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--bg-hover);
+  }
+
+  & + & {
+    margin-top: 2px;
+  }
+
+  span,
+  small {
+    display: block;
+  }
+
+  span {
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  small {
+    margin-top: 2px;
+    color: var(--text-assist);
+    font-size: 12px;
+    line-height: 18px;
   }
 }
 

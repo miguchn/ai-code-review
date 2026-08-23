@@ -16,9 +16,9 @@
       </div>
     </template>
 
-    <div v-loading="detailLoading" class="drawer-body">
+    <div v-loading="detailLoading" class="drawer-body" data-tour="issue-detail">
       <template v-if="detailIssue">
-        <section class="lifecycle-bar" aria-label="问题生命周期">
+        <section class="lifecycle-bar" aria-label="问题生命周期" data-tour="issue-lifecycle">
           <div
             v-for="(node, idx) in lifecycleNodes"
             :key="node.key"
@@ -246,7 +246,7 @@
           </el-timeline>
         </section>
 
-        <div v-if="showDetailActions || canTransfer" class="drawer-actions">
+        <div v-if="showDetailActions || canTransfer" class="drawer-actions" data-tour="issue-actions">
           <el-button
             v-if="canTransfer"
             :loading="actionLoading"

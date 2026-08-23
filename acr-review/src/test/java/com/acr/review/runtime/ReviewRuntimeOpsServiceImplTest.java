@@ -7,6 +7,8 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import com.acr.review.mapper.ReviewRuntimeStatsMapper;
+import com.acr.review.engine.OcrEngineAvailability;
+import com.acr.review.engine.OcrEngineAvailabilityService;
 import com.acr.review.scheduling.IReviewRuntimeStatusService;
 import com.acr.review.scheduling.ReviewResourceBudgetStatus;
 import com.acr.review.scheduling.ReviewRuntimeStatus;
@@ -20,6 +22,7 @@ class ReviewRuntimeOpsServiceImplTest
         IReviewRuntimeStatusService runtimeStatusService = mock(IReviewRuntimeStatusService.class);
         ReviewRuntimeAlertService alertService = mock(ReviewRuntimeAlertService.class);
         ReviewRuntimeAlertSettings settings = mock(ReviewRuntimeAlertSettings.class);
+        OcrEngineAvailabilityService ocrAvailabilityService = mock(OcrEngineAvailabilityService.class);
         when(settings.pendingAgeMinutes()).thenReturn(30);
         when(settings.deliveryPendingAgeMinutes()).thenReturn(20);
         when(settings.budgetSaturatedMinutes()).thenReturn(10);
@@ -45,9 +48,11 @@ class ReviewRuntimeOpsServiceImplTest
             7, 2, 4, 64, 3, 1, 1, 2, 64, 0,
             new ReviewResourceBudgetStatus(1, 4, 0, 10, 10240, 1, 2, 0, 2, 4, 0, 1, 2, 0)));
         when(alertService.evaluateNow()).thenReturn(List.of());
+        when(ocrAvailabilityService.probe()).thenReturn(new OcrEngineAvailability(
+            true, "ocr", "open-code-review v1", "OCR 引擎可用", new java.util.Date()));
 
         ReviewRuntimeOpsServiceImpl service = new ReviewRuntimeOpsServiceImpl(
-            statsMapper, runtimeStatusService, alertService, settings);
+            statsMapper, runtimeStatusService, alertService, settings, ocrAvailabilityService);
         ReviewRuntimeOverview overview = service.getOverview();
 
         assertEquals(3L, overview.getTask().getPendingCount());
@@ -64,5 +69,7 @@ class ReviewRuntimeOpsServiceImplTest
         assertEquals(6L, overview.getDelivery().getPendingCount());
         assertEquals(2L, overview.getDelivery().getManualCount());
         assertEquals(21L, overview.getDelivery().getOldestPendingDeliveryId());
+        assertEquals("ocr", overview.getEngineAvailability().executable());
+        assertEquals(true, overview.getEngineAvailability().available());
     }
 }

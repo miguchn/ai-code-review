@@ -19,6 +19,7 @@ public final class ReviewRuntimeConstants
     public static final String ALERT_DELIVERY_OVERAGE = "DELIVERY_OVERAGE";
     public static final String ALERT_BUDGET_SATURATED = "BUDGET_SATURATED";
     public static final String ALERT_FAILURE_RATE = "FAILURE_RATE";
+    public static final String ALERT_OCR_ENGINE_UNAVAILABLE = "OCR_ENGINE_UNAVAILABLE";
 
     public static final String TARGET_TASK = "TASK";
     public static final String TARGET_DELIVERY = "DELIVERY";

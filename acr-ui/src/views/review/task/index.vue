@@ -52,7 +52,7 @@
       <right-toolbar v-model:showSearch="showSearch" @queryTable="getList" />
     </el-row>
 
-    <el-table v-loading="loading" :data="taskList" empty-text="暂无审查任务">
+    <el-table data-tour="review-task-table" v-loading="loading" :data="taskList" empty-text="暂无审查任务">
       <el-table-column label="所属项目" prop="projectName" min-width="140" :show-overflow-tooltip="true" />
       <el-table-column label="类型" width="100">
         <template #default="scope">

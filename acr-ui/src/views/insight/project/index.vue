@@ -38,45 +38,47 @@
       <right-toolbar v-model:showSearch="showSearch" @queryTable="loadData" />
     </el-row>
 
-    <div v-if="loading">
-      <el-skeleton :rows="6" animated />
+    <div data-tour="insight-project-table">
+      <div v-if="loading">
+        <el-skeleton :rows="6" animated />
+      </div>
+      <div v-else-if="error" class="insight-state">
+        <span>项目矩阵加载失败</span>
+        <el-button type="primary" link @click="loadData">重试</el-button>
+      </div>
+      <template v-else>
+        <el-alert
+          v-if="!rows.length"
+          type="info"
+          :closable="false"
+          show-icon
+          class="mb16"
+          title="暂无可见项目或选定范围内无审查数据"
+          description="请确认数据权限范围内已接入代码项目，并完成聚合刷新。数据积累起始日期见详情页空态提示。"
+        />
+        <el-table :data="rows" @sort-change="onSortChange" empty-text="暂无项目数据">
+          <el-table-column label="项目" prop="projectName" min-width="160" :show-overflow-tooltip="true">
+            <template #default="scope">
+              <el-link type="primary" @click="goDetail(scope.row)">{{ scope.row.projectName }}</el-link>
+            </template>
+          </el-table-column>
+          <el-table-column label="业务系统" prop="businessSystemName" min-width="120" :show-overflow-tooltip="true" />
+          <el-table-column label="负责人" prop="ownerName" width="100" :show-overflow-tooltip="true" />
+          <el-table-column label="任务数" prop="taskTotal" width="100" sortable="custom" />
+          <el-table-column label="成功率" prop="successRate" width="110" sortable="custom">
+            <template #default="scope">{{ formatRatio(scope.row.successRate) }}</template>
+          </el-table-column>
+          <el-table-column label="新增问题" prop="issueNew" width="110" sortable="custom" />
+          <el-table-column label="未关闭重点" prop="openFocusIssues" width="120" sortable="custom" />
+          <el-table-column label="处置率" prop="dispositionRate" width="110" sortable="custom">
+            <template #default="scope">{{ formatRatio(scope.row.dispositionRate) }}</template>
+          </el-table-column>
+          <el-table-column label="最近审查时间" prop="lastReviewTime" min-width="170" sortable="custom">
+            <template #default="scope">{{ scope.row.lastReviewTime || '--' }}</template>
+          </el-table-column>
+        </el-table>
+      </template>
     </div>
-    <div v-else-if="error" class="insight-state">
-      <span>项目矩阵加载失败</span>
-      <el-button type="primary" link @click="loadData">重试</el-button>
-    </div>
-    <template v-else>
-      <el-alert
-        v-if="!rows.length"
-        type="info"
-        :closable="false"
-        show-icon
-        class="mb16"
-        title="暂无可见项目或选定范围内无审查数据"
-        description="请确认数据权限范围内已接入代码项目，并完成聚合刷新。数据积累起始日期见详情页空态提示。"
-      />
-      <el-table :data="rows" @sort-change="onSortChange" empty-text="暂无项目数据">
-        <el-table-column label="项目" prop="projectName" min-width="160" :show-overflow-tooltip="true">
-          <template #default="scope">
-            <el-link type="primary" @click="goDetail(scope.row)">{{ scope.row.projectName }}</el-link>
-          </template>
-        </el-table-column>
-        <el-table-column label="业务系统" prop="businessSystemName" min-width="120" :show-overflow-tooltip="true" />
-        <el-table-column label="负责人" prop="ownerName" width="100" :show-overflow-tooltip="true" />
-        <el-table-column label="任务数" prop="taskTotal" width="100" sortable="custom" />
-        <el-table-column label="成功率" prop="successRate" width="110" sortable="custom">
-          <template #default="scope">{{ formatRatio(scope.row.successRate) }}</template>
-        </el-table-column>
-        <el-table-column label="新增问题" prop="issueNew" width="110" sortable="custom" />
-        <el-table-column label="未关闭重点" prop="openFocusIssues" width="120" sortable="custom" />
-        <el-table-column label="处置率" prop="dispositionRate" width="110" sortable="custom">
-          <template #default="scope">{{ formatRatio(scope.row.dispositionRate) }}</template>
-        </el-table-column>
-        <el-table-column label="最近审查时间" prop="lastReviewTime" min-width="170" sortable="custom">
-          <template #default="scope">{{ scope.row.lastReviewTime || '--' }}</template>
-        </el-table-column>
-      </el-table>
-    </template>
   </div>
 </template>
 

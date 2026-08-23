@@ -1,5 +1,5 @@
 <template>
-  <section class="wb-panel">
+  <section class="wb-panel" data-tour="workbench-recent">
     <header class="wb-panel-head">
       <h3 class="wb-panel-title">最近动态</h3>
       <el-button link type="primary" size="small" @click="$emit('view-all')">查看全部</el-button>

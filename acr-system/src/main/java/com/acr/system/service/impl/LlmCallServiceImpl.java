@@ -144,8 +144,8 @@ public class LlmCallServiceImpl implements LlmCallService
         {
             if (StringUtils.isNotEmpty(content))
             {
-                LlmCallResult ok = LlmCallResult.success(http.getLatencyMs(), content,
-                    LlmErrorClassifier.snippet(http.getBody(), 120));
+                // 连接检测只需返回解析后的最小内容；原始响应可能包含供应商 reasoning_content。
+                LlmCallResult ok = LlmCallResult.success(http.getLatencyMs(), content, null);
                 attachUsageQuietly(ok, http.getBody());
                 return ok;
             }

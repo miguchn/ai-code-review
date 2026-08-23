@@ -31,6 +31,13 @@ public class ReviewRuntimeController extends BaseController
         return success(runtimeOpsService.getOverview());
     }
 
+    @PreAuthorize("@ss.hasAnyPermi('" + ReviewRuntimeConstants.PERM_RUNTIME_VIEW + ",review:project:list')")
+    @GetMapping("/engine/ocr")
+    public AjaxResult ocrEngineAvailability()
+    {
+        return success(runtimeOpsService.getOcrEngineAvailability());
+    }
+
     @PreAuthorize("@ss.hasPermi('" + ReviewRuntimeConstants.PERM_RUNTIME_VIEW + "')")
     @GetMapping("/backlog/overdue-pending")
     public AjaxResult overduePending(@RequestParam(required = false) Integer limit)

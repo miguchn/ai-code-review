@@ -9,6 +9,7 @@ import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -19,6 +20,7 @@ import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.springframework.dao.DuplicateKeyException;
 import com.acr.review.domain.ReviewProject;
 import com.acr.review.domain.ReviewWebhookEvent;
@@ -118,11 +120,18 @@ class ReviewWebhookServiceImplTest
     @Test
     void ignoresDuplicateDeliveryWithoutNewTask()
     {
+        ReviewProject project = enabledProject();
+        when(projectMapper.selectByFullPath("GITHUB", "miguchn/demo", null)).thenReturn(project);
+        when(cryptoService.decryptWebhookSecret("cipher")).thenReturn("secret");
+        when(webhookAdapter.verify(eq("secret"), eq(PAYLOAD), any())).thenReturn(true);
         when(eventMapper.insertEvent(any())).thenThrow(new DuplicateKeyException("dup"));
 
         WebhookHandleResult result = service.handleGitHubWebhook("pull_request", "d-1", "sig", PAYLOAD);
 
         assertEquals(200, result.httpStatus());
+        InOrder order = inOrder(webhookAdapter, eventMapper);
+        order.verify(webhookAdapter).verify(eq("secret"), eq(PAYLOAD), any());
+        order.verify(eventMapper).insertEvent(any());
         verify(eventMapper).incrementDuplicate("GITHUB", "d-1");
         verify(taskCreateService, never()).createTaskFromEvent(any(), any(), any());
     }
@@ -135,7 +144,7 @@ class ReviewWebhookServiceImplTest
         WebhookHandleResult result = service.handleGitHubWebhook("pull_request", "d-1", "sig", PAYLOAD);
 
         assertEquals(200, result.httpStatus());
-        verify(eventMapper).updateProcessResult(argMatchesStatus("IGNORED"));
+        verify(eventMapper, never()).insertEvent(any());
         verify(taskCreateService, never()).createTaskFromEvent(any(), any(), any());
     }
 
@@ -145,12 +154,14 @@ class ReviewWebhookServiceImplTest
         ReviewProject project = enabledProject();
         project.setStatus("1");
         when(projectMapper.selectByFullPath("GITHUB", "miguchn/demo", null)).thenReturn(project);
+        when(cryptoService.decryptWebhookSecret("cipher")).thenReturn("secret");
+        when(webhookAdapter.verify(eq("secret"), eq(PAYLOAD), any())).thenReturn(true);
 
         WebhookHandleResult result = service.handleGitHubWebhook("pull_request", "d-1", "sig", PAYLOAD);
 
         assertEquals(200, result.httpStatus());
         verify(eventMapper).updateProcessResult(argMatchesStatus("IGNORED"));
-        verify(webhookAdapter, never()).verify(any(), any(), any());
+        verify(webhookAdapter).verify(eq("secret"), eq(PAYLOAD), any());
     }
 
     @Test
@@ -163,7 +174,7 @@ class ReviewWebhookServiceImplTest
         WebhookHandleResult result = service.handleGitHubWebhook("pull_request", "d-1", "sig", PAYLOAD);
 
         assertEquals(401, result.httpStatus());
-        verify(eventMapper).updateProcessResult(argMatchesStatus("FAILED"));
+        verify(eventMapper, never()).insertEvent(any());
     }
 
     @Test
@@ -176,7 +187,7 @@ class ReviewWebhookServiceImplTest
         WebhookHandleResult result = service.handleGitHubWebhook("pull_request", "d-1", "bad-sig", PAYLOAD);
 
         assertEquals(401, result.httpStatus());
-        verify(eventMapper).updateProcessResult(argMatchesStatus("FAILED"));
+        verify(eventMapper, never()).insertEvent(any());
         verify(taskCreateService, never()).createTaskFromEvent(any(), any(), any());
     }
 
@@ -295,6 +306,7 @@ class ReviewWebhookServiceImplTest
         WebhookHandleResult result = service.handleGitHubWebhook("pull_request", "d-1", "sig", huge);
 
         assertEquals(413, result.httpStatus());
+        verify(eventMapper, never()).insertEvent(any());
         verify(taskCreateService, never()).createTaskFromEvent(any(), any(), any());
     }
 

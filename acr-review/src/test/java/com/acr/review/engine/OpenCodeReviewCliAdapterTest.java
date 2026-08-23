@@ -205,6 +205,23 @@ class OpenCodeReviewCliAdapterTest
         assertFalse(summary.contains("\n") && summary.indexOf('\n') == 0);
     }
 
+    @Test
+    void missingExecutableReturnsActionableFailureReason()
+    {
+        properties.setExecutablePath(tempDir.resolve("missing-ocr").toString());
+        ReviewEngineRequest request = new ReviewEngineRequest();
+        request.setWorkingDirectory(createWorkspace().toString());
+        request.setInvocationType(ReviewEngineInvocationType.VERSION);
+
+        ReviewEngineResult result = adapter.execute(request);
+
+        assertFalse(result.isSuccess());
+        assertEquals(ReviewEngineFailureType.CLI_NOT_FOUND, result.getFailureType());
+        assertEquals("未检测到 OCR 引擎（命令：" + properties.getExecutablePath()
+            + "），请安装 open-code-review 或检查 ACR_OCR_EXECUTABLE 配置", result.getFailureReason());
+        assertFalse(result.getFailureReason().contains("Exception"));
+    }
+
     private Path createWorkspace()
     {
         try

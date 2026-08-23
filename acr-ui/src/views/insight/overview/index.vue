@@ -1,6 +1,6 @@
 <template>
   <div class="app-container insight-page">
-    <div class="insight-toolbar">
+    <div class="insight-toolbar" data-tour="insight-filters">
       <el-form :inline="true" :model="query" class="insight-filters">
         <el-form-item label="时间范围">
           <el-radio-group v-model="rangePreset" @change="onPresetChange">
@@ -52,7 +52,7 @@
         :description="emptyHint"
       />
 
-      <el-row :gutter="16" class="kpi-row">
+      <el-row :gutter="16" class="kpi-row" data-tour="insight-kpis">
         <el-col v-for="card in data?.kpis || []" :key="card.code" :xs="24" :sm="12" :lg="6">
           <div class="kpi-card">
             <div class="kpi-name">{{ card.name }}</div>
@@ -62,55 +62,57 @@
         </el-col>
       </el-row>
 
-      <el-row :gutter="16" class="mt16">
-        <el-col :xs="24" :lg="12">
-          <section class="chart-panel">
-            <header class="panel-head">
-              <h3>审查任务趋势</h3>
-              <el-button link type="primary" @click="exportChart('task')">导出 PNG</el-button>
-            </header>
-            <div ref="taskChartRef" class="chart-box" />
-          </section>
-        </el-col>
-        <el-col :xs="24" :lg="12">
-          <section class="chart-panel">
-            <header class="panel-head">
-              <h3>新增问题趋势</h3>
-              <el-button link type="primary" @click="exportChart('issue')">导出 PNG</el-button>
-            </header>
-            <div ref="issueChartRef" class="chart-box" />
-          </section>
-        </el-col>
-      </el-row>
+      <div data-tour="insight-charts">
+        <el-row :gutter="16" class="mt16">
+          <el-col :xs="24" :lg="12">
+            <section class="chart-panel">
+              <header class="panel-head">
+                <h3>审查任务趋势</h3>
+                <el-button link type="primary" @click="exportChart('task')">导出 PNG</el-button>
+              </header>
+              <div ref="taskChartRef" class="chart-box" />
+            </section>
+          </el-col>
+          <el-col :xs="24" :lg="12">
+            <section class="chart-panel">
+              <header class="panel-head">
+                <h3>新增问题趋势</h3>
+                <el-button link type="primary" @click="exportChart('issue')">导出 PNG</el-button>
+              </header>
+              <div ref="issueChartRef" class="chart-box" />
+            </section>
+          </el-col>
+        </el-row>
 
-      <el-row :gutter="16" class="mt16">
-        <el-col :xs="24" :lg="12">
-          <section class="chart-panel">
-            <header class="panel-head">
-              <h3>问题类别分布</h3>
-              <el-button link type="primary" @click="exportChart('category')">导出 PNG</el-button>
-            </header>
-            <div ref="categoryChartRef" class="chart-box" />
-          </section>
-        </el-col>
-        <el-col :xs="24" :lg="12">
-          <section class="chart-panel">
-            <header class="panel-head"><h3>交付渠道健康</h3></header>
-            <el-table :data="data?.deliveryHealth || []" size="small" empty-text="暂无投递数据">
-              <el-table-column label="渠道" min-width="160" :show-overflow-tooltip="true">
-                <template #default="scope">
-                  <dict-tag :options="review_delivery_channel" :value="scope.row.channel" />
-                </template>
-              </el-table-column>
-              <el-table-column label="尝试" prop="total" width="80" />
-              <el-table-column label="成功" prop="success" width="80" />
-              <el-table-column label="成功率" width="100">
-                <template #default="scope">{{ formatRatio(scope.row.successRate) }}</template>
-              </el-table-column>
-            </el-table>
-          </section>
-        </el-col>
-      </el-row>
+        <el-row :gutter="16" class="mt16">
+          <el-col :xs="24" :lg="12">
+            <section class="chart-panel">
+              <header class="panel-head">
+                <h3>问题类别分布</h3>
+                <el-button link type="primary" @click="exportChart('category')">导出 PNG</el-button>
+              </header>
+              <div ref="categoryChartRef" class="chart-box" />
+            </section>
+          </el-col>
+          <el-col :xs="24" :lg="12">
+            <section class="chart-panel">
+              <header class="panel-head"><h3>交付渠道健康</h3></header>
+              <el-table :data="data?.deliveryHealth || []" size="small" empty-text="暂无投递数据">
+                <el-table-column label="渠道" min-width="160" :show-overflow-tooltip="true">
+                  <template #default="scope">
+                    <dict-tag :options="review_delivery_channel" :value="scope.row.channel" />
+                  </template>
+                </el-table-column>
+                <el-table-column label="尝试" prop="total" width="80" />
+                <el-table-column label="成功" prop="success" width="80" />
+                <el-table-column label="成功率" width="100">
+                  <template #default="scope">{{ formatRatio(scope.row.successRate) }}</template>
+                </el-table-column>
+              </el-table>
+            </section>
+          </el-col>
+        </el-row>
+      </div>
     </template>
 
     <el-drawer v-model="dictVisible" title="指标说明" size="420px">

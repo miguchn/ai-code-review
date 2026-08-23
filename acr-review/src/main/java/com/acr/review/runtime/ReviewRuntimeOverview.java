@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import com.acr.review.engine.OcrEngineAvailability;
 import com.acr.review.scheduling.ReviewRuntimeStatus;
 
 /** 运行概览聚合响应（全部中文标签由前端/接口字段说明承载）。 */
@@ -12,6 +13,7 @@ public class ReviewRuntimeOverview
     private TaskSurface task = new TaskSurface();
     private ResourceSurface resource = new ResourceSurface();
     private DeliverySurface delivery = new DeliverySurface();
+    private OcrEngineAvailability engineAvailability;
     private List<ReviewRuntimeAlert> alerts = new ArrayList<>();
     private Map<String, Integer> alertThresholds = new LinkedHashMap<>();
 
@@ -43,6 +45,16 @@ public class ReviewRuntimeOverview
     public void setDelivery(DeliverySurface delivery)
     {
         this.delivery = delivery;
+    }
+
+    public OcrEngineAvailability getEngineAvailability()
+    {
+        return engineAvailability;
+    }
+
+    public void setEngineAvailability(OcrEngineAvailability engineAvailability)
+    {
+        this.engineAvailability = engineAvailability;
     }
 
     public List<ReviewRuntimeAlert> getAlerts()

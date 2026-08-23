@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### 首次登录任务式指引 + OCR 引擎可见性 + 端到端 review 修复
+
+- 首次登录指引：三条任务线 tour（管理员接项目/开发者处置问题/管理者读洞察，各 ≤8 步），`data-tour` 稳定锚点，锚点缺失自动跳过；按角色首登自动启动、localStorage 按用户记完成，功能助手抽屉可重触发；零新依赖、零后端改动；`npm run test:unit`（node --test）覆盖 manifest
+- OCR 引擎可见性（不装默认镜像）：`OcrEngineAvailabilityService` 探针（5s 超时、60s 缓存、异常不抛）；运行概览「审查引擎可用性」面板；仅当不可用且存在启用中 OCR_ENGINE 项目时 WARNING 告警；项目表单选审查引擎时前置提示；OCR 进程缺失失败消息人话化；docker-compose/部署文档补可选安装说明
+- Webhook 安全修复：先匹配项目并验签、通过后才占用 deliveryId 去重键，防伪造请求抢占合法投递 ID；**语义变化**：未验签/未匹配/超限事件不再落库（M2「事件全量落库」调整为验签后落库，见路线图 M2 注记）
+- Docker 数据源参数化：compose 后端可连宿主机存量库（`host.docker.internal` 映射 + 文档说明），四服务 healthy
+- 模型连接测试成功结果只返回解析后的最小内容与用量，不再回显供应商原始响应摘要
+- 企业级 review 事实源 `docs/planning/enterprise-product-review-2026-08-23.md`（含 V1.0 准入遗留项与路线图建议）
+
 ### 问题自动指派闭环（sql/49）
 
 - 问题物化时按提交作者 → PR 发起人 → 项目负责人自动落责任人（EXISTING 不兜底负责人；已有责任人再次命中不改）

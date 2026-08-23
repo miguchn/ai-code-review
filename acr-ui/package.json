@@ -10,6 +10,7 @@
     "build:dev": "vite build --mode development",
     "build:uat": "vite build --mode uat",
     "build:prod": "vite build",
+    "test:unit": "node --test test/*.test.js",
     "preview": "vite preview"
   },
   "dependencies": {

@@ -8,9 +8,9 @@ spring:
     driverClassName: com.mysql.cj.jdbc.Driver
     druid:
       master:
-        url: jdbc:mysql://mysql:3306/ai_code_review?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true
-        username: root
-        password: ${MYSQL_ROOT_PASSWORD:root}
+        url: jdbc:mysql://${ACR_MYSQL_HOST:mysql}:${ACR_MYSQL_PORT:3306}/${ACR_MYSQL_DATABASE:ai_code_review}?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true
+        username: ${ACR_MYSQL_USERNAME:root}
+        password: ${ACR_MYSQL_PASSWORD:${MYSQL_ROOT_PASSWORD:root}}
       slave:
         enabled: false
         url:

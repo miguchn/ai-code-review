@@ -779,6 +779,40 @@ class ReviewTaskExecutionServiceImplTest
     }
 
     @Test
+    void ocrMissingExecutablePersistsActionableTaskFailureMessage()
+    {
+        ReviewTask task = ocrTask(31L);
+        stubOcrPathPrerequisites(task);
+        when(diffFetcher.fetchDiff(any(), any(), eq("abc1234"), eq("def5678")))
+            .thenReturn(GitPullRequestDiffResult.ok(scopeTestDiff()));
+        String message = "未检测到 OCR 引擎（命令：ocr），请安装 open-code-review 或检查 ACR_OCR_EXECUTABLE 配置";
+        when(reviewEngine.execute(any())).thenReturn(com.acr.review.engine.ReviewEngineResult.failure(
+            "open-code-review", null, 0L, "", message, null,
+            com.acr.review.engine.ReviewEngineFailureType.CLI_NOT_FOUND, message));
+        when(runMapper.insertReviewTaskRun(any())).thenAnswer(invocation -> {
+            ReviewTaskRun inserted = invocation.getArgument(0);
+            inserted.setRunId(301L);
+            return 1;
+        });
+
+        service.executeTask(31L);
+
+        verify(reviewEngine).execute(any());
+        org.mockito.ArgumentCaptor<ReviewTask> taskCaptor = org.mockito.ArgumentCaptor.forClass(ReviewTask.class);
+        verify(taskMapper, org.mockito.Mockito.atLeastOnce()).updateTaskExecution(taskCaptor.capture());
+        org.junit.jupiter.api.Assertions.assertTrue(taskCaptor.getAllValues().stream()
+            .anyMatch(candidate -> message.equals(candidate.getFailureMessage())));
+        org.junit.jupiter.api.Assertions.assertTrue(taskCaptor.getAllValues().stream()
+            .filter(candidate -> candidate.getFailureMessage() != null)
+            .noneMatch(candidate -> candidate.getFailureMessage().contains("Exception")));
+
+        org.mockito.ArgumentCaptor<ReviewTaskRun> runCaptor = org.mockito.ArgumentCaptor.forClass(ReviewTaskRun.class);
+        verify(runMapper, org.mockito.Mockito.atLeastOnce()).updateReviewTaskRun(runCaptor.capture());
+        org.junit.jupiter.api.Assertions.assertTrue(runCaptor.getAllValues().stream()
+            .anyMatch(candidate -> message.equals(candidate.getFailureMessage())));
+    }
+
+    @Test
     void ocrPathPassesExcludePatternsAndPersistsScopeSnapshot()
     {
         // 平台默认 + 测试文件 + 项目排除合并经 --exclude 传入引擎；决策快照落 scope_decision_json

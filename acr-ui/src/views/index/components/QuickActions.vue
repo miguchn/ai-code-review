@@ -8,6 +8,7 @@
         v-for="action in actions"
         :key="action.path"
         class="wb-quick-item"
+        :data-tour="action.path === '/project-access/project' ? 'workbench-quick-project' : undefined"
         role="button"
         tabindex="0"
         @click="go(action)"

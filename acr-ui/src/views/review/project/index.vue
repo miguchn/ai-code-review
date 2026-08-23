@@ -30,7 +30,7 @@
       <el-col :span="1.5">
         <el-tooltip :disabled="options.credentialBindingEditable" content="新项目必须由可绑定平台凭据的平台角色创建" placement="top">
           <span>
-            <el-button type="primary" plain icon="Plus" :disabled="!options.credentialBindingEditable"
+            <el-button data-tour="project-add" type="primary" plain icon="Plus" :disabled="!options.credentialBindingEditable"
               @click="handleAdd" v-hasPermi="['review:project:add']">新增</el-button>
           </span>
         </el-tooltip>
@@ -119,7 +119,7 @@
     <el-dialog :title="title" v-model="open" width="920px" top="4vh" append-to-body
       @opened="scrollProjectFormToTop" @closed="reset">
       <el-form ref="projectRef" :model="form" :rules="rules" label-width="110px" class="project-form">
-        <el-tabs v-model="activeTab" class="project-tabs">
+        <el-tabs v-model="activeTab" class="project-tabs" data-tour="project-wizard-tabs">
           <el-tab-pane label="基础信息" name="basic">
             <el-row :gutter="16">
               <el-col :span="12">
@@ -235,7 +235,9 @@
             </el-collapse>
           </el-tab-pane>
 
-          <el-tab-pane label="Webhook" name="webhook">
+          <el-tab-pane name="webhook">
+            <template #label><span data-tour="project-webhook-tab">Webhook</span></template>
+            <div data-tour="project-webhook-form">
             <el-form-item label="说明">
               <div class="inline-tip">
                 Webhook 用于接收合并请求或 Push 事件并创建审查任务。Secret 加密保存，页面不回显明文。
@@ -271,6 +273,7 @@
               <span v-if="form.lastWebhookTime">{{ formatDateTime(form.lastWebhookTime) }} · {{ form.lastWebhookResult }}</span>
               <span v-else class="inline-tip">尚未接收 Webhook 事件</span>
             </el-form-item>
+            </div>
           </el-tab-pane>
 
           <el-tab-pane label="通知" name="notify">
@@ -511,6 +514,12 @@
                   </div>
                 </div>
               </el-form-item>
+              <ocr-availability-alert
+                class="ocr-availability-alert"
+                :availability="ocrAvailability"
+                :loading="ocrAvailabilityLoading"
+                :error="ocrAvailabilityError"
+              />
             </template>
           </el-tab-pane>
         </el-tabs>
@@ -588,6 +597,8 @@ import {
   listReviewProjectMembers, saveReviewProjectMember, delReviewProjectMember
 } from '@/api/review/project'
 import { GIT_PROVIDER_FALLBACK } from '@/constants/gitProviders'
+import { getOcrEngineAvailability } from '@/api/review/runtime'
+import OcrAvailabilityAlert from '@/components/OcrAvailabilityAlert'
 import useGuideStore from '@/store/modules/guide'
 import { findBranchIntersection } from '@/utils/reviewDisplay'
 
@@ -608,6 +619,9 @@ const open = ref(false)
 const title = ref('')
 const testingId = ref()
 const submitting = ref(false)
+const ocrAvailability = ref(null)
+const ocrAvailabilityLoading = ref(false)
+const ocrAvailabilityError = ref('')
 const repositoryReading = ref(false)
 const repositoryInfoLoaded = ref(false)
 const loadedRepositorySignature = ref('')
@@ -907,6 +921,9 @@ function reset() {
   branchSearch.value = ''
   advancedSections.value = []
   showAllTemplates.value = false
+  ocrAvailability.value = null
+  ocrAvailabilityLoading.value = false
+  ocrAvailabilityError.value = ''
   proxy.resetForm('projectRef')
 }
 
@@ -924,6 +941,7 @@ function handleAdd() {
   loadOptions()
   open.value = true
   title.value = '新增代码审查项目'
+  loadOcrEngineAvailability()
 }
 
 function handleUpdate(row) {
@@ -957,6 +975,7 @@ function handleUpdate(row) {
     loadOptions()
     open.value = true
     title.value = '修改代码审查项目'
+    if (project.reviewMode === 'OCR_ENGINE') loadOcrEngineAvailability()
   })
 }
 
@@ -1013,8 +1032,22 @@ function handleReviewModeChange(mode) {
     form.value.modelId = undefined
     form.value.templateId = undefined
     form.value.engineCode = form.value.engineCode || 'OPEN_CODE_REVIEW'
+    loadOcrEngineAvailability()
   }
   proxy.$refs.projectRef?.clearValidate(['modelId', 'templateId', 'engineCode'])
+}
+
+function loadOcrEngineAvailability() {
+  ocrAvailabilityLoading.value = true
+  ocrAvailabilityError.value = ''
+  getOcrEngineAvailability().then(response => {
+    ocrAvailability.value = response.data || null
+  }).catch(err => {
+    ocrAvailability.value = null
+    ocrAvailabilityError.value = err?.message || '加载失败'
+  }).finally(() => {
+    ocrAvailabilityLoading.value = false
+  })
 }
 
 function handlePrimaryStackChange() {

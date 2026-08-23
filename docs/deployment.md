@@ -96,7 +96,23 @@ npm run dev
 
 默认管理员：`admin / admin123`
 
+### 6. Docker 复用宿主机已有 MySQL
+
+Docker Compose 默认使用内置 MySQL。需要保留并复用宿主机现有测试库时，在 `.env` 增加：
+
+```dotenv
+ACR_MYSQL_HOST=host.docker.internal
+ACR_MYSQL_PORT=3306
+ACR_MYSQL_DATABASE=ai_code_review
+ACR_MYSQL_USERNAME=root
+ACR_MYSQL_PASSWORD=your_password
+```
+
+Compose 会为 Linux 自动补充 `host-gateway` 映射，macOS / Windows 可直接使用同一主机名。存量数据库必须先按 `sql/README.md` 执行尚未应用的增量脚本；不得对已有业务数据执行 `init-full.sql`。
+
 ## OCR 引擎安装（可选）
+
+默认 Docker 后端镜像不安装 open-code-review CLI。未使用 `OCR_ENGINE` 的项目无需安装；需要在容器中使用时，应采用自定义镜像或挂载已安装的可执行文件，不要假定宿主机的 `ocr` 命令会自动出现在容器内。
 
 ```bash
 # 安装
@@ -106,7 +122,7 @@ npm install -g @alibaba-group/open-code-review
 ocr version
 ```
 
-平台通过 `review.engine.*` 或以下环境变量配置本地 CLI 适配，不在业务代码中写死路径：
+平台通过 `review.engine.*` 或以下环境变量配置本地 CLI 适配，不在业务代码中写死路径。Docker 场景中的路径必须是容器内路径：
 
 | 环境变量 | 说明 | 默认值 |
 |---------|------|--------|
@@ -135,7 +151,9 @@ services:
   backend:
     build: ./acr-admin
     depends_on: [mysql, redis]
-    # 容器内安装 OCR CLI
+    # OCR 可选；需要时使用已安装 CLI 的自定义镜像或挂载可执行文件
+    environment:
+      ACR_OCR_EXECUTABLE: ocr
   frontend:
     image: nginx:alpine
     volumes:

@@ -123,7 +123,7 @@
 import echarts from '@/utils/echarts'
 import { getInsightProjectDetail } from '@/api/insight'
 import { issueCategoryLabel, severityLabel } from '@/utils/reviewDisplay'
-import { formatChange, formatKpiValue, toRangePreset } from '../components/insightFilter'
+import { formatChange, formatKpiValue, toIdParam, toRangePreset } from '../components/insightFilter'
 
 const route = useRoute()
 const router = useRouter()
@@ -167,10 +167,12 @@ function buildParams() {
 }
 
 async function loadData() {
+  const activeProjectId = toIdParam(projectId.value)
+  if (!activeProjectId) return
   loading.value = true
   error.value = false
   try {
-    const res = await getInsightProjectDetail(projectId.value, buildParams())
+    const res = await getInsightProjectDetail(activeProjectId, buildParams())
     data.value = res.data
     // 先翻转 loading 再渲染：骨架 v-if 会移除图表容器，须等容器挂载后渲染
     loading.value = false

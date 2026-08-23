@@ -11,6 +11,7 @@
       <settings ref="settingRef" />
     </div>
     <guide-drawer />
+    <tour-overlay />
   </div>
 </template>
 
@@ -19,6 +20,7 @@ import { useWindowSize } from '@vueuse/core'
 import Sidebar from './components/Sidebar/index.vue'
 import { AppMain, Navbar, Settings, TagsView } from './components'
 import GuideDrawer from '@/guide/components/GuideDrawer.vue'
+import TourOverlay from '@/tour/components/TourOverlay.vue'
 import useAppStore from '@/store/modules/app'
 import useSettingsStore from '@/store/modules/settings'
 

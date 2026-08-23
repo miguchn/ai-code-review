@@ -16,6 +16,9 @@ import org.springframework.context.SmartLifecycle;
 import org.springframework.stereotype.Service;
 import com.acr.review.delivery.ReviewDeliveryConstants;
 import com.acr.review.domain.ReviewPipelineConstants;
+import com.acr.review.engine.OcrEngineAvailability;
+import com.acr.review.engine.OcrEngineAvailabilityService;
+import com.acr.review.mapper.ReviewProjectMapper;
 import com.acr.review.mapper.ReviewRuntimeStatsMapper;
 import com.acr.review.scheduling.IReviewRuntimeStatusService;
 import com.acr.review.scheduling.ReviewResourceBudgetStatus;
@@ -33,6 +36,8 @@ public class ReviewRuntimeAlertService implements SmartLifecycle
     private final ReviewRuntimeStatsMapper statsMapper;
     private final IReviewRuntimeStatusService runtimeStatusService;
     private final ScheduledExecutorService controlScheduler;
+    private final OcrEngineAvailabilityService ocrAvailabilityService;
+    private final ReviewProjectMapper projectMapper;
     private final AtomicBoolean running = new AtomicBoolean(false);
     private final AtomicReference<List<ReviewRuntimeAlert>> latestAlerts = new AtomicReference<>(List.of());
     private final AtomicReference<Long> budgetSaturatedSinceMs = new AtomicReference<>(null);
@@ -41,12 +46,16 @@ public class ReviewRuntimeAlertService implements SmartLifecycle
     public ReviewRuntimeAlertService(ReviewRuntimeAlertSettings settings,
                                      ReviewRuntimeStatsMapper statsMapper,
                                      IReviewRuntimeStatusService runtimeStatusService,
-                                     @Qualifier("reviewTaskControlScheduler") ScheduledExecutorService controlScheduler)
+                                     @Qualifier("reviewTaskControlScheduler") ScheduledExecutorService controlScheduler,
+                                     OcrEngineAvailabilityService ocrAvailabilityService,
+                                     ReviewProjectMapper projectMapper)
     {
         this.settings = settings;
         this.statsMapper = statsMapper;
         this.runtimeStatusService = runtimeStatusService;
         this.controlScheduler = controlScheduler;
+        this.ocrAvailabilityService = ocrAvailabilityService;
+        this.projectMapper = projectMapper;
     }
 
     public List<ReviewRuntimeAlert> currentAlerts()
@@ -74,7 +83,32 @@ public class ReviewRuntimeAlertService implements SmartLifecycle
         appendDeliveryOverage(alerts, now);
         appendBudgetSaturation(alerts, status, now);
         appendFailureRate(alerts, now);
+        appendOcrEngineUnavailable(alerts, now);
         return alerts;
+    }
+
+    private void appendOcrEngineUnavailable(List<ReviewRuntimeAlert> alerts, Date now)
+    {
+        OcrEngineAvailability availability = ocrAvailabilityService.probe();
+        if (availability == null || availability.available())
+        {
+            return;
+        }
+        int affectedProjects = projectMapper.countEnabledOcrProjects();
+        if (affectedProjects <= 0)
+        {
+            return;
+        }
+        alerts.add(new ReviewRuntimeAlert(
+            ReviewRuntimeConstants.ALERT_OCR_ENGINE_UNAVAILABLE,
+            "warning",
+            "OCR 引擎不可用",
+            "OCR 引擎当前不可用，影响 " + affectedProjects + " 个启用中的 OCR_ENGINE 项目",
+            availability.message(),
+            ReviewRuntimeConstants.TARGET_RUNTIME,
+            null,
+            null,
+            now));
     }
 
     private void appendPendingOverage(List<ReviewRuntimeAlert> alerts, Date now)

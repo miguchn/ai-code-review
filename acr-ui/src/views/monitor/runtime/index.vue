@@ -86,6 +86,28 @@
         </el-col>
       </el-row>
 
+      <section class="surface-panel mb16 engine-availability-panel">
+        <header class="panel-head">
+          <h3>审查引擎可用性</h3>
+          <span class="hint">版本探测结果缓存 60 秒</span>
+        </header>
+        <div class="engine-availability">
+          <el-tag
+            :type="engineAvailability.available ? 'success' : (engineAvailability.detectedAt ? 'warning' : 'info')"
+            effect="plain"
+          >
+            {{ engineAvailability.available ? '可用' : (engineAvailability.detectedAt ? '不可用' : '未探测') }}
+          </el-tag>
+          <div class="engine-detail">
+            <strong>OCR / open-code-review</strong>
+            <span v-if="engineAvailability.executable">命令：{{ engineAvailability.executable }}</span>
+            <span v-if="engineAvailability.version">版本：{{ engineAvailability.version }}</span>
+            <span v-if="engineAvailability.message">{{ engineAvailability.message }}</span>
+            <span v-if="engineAvailability.detectedAt">探测时间：{{ formatDateTime(engineAvailability.detectedAt) }}</span>
+          </div>
+        </div>
+      </section>
+
       <section class="surface-panel mb16">
         <header class="panel-head">
           <h3>告警</h3>
@@ -167,6 +189,7 @@ const updatedAt = ref('')
 const task = ref({})
 const resource = ref({})
 const delivery = ref({})
+const engineAvailability = ref({})
 const alerts = ref([])
 const backlogTab = ref('overdue')
 const backlogRows = ref([])
@@ -179,6 +202,7 @@ function loadAll() {
     task.value = data.task || {}
     resource.value = data.resource || {}
     delivery.value = data.delivery || {}
+    engineAvailability.value = data.engineAvailability || {}
     alerts.value = data.alerts || []
     updatedAt.value = formatDateTime(new Date())
   }).catch(err => {
@@ -269,6 +293,19 @@ onMounted(() => loadAll())
   color: #166534;
 }
 .hint { font-size: 12px; color: #64748b; }
+.engine-availability {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.engine-detail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  color: #475569;
+  font-size: 13px;
+}
+.engine-detail strong { color: #1e293b; }
 .metric-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

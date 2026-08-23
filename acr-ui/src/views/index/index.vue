@@ -16,7 +16,7 @@
     </template>
 
     <template v-else>
-      <header class="wb-header">
+      <header class="wb-header" data-tour="workbench-summary">
         <h2 class="wb-title">工作台</h2>
         <div v-if="showScopeInfo" class="wb-scope">
           <span v-if="scope.projectCount != null" class="wb-scope-item">
