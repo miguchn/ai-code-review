@@ -217,4 +217,12 @@
                  END
         ORDER BY stat_date ASC
     </select>
+
+    <select id="selectAuthorEmailsByEventId" resultType="string">
+        SELECT DISTINCT LOWER(TRIM(author_email))
+        FROM review_commit_fact
+        WHERE source_event_id = #{eventId}
+          AND author_email IS NOT NULL
+          AND TRIM(author_email) != ''
+    </select>
 </mapper>

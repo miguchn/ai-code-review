@@ -2,6 +2,7 @@ package com.acr.review.delivery;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
@@ -185,6 +186,64 @@ class ReviewDeliveryIntentServiceTest
         assertEquals(ReviewDeliveryConstants.STATUS_PENDING, captor.getValue().getDeliveryStatus());
         verify(mapper, never()).countRecentImDeliveries(any(), any(), any(), anyInt());
         verify(publisher).publishEvent(any(ReviewDeliveryPendingEvent.class));
+    }
+
+    @Test
+    void enqueueOverdueRemind_skipsPolicyAndCooldown_andIsIdempotent()
+    {
+        ReviewProject project = notifyEnabledProject();
+        project.setNotifyResultPolicy(ReviewDeliveryConstants.NOTIFY_POLICY_BLOCK_ONLY);
+        project.setNotifyCooldownMinutes(60);
+        ReviewTask task = task(10L, ReviewPipelineConstants.TASK_SUCCESS);
+        when(channelService.selectReviewNotifyChannelById(7L)).thenReturn(activeDingTalkChannel());
+        when(mapper.selectByIdempotencyKey(any())).thenReturn(null);
+        when(mapper.upsertDeliveryIntent(any())).thenAnswer(invocation -> {
+            invocation.<ReviewDeliveryRecord>getArgument(0).setDeliveryId(77L);
+            return 1;
+        });
+
+        ReviewDeliveryRecord result = service.enqueueOverdueRemind(project, task, "system");
+
+        ArgumentCaptor<ReviewDeliveryRecord> captor = ArgumentCaptor.forClass(ReviewDeliveryRecord.class);
+        verify(mapper).upsertDeliveryIntent(captor.capture());
+        assertEquals(ReviewDeliveryConstants.TRIGGER_OVERDUE_REMIND, captor.getValue().getTriggerSource());
+        assertTrue(captor.getValue().getIdempotencyKey().startsWith("overdue-remind:3:"));
+        assertEquals(ReviewDeliveryConstants.STATUS_PENDING, captor.getValue().getDeliveryStatus());
+        assertEquals(77L, result.getDeliveryId());
+        verify(mapper, never()).countRecentImDeliveries(any(), any(), any(), anyInt());
+
+        ReviewDeliveryRecord existing = new ReviewDeliveryRecord();
+        existing.setDeliveryId(77L);
+        when(mapper.selectByIdempotencyKey(any())).thenReturn(existing);
+        assertEquals(77L, service.enqueueOverdueRemind(project, task, "system").getDeliveryId());
+    }
+
+    @Test
+    void enqueueOverdueRemind_nullPrNumberDoesNotMutateAnchor()
+    {
+        ReviewProject project = notifyEnabledProject();
+        ReviewTask task = task(10L, ReviewPipelineConstants.TASK_SUCCESS);
+        task.setPrNumber(null);
+        when(channelService.selectReviewNotifyChannelById(7L)).thenReturn(activeDingTalkChannel());
+        when(mapper.selectByIdempotencyKey(any())).thenReturn(null);
+        when(mapper.upsertDeliveryIntent(any())).thenAnswer(invocation -> {
+            invocation.<ReviewDeliveryRecord>getArgument(0).setDeliveryId(78L);
+            return 1;
+        });
+
+        service.enqueueOverdueRemind(project, task, "system");
+
+        assertNull(task.getPrNumber());
+        ArgumentCaptor<ReviewDeliveryRecord> captor = ArgumentCaptor.forClass(ReviewDeliveryRecord.class);
+        verify(mapper).upsertDeliveryIntent(captor.capture());
+        assertEquals(0, captor.getValue().getPrNumber());
+    }
+
+    @Test
+    void enqueueOverdueRemind_notifyDisabledReturnsNull()
+    {
+        assertNull(service.enqueueOverdueRemind(project(), task(10L, ReviewPipelineConstants.TASK_SUCCESS), "system"));
+        verify(mapper, never()).upsertDeliveryIntent(any());
     }
 
     private static ReviewTask task(Long id, String status)

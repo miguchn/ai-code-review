@@ -12,6 +12,18 @@ export function removeMyIdentity(id) {
   return request({ url: '/system/userprofile/identities/' + id, method: 'delete' })
 }
 
+export function listMyImIdentities() {
+  return request({ url: '/system/userprofile/imIdentities', method: 'get' })
+}
+
+export function addMyImIdentity(data) {
+  return request({ url: '/system/userprofile/imIdentities', method: 'post', data })
+}
+
+export function removeMyImIdentity(id) {
+  return request({ url: '/system/userprofile/imIdentities/' + id, method: 'delete' })
+}
+
 export function listIdentityCandidates() {
   return request({ url: '/insight/identity/candidates', method: 'get' })
 }

@@ -40,4 +40,7 @@ public interface ReviewCommitFactMapper
                                                             @Param("beginDate") Date beginDate,
                                                             @Param("endDate") Date endDate,
                                                             @Param("projectIds") List<Long> projectIds);
+
+    /** push 线任务：按受理事件取提交作者邮箱集合。 */
+    List<String> selectAuthorEmailsByEventId(@Param("eventId") Long eventId);
 }

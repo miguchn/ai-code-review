@@ -25,6 +25,9 @@ public interface ReviewTaskMapper
     ReviewTask selectLatestSuccessByProjectAndPr(@Param("projectId") Long projectId,
                                                  @Param("prNumber") Integer prNumber);
 
+    /** 项目最近一条审查任务（逾期提醒挂载锚点，不限状态）。 */
+    ReviewTask selectLatestByProjectId(@Param("projectId") Long projectId);
+
     /** 查询到期的 PENDING/RETRYING 候选；调用方按项目轮询后再提交执行。 */
     List<ReviewTask> selectDispatchableTasks(@Param("limit") int limit);
 

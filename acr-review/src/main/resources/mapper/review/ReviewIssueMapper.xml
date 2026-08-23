@@ -59,6 +59,11 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="recheckTaskId" column="recheck_task_id" />
         <result property="recheckRunId" column="recheck_run_id" />
         <result property="recheckCommitSha" column="recheck_commit_sha" />
+        <result property="assigneeUserId" column="assignee_user_id" />
+        <result property="assignSource" column="assign_source" />
+        <result property="assignTime" column="assign_time" />
+        <result property="overdueFlag" column="overdue_flag" />
+        <result property="assigneeName" column="assignee_name" />
         <result property="stageEnteredTime" column="stage_entered_time" />
         <result property="createBy" column="create_by" />
         <result property="createTime" column="create_time" />
@@ -74,6 +79,8 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                i.evidence, i.suggestion, i.origin, i.status, i.resolve_note, i.close_source,
                i.closed_by, i.closed_time, i.missed_streak, i.last_seen_head_sha, i.last_missed_run_id,
                i.recheck_task_id, i.recheck_run_id, i.recheck_commit_sha,
+               i.assignee_user_id, i.assign_source, i.assign_time, i.overdue_flag,
+               coalesce(assignee.nick_name, assignee.user_name) as assignee_name,
                last_task.event_source, last_task.pr_title, last_task.pr_author,
                last_task.source_branch, last_task.target_branch, last_task.head_sha,
                p.repository_owner, p.repository_name, p.repository_url,
@@ -85,6 +92,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         left join review_project p on p.project_id = i.project_id
         left join sys_business_system bs on bs.system_id = p.business_system_id
         left join review_task last_task on last_task.task_id = i.last_task_id
+        left join sys_user assignee on assignee.user_id = i.assignee_user_id
         left join sys_dept d on d.dept_id = p.dept_id
         left join sys_user owner on owner.user_id = p.owner_user_id
     </sql>
@@ -139,6 +147,16 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <if test="endTime != null and endTime != ''">
             and i.create_time &lt;= #{endTime}
         </if>
+        <if test="assigneeUserId != null">
+            and i.assignee_user_id = #{assigneeUserId}
+        </if>
+        <if test="assignFilter != null and assignFilter == 'UNASSIGNED'">
+            and i.assignee_user_id is null
+            and i.status in ('AWAITING_CONFIRM', 'AWAITING_FIX', 'RECHECKING')
+        </if>
+        <if test="overdueFlag != null and overdueFlag != ''">
+            and i.overdue_flag = #{overdueFlag}
+        </if>
     </sql>
 
     <select id="selectIssueById" resultMap="ReviewIssueResult">
@@ -154,6 +172,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                evidence, suggestion, origin, status, resolve_note, close_source,
                closed_by, closed_time, missed_streak, last_seen_head_sha, last_missed_run_id,
                recheck_task_id, recheck_run_id, recheck_commit_sha,
+               assignee_user_id, assign_source, assign_time, overdue_flag,
                create_by, create_time, update_by, update_time
         from review_issue
         where project_id = #{projectId}
@@ -227,12 +246,14 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
          issue_rank, severity, category, title, description, file_path, start_line, end_line,
          evidence, suggestion, origin, status, resolve_note, close_source, closed_by, closed_time,
          missed_streak, last_seen_head_sha, last_missed_run_id, recheck_task_id, recheck_run_id, recheck_commit_sha,
+         assignee_user_id, assign_source, assign_time, overdue_flag,
          create_by, create_time, update_by, update_time)
         values
         (#{projectId}, #{provider}, #{prNumber}, #{refBranch}, #{fingerprint}, #{familyKey}, #{firstTaskId}, #{firstRunId}, #{lastTaskId}, #{lastRunId},
          #{issueRank}, #{severity}, #{category}, #{title}, #{description}, #{filePath}, #{startLine}, #{endLine},
          #{evidence}, #{suggestion}, #{origin}, #{status}, #{resolveNote}, #{closeSource}, #{closedBy}, #{closedTime},
          #{missedStreak}, #{lastSeenHeadSha}, #{lastMissedRunId}, #{recheckTaskId}, #{recheckRunId}, #{recheckCommitSha},
+         #{assigneeUserId}, #{assignSource}, #{assignTime}, #{overdueFlag},
          #{createBy}, sysdate(), #{updateBy}, sysdate())
     </insert>
 
@@ -272,6 +293,57 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             close_source = #{closeSource},
             closed_by = #{closedBy},
             closed_time = #{closedTime},
+            update_by = #{updateBy},
+            update_time = sysdate()
+        where issue_id = #{issueId}
+    </update>
+
+    <select id="selectAssignedByLastTaskId" resultMap="ReviewIssueResult">
+        <include refid="selectColumns" />
+        where i.last_task_id = #{taskId}
+          and i.assignee_user_id is not null
+        order by i.issue_id asc
+    </select>
+
+    <select id="selectActiveIssuesForOverdueScan" resultMap="ReviewIssueResult">
+        select i.issue_id, i.project_id, i.severity, i.status, i.title,
+               i.assignee_user_id, i.overdue_flag,
+               coalesce(assignee.nick_name, assignee.user_name) as assignee_name,
+               coalesce((select max(a.create_time) from review_issue_action a
+                         where a.issue_id = i.issue_id and a.from_status &lt;&gt; a.to_status),
+                        i.create_time) as stage_entered_time
+        from review_issue i
+        left join sys_user assignee on assignee.user_id = i.assignee_user_id
+        where i.status in ('AWAITING_CONFIRM', 'AWAITING_FIX', 'RECHECKING')
+        order by i.project_id asc, i.issue_id asc
+    </select>
+
+    <select id="selectOverdueActiveByProject" resultMap="ReviewIssueResult">
+        select i.issue_id, i.project_id, i.severity, i.status, i.title,
+               i.assignee_user_id, i.overdue_flag,
+               coalesce(assignee.nick_name, assignee.user_name) as assignee_name
+        from review_issue i
+        left join sys_user assignee on assignee.user_id = i.assignee_user_id
+        where i.project_id = #{projectId}
+          and i.overdue_flag = 'Y'
+          and i.status in ('AWAITING_CONFIRM', 'AWAITING_FIX', 'RECHECKING')
+        order by field(i.severity, 'CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO'), i.issue_id asc
+    </select>
+
+    <update id="updateOverdueFlag">
+        update review_issue
+        set overdue_flag = #{overdueFlag},
+            update_by = 'system',
+            update_time = sysdate()
+        where issue_id = #{issueId}
+          and overdue_flag &lt;&gt; #{overdueFlag}
+    </update>
+
+    <update id="updateIssueAssignment" parameterType="com.acr.review.domain.ReviewIssue">
+        update review_issue
+        set assignee_user_id = #{assigneeUserId},
+            assign_source = #{assignSource},
+            assign_time = #{assignTime},
             update_by = #{updateBy},
             update_time = sysdate()
         where issue_id = #{issueId}

@@ -48,6 +48,19 @@ public class ReviewIssue extends BaseEntity
     private Long recheckRunId;
     private String recheckCommitSha;
 
+    /** 责任人平台用户 ID。 */
+    private Long assigneeUserId;
+    /** 指派来源：AUTO_COMMIT / AUTO_PR_AUTHOR / AUTO_OWNER / TRANSFER。 */
+    private String assignSource;
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    private Date assignTime;
+    /** 逾期标志 Y/N。 */
+    private String overdueFlag;
+    /** 列表展示：责任人姓名。 */
+    private String assigneeName;
+    /** 查询：MINE / UNASSIGNED。 */
+    private String assignFilter;
+
     /** 列表展示 */
     private String projectName;
     private String businessSystemName;
@@ -154,6 +167,18 @@ public class ReviewIssue extends BaseEntity
     public void setRecheckRunId(Long recheckRunId) { this.recheckRunId = recheckRunId; }
     public String getRecheckCommitSha() { return recheckCommitSha; }
     public void setRecheckCommitSha(String recheckCommitSha) { this.recheckCommitSha = recheckCommitSha; }
+    public Long getAssigneeUserId() { return assigneeUserId; }
+    public void setAssigneeUserId(Long assigneeUserId) { this.assigneeUserId = assigneeUserId; }
+    public String getAssignSource() { return assignSource; }
+    public void setAssignSource(String assignSource) { this.assignSource = assignSource; }
+    public Date getAssignTime() { return assignTime; }
+    public void setAssignTime(Date assignTime) { this.assignTime = assignTime; }
+    public String getOverdueFlag() { return overdueFlag; }
+    public void setOverdueFlag(String overdueFlag) { this.overdueFlag = overdueFlag; }
+    public String getAssigneeName() { return assigneeName; }
+    public void setAssigneeName(String assigneeName) { this.assigneeName = assigneeName; }
+    public String getAssignFilter() { return assignFilter; }
+    public void setAssignFilter(String assignFilter) { this.assignFilter = assignFilter; }
     public String getProjectName() { return projectName; }
     public void setProjectName(String projectName) { this.projectName = projectName; }
     public String getBusinessSystemName() { return businessSystemName; }

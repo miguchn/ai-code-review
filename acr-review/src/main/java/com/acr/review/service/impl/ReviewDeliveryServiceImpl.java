@@ -20,6 +20,7 @@ import com.acr.review.delivery.ReviewDeliveryIntentService;
 import com.acr.review.delivery.ReviewDeliveryRuntimeSettings;
 import com.acr.review.delivery.ReviewInlineCommentRenderer;
 import com.acr.review.delivery.ReviewNotifyMessageRenderer;
+import com.acr.review.delivery.ReviewOverdueRemindRenderer;
 import com.acr.review.delivery.ReviewSummaryContent;
 import com.acr.review.delivery.ReviewSummaryContentFactory;
 import com.acr.review.domain.GitCredential;
@@ -339,6 +340,10 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
         {
             throw new ServiceException("项目未启用通知或未绑定渠道");
         }
+        if (ReviewDeliveryConstants.TRIGGER_OVERDUE_REMIND.equals(record.getTriggerSource()))
+        {
+            return sendOverdueRemind(project, record);
+        }
         boolean success = ReviewPipelineConstants.TASK_SUCCESS.equals(task.getTaskStatus());
         boolean failed = ReviewPipelineConstants.TASK_FAILED.equals(task.getTaskStatus());
         if (!success && !failed)
@@ -365,12 +370,34 @@ public class ReviewDeliveryServiceImpl implements IReviewDeliveryService
             ? "AI Code Review · " + content.getConclusionLabel()
             : "AI Code Review · 执行失败";
         String body = success
-            ? ReviewNotifyMessageRenderer.renderSuccess(content)
+            ? ReviewNotifyMessageRenderer.renderSuccess(content, channel.channelType())
             : ReviewNotifyMessageRenderer.renderFailed(content);
+        java.util.List<String> atIds = success
+            ? ReviewNotifyMessageRenderer.collectAtIds(content.getAssignees(), channel.channelType())
+            : java.util.List.of();
         String snapshot = buildContentSnapshot(ReviewDeliveryConstants.SNAPSHOT_KIND_IM,
             channel.channelType(), title, body);
         robotClients.require(channel.channelType()).send(
-            channel.webhookUrl(), channel.secret(), title, body);
+            channel.webhookUrl(), channel.secret(), title, body, atIds);
+        return new ImDeliveryResult(channel.channelType(), snapshot);
+    }
+
+    private ImDeliveryResult sendOverdueRemind(ReviewProject project, ReviewDeliveryRecord record)
+    {
+        DecryptedNotifyChannel channel = notifyChannelService.getDecryptedChannel(project.getNotifyChannelId(), true);
+        if (!ReviewDeliveryConstants.isSupportedNotifyChannelType(channel.channelType()))
+        {
+            throw new ServiceException("通知渠道类型不受支持：" + channel.channelType());
+        }
+        List<ReviewIssue> overdue = issueMapper.selectOverdueActiveByProject(project.getProjectId());
+        List<com.acr.review.delivery.ReviewAssigneeMention> mentions = contentFactory.collectAssignees(overdue);
+        String title = ReviewOverdueRemindRenderer.TITLE;
+        String body = ReviewOverdueRemindRenderer.render(overdue, mentions, channel.channelType());
+        java.util.List<String> atIds = ReviewNotifyMessageRenderer.collectAtIds(mentions, channel.channelType());
+        String snapshot = buildContentSnapshot(ReviewDeliveryConstants.SNAPSHOT_KIND_IM,
+            channel.channelType(), title, body);
+        robotClients.require(channel.channelType()).send(
+            channel.webhookUrl(), channel.secret(), title, body, atIds);
         return new ImDeliveryResult(channel.channelType(), snapshot);
     }
 

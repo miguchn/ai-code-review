@@ -46,17 +46,24 @@ import com.acr.review.domain.ReviewRoundReconcileResult;
 import com.acr.review.domain.ReviewTask;
 import com.acr.review.domain.ReviewTaskRun;
 import com.acr.review.domain.result.ReviewTopIssue;
+import com.acr.review.mapper.ReviewCommitFactMapper;
 import com.acr.review.mapper.ReviewIssueActionMapper;
 import com.acr.review.mapper.ReviewIssueMapper;
+import com.acr.review.mapper.ReviewProjectMemberMapper;
 import com.acr.review.mapper.ReviewProjectMapper;
 import com.acr.review.mapper.ReviewTaskMapper;
 import com.acr.review.mapper.ReviewTaskRunMapper;
 import com.acr.review.service.IReviewDeliveryService;
+import com.acr.review.service.ReviewIssueAssignment;
+import com.acr.review.service.ReviewIssueAssigneeResolver;
 import com.acr.review.service.ReviewIssueFingerprint;
 import com.acr.review.service.ReviewScoringConstants;
 import com.acr.review.service.ReviewProjectAccessService;
 import com.acr.system.service.ISysConfigService;
 import com.acr.system.service.ISysDeptService;
+import com.acr.system.service.ISysUserService;
+import com.acr.common.core.domain.entity.SysUser;
+import com.acr.review.domain.ReviewProjectMember;
 import com.alibaba.fastjson2.JSON;
 
 @ExtendWith(MockitoExtension.class)
@@ -71,6 +78,10 @@ class ReviewIssueServiceImplTest
     @Mock private IReviewDeliveryService deliveryService;
     @Mock private ISysConfigService configService;
     @Mock private ReviewProjectAccessService projectAccessService;
+    @Mock private ReviewIssueAssigneeResolver assigneeResolver;
+    @Mock private ReviewCommitFactMapper commitFactMapper;
+    @Mock private ReviewProjectMemberMapper projectMemberMapper;
+    @Mock private ISysUserService userService;
 
     private ReviewIssueServiceImpl service;
 
@@ -78,9 +89,12 @@ class ReviewIssueServiceImplTest
     void setUp()
     {
         service = new ReviewIssueServiceImpl(issueMapper, actionMapper, projectMapper, taskMapper, runMapper,
-            deptService, deliveryService, configService, projectAccessService);
+            deptService, deliveryService, configService, projectAccessService, assigneeResolver,
+            commitFactMapper, projectMemberMapper, userService);
         lenient().when(configService.selectConfigByKey(ReviewIssueConstants.CONFIG_MISSED_ROUNDS_THRESHOLD))
             .thenReturn("1");
+        lenient().when(assigneeResolver.resolve(any(), any(), any(), any(), any()))
+            .thenReturn(java.util.Optional.empty());
     }
 
     @Test
@@ -1040,12 +1054,203 @@ class ReviewIssueServiceImplTest
     }
 
     @Test
+    void reconcileAssignsNewIssueAndWritesAssignAutoNote()
+    {
+        ReviewTask task = successLlmTask(1L, 10L, 8, "aaa1111");
+        task.setPrAuthor("octocat");
+        ReviewTaskRun run = runWithIssues(100L, top("SEC", "a.java", "leak", 1));
+        ReviewProject project = new ReviewProject();
+        project.setProjectId(10L);
+        project.setOwnerUserId(99L);
+        when(projectMapper.selectReviewProjectById(10L)).thenReturn(project);
+        when(issueMapper.selectByProjectAndPr(10L, 8, "")).thenReturn(new ArrayList<>());
+        when(issueMapper.insertIssue(any())).thenAnswer(inv -> {
+            ReviewIssue created = inv.getArgument(0);
+            created.setIssueId(501L);
+            return 1;
+        });
+        when(assigneeResolver.resolve(eq(ReviewIssueConstants.ORIGIN_NEW), any(), eq("octocat"), eq(99L), any()))
+            .thenReturn(java.util.Optional.of(new ReviewIssueAssignment(
+                11L, ReviewIssueConstants.ASSIGN_SOURCE_AUTO_COMMIT, "按提交邮箱 dev@corp.cn 自动指派给张三")));
+
+        service.reconcileAfterSuccess(task, run);
+
+        ArgumentCaptor<ReviewIssue> assigned = ArgumentCaptor.forClass(ReviewIssue.class);
+        verify(issueMapper).updateIssueAssignment(assigned.capture());
+        assertEquals(11L, assigned.getValue().getAssigneeUserId());
+        assertEquals(ReviewIssueConstants.ASSIGN_SOURCE_AUTO_COMMIT, assigned.getValue().getAssignSource());
+        ArgumentCaptor<ReviewIssueAction> actionCaptor = ArgumentCaptor.forClass(ReviewIssueAction.class);
+        verify(actionMapper, times(2)).insertAction(actionCaptor.capture());
+        ReviewIssueAction auto = actionCaptor.getAllValues().stream()
+            .filter(a -> ReviewIssueConstants.ACTION_ASSIGN_AUTO.equals(a.getActionType()))
+            .findFirst().orElseThrow();
+        assertEquals(ReviewIssueConstants.OPERATOR_SYSTEM, auto.getOperator());
+        assertEquals("按提交邮箱 dev@corp.cn 自动指派给张三", auto.getResolveNote());
+    }
+
+    @Test
+    void reconcileRepeatHitDoesNotChangeAssignee()
+    {
+        ReviewTask task = successLlmTask(2L, 10L, 8, "bbb2222");
+        ReviewTaskRun run = runWithIssues(101L, top("SEC", "a.java", "leak", 1));
+        ReviewIssue existing = openIssue(99L, "SEC", "a.java", "leak");
+        existing.setAssigneeUserId(11L);
+        existing.setAssignSource(ReviewIssueConstants.ASSIGN_SOURCE_AUTO_COMMIT);
+        when(issueMapper.selectByProjectAndPr(10L, 8, "")).thenReturn(new ArrayList<>(List.of(existing)));
+
+        service.reconcileAfterSuccess(task, run);
+
+        verify(issueMapper, never()).updateIssueAssignment(any());
+        verify(assigneeResolver, never()).resolve(any(), any(), any(), any(), any());
+    }
+
+    @Test
     void closeActiveIssuesForPrIgnoresSentinelZero()
     {
         assertEquals(0, service.closeActiveIssuesForPr(10L, 0, true));
         assertEquals(0, service.closeActiveIssuesForPr(10L, 0, false));
         verify(issueMapper, never()).selectByProjectAndPr(any(), any(), any());
         verify(issueMapper, never()).updateIssueDisposition(any());
+    }
+
+    @Test
+    void transferByAssigneeSucceeds()
+    {
+        ReviewIssue issue = openIssue(80L, "SEC", "a.java", "leak");
+        issue.setAssigneeUserId(11L);
+        ReviewProject project = new ReviewProject();
+        project.setProjectId(10L);
+        project.setOwnerUserId(99L);
+        when(issueMapper.selectIssueById(80L)).thenReturn(issue);
+        when(projectMapper.selectReviewProjectById(10L)).thenReturn(project);
+        ReviewProjectMember member = new ReviewProjectMember();
+        member.setProjectRole(ReviewProjectMember.ROLE_REVIEWER);
+        member.setStatus("0");
+        when(projectMemberMapper.selectByProjectAndUser(10L, 22L)).thenReturn(member);
+        SysUser from = new SysUser();
+        from.setNickName("张三");
+        SysUser to = new SysUser();
+        to.setNickName("李四");
+        when(userService.selectUserById(11L)).thenReturn(from);
+        when(userService.selectUserById(22L)).thenReturn(to);
+
+        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class))
+        {
+            security.when(SecurityUtils::getUserId).thenReturn(11L);
+            security.when(SecurityUtils::getUsername).thenReturn("zhangsan");
+
+            ReviewIssue result = service.transfer(80L, 22L, "该模块已移交李四负责");
+
+            assertEquals(22L, result.getAssigneeUserId());
+            assertEquals(ReviewIssueConstants.ASSIGN_SOURCE_TRANSFER, result.getAssignSource());
+            ArgumentCaptor<ReviewIssueAction> actionCaptor = ArgumentCaptor.forClass(ReviewIssueAction.class);
+            verify(actionMapper).insertAction(actionCaptor.capture());
+            assertEquals(ReviewIssueConstants.ACTION_ASSIGN_TRANSFER, actionCaptor.getValue().getActionType());
+            assertTrue(actionCaptor.getValue().getResolveNote().contains("张三 → 李四"));
+            assertTrue(actionCaptor.getValue().getResolveNote().contains("该模块已移交李四负责"));
+        }
+    }
+
+    @Test
+    void transferByClosePermSucceeds()
+    {
+        ReviewIssue issue = openIssue(81L, "SEC", "a.java", "leak");
+        issue.setAssigneeUserId(11L);
+        ReviewProject project = new ReviewProject();
+        project.setProjectId(10L);
+        project.setOwnerUserId(22L);
+        when(issueMapper.selectIssueById(81L)).thenReturn(issue);
+        when(projectMapper.selectReviewProjectById(10L)).thenReturn(project);
+        stubProjectScope(issue);
+
+        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class))
+        {
+            security.when(SecurityUtils::getUserId).thenReturn(99L);
+            security.when(SecurityUtils::getUsername).thenReturn("admin");
+            security.when(() -> SecurityUtils.hasPermi("review:issue:close")).thenReturn(true);
+
+            service.transfer(81L, 22L, "改由负责人处理");
+
+            verify(projectAccessService).requireView(10L);
+            verify(issueMapper).updateIssueAssignment(any());
+        }
+    }
+
+    @Test
+    void transferRejectsUnrelatedUser()
+    {
+        ReviewIssue issue = openIssue(82L, "SEC", "a.java", "leak");
+        issue.setAssigneeUserId(11L);
+        when(issueMapper.selectIssueById(82L)).thenReturn(issue);
+
+        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class))
+        {
+            security.when(SecurityUtils::getUserId).thenReturn(33L);
+            security.when(() -> SecurityUtils.hasPermi("review:issue:close")).thenReturn(false);
+
+            ServiceException ex = assertThrows(ServiceException.class,
+                () -> service.transfer(82L, 22L, "随便转"));
+            assertEquals("没有权限转派该问题", ex.getMessage());
+            verify(issueMapper, never()).updateIssueAssignment(any());
+        }
+    }
+
+    @Test
+    void transferRejectsNonMemberTarget()
+    {
+        ReviewIssue issue = openIssue(83L, "SEC", "a.java", "leak");
+        issue.setAssigneeUserId(11L);
+        ReviewProject project = new ReviewProject();
+        project.setProjectId(10L);
+        project.setOwnerUserId(99L);
+        when(issueMapper.selectIssueById(83L)).thenReturn(issue);
+        when(projectMapper.selectReviewProjectById(10L)).thenReturn(project);
+        when(projectMemberMapper.selectByProjectAndUser(10L, 44L)).thenReturn(null);
+
+        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class))
+        {
+            security.when(SecurityUtils::getUserId).thenReturn(11L);
+            security.when(SecurityUtils::getUsername).thenReturn("zhangsan");
+
+            ServiceException ex = assertThrows(ServiceException.class,
+                () -> service.transfer(83L, 44L, "转给外人"));
+            assertEquals("转派目标必须是项目有效成员", ex.getMessage());
+        }
+    }
+
+    @Test
+    void transferRejectsTerminalIssue()
+    {
+        ReviewIssue issue = openIssue(84L, "SEC", "a.java", "leak");
+        issue.setStatus(ReviewIssueConstants.STATUS_CLOSED);
+        issue.setAssigneeUserId(11L);
+        when(issueMapper.selectIssueById(84L)).thenReturn(issue);
+
+        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class))
+        {
+            security.when(SecurityUtils::getUserId).thenReturn(11L);
+            assertThrows(ServiceException.class, () -> service.transfer(84L, 22L, "已关闭"));
+            verify(issueMapper, never()).updateIssueAssignment(any());
+        }
+    }
+
+    @Test
+    void transferRequiresNote()
+    {
+        ReviewIssue issue = openIssue(85L, "SEC", "a.java", "leak");
+        issue.setAssigneeUserId(11L);
+        ReviewProject project = new ReviewProject();
+        project.setProjectId(10L);
+        project.setOwnerUserId(22L);
+        when(issueMapper.selectIssueById(85L)).thenReturn(issue);
+        when(projectMapper.selectReviewProjectById(10L)).thenReturn(project);
+
+        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class))
+        {
+            security.when(SecurityUtils::getUserId).thenReturn(11L);
+            ServiceException ex = assertThrows(ServiceException.class, () -> service.transfer(85L, 22L, "  "));
+            assertEquals("转派必须填写原因", ex.getMessage());
+        }
     }
 
     private static ReviewIssueBatchRequest batchRequest(String action, List<Long> issueIds)

@@ -121,6 +121,57 @@ class SysUserIdentityServiceImplTest
         assertEquals(mine, result);
     }
 
+    @Test
+    void addMineIm_rejectsUnknownType()
+    {
+        ServiceException ex = assertThrows(ServiceException.class,
+            () -> service.addMineIm(1L, "GIT_COMMIT", "13800000000", "u1"));
+        assertEquals("IM 身份类型仅支持钉钉、企微或飞书", ex.getMessage());
+        verify(identityMapper, never()).insert(any());
+    }
+
+    @Test
+    void addMineIm_conflictMessage_isHumanReadable()
+    {
+        SysUserIdentity existing = new SysUserIdentity();
+        existing.setUserId(2L);
+        existing.setNickName("李姐");
+        when(identityMapper.selectByTypeAndIdentifier(eq(SysUserIdentity.TYPE_IM_DINGTALK), eq("13800000000")))
+            .thenReturn(existing);
+
+        ServiceException ex = assertThrows(ServiceException.class,
+            () -> service.addMineIm(1L, SysUserIdentity.TYPE_IM_DINGTALK, " 13800000000 ", "u1"));
+        assertEquals("该 IM 账号已关联到用户 李姐，如归属有误请联系管理员调整", ex.getMessage());
+        verify(identityMapper, never()).insert(any());
+    }
+
+    @Test
+    void deleteMineIm_rejectsOtherUser()
+    {
+        SysUserIdentity row = new SysUserIdentity();
+        row.setId(9L);
+        row.setUserId(2L);
+        row.setIdentityType(SysUserIdentity.TYPE_IM_WECOM);
+        when(identityMapper.selectById(9L)).thenReturn(row);
+
+        ServiceException ex = assertThrows(ServiceException.class, () -> service.deleteMineIm(1L, 9L));
+        assertEquals("只能移除自己的 IM 账号", ex.getMessage());
+        verify(identityMapper, never()).deleteById(any());
+    }
+
+    @Test
+    void addMineIm_sameUserExistingReturnsRow()
+    {
+        SysUserIdentity mine = new SysUserIdentity();
+        mine.setUserId(1L);
+        mine.setIdentifier("13800000000");
+        when(identityMapper.selectByTypeAndIdentifier(eq(SysUserIdentity.TYPE_IM_DINGTALK), eq("13800000000")))
+            .thenReturn(mine);
+
+        assertEquals(mine, service.addMineIm(1L, SysUserIdentity.TYPE_IM_DINGTALK, "13800000000", "u1"));
+        verify(identityMapper, never()).insert(any());
+    }
+
     private static SysUserIdentity ownedBy(Long userId, String nick)
     {
         SysUserIdentity row = new SysUserIdentity();

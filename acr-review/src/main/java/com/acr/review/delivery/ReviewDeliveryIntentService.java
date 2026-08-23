@@ -182,6 +182,36 @@ public class ReviewDeliveryIntentService
             null, status, errorCode, failure, triggerSource, operator);
     }
 
+    /**
+     * 逾期聚合提醒：不受结论策略与冷却约束；当日幂等键已存在则不重入队。
+     * 渠道不可解析时按 MANUAL 留痕。
+     */
+    public ReviewDeliveryRecord enqueueOverdueRemind(ReviewProject project, ReviewTask anchorTask, String operator)
+    {
+        if (project == null || project.getProjectId() == null || !"Y".equals(project.getNotifyEnabled())
+            || anchorTask == null || anchorTask.getTaskId() == null)
+        {
+            return null;
+        }
+        String day = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Shanghai"))
+            .format(java.time.format.DateTimeFormatter.BASIC_ISO_DATE);
+        String key = ReviewDeliveryConstants.overdueRemindIdempotencyKey(project.getProjectId(), day);
+        ReviewDeliveryRecord existing = deliveryMapper.selectByIdempotencyKey(key);
+        if (existing != null)
+        {
+            return existing;
+        }
+        String provider = StringUtils.defaultIfEmpty(project.getProvider(), ReviewDeliveryConstants.PROVIDER_GITHUB);
+        String channelType = resolveChannelType(project);
+        boolean resolvable = ReviewDeliveryConstants.isSupportedNotifyChannelType(channelType);
+        String channel = resolvable ? channelType : ReviewDeliveryConstants.CHANNEL_IM_NOTIFICATION;
+        String status = resolvable ? ReviewDeliveryConstants.STATUS_PENDING : ReviewDeliveryConstants.STATUS_MANUAL;
+        String errorCode = resolvable ? null : ReviewDeliveryConstants.ERROR_CONFIGURATION;
+        String failure = resolvable ? null : "项目已启用通知，但通知渠道缺失、停用或类型不受支持，请修复配置后人工补发";
+        return upsert(anchorTask, null, provider, channel, key, null, status, errorCode, failure,
+            ReviewDeliveryConstants.TRIGGER_OVERDUE_REMIND, operator);
+    }
+
     public void requeue(Long deliveryId, String operator)
     {
         if (deliveryMapper.requeueDelivery(deliveryId, ReviewDeliveryConstants.TRIGGER_MANUAL_RETRY,
@@ -202,7 +232,7 @@ public class ReviewDeliveryIntentService
         record.setProjectId(task.getProjectId());
         record.setProvider(provider);
         record.setChannel(channel);
-        record.setPrNumber(task.getPrNumber());
+        record.setPrNumber(task.getPrNumber() == null ? 0 : task.getPrNumber());
         record.setIssueId(issueId);
         record.setIdempotencyKey(key);
         record.setDeliveryStatus(status);

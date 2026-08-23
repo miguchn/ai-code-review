@@ -9,6 +9,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import com.acr.review.delivery.ReviewDeliveryConstants;
 import com.acr.review.domain.ReviewPipelineConstants;
 import com.acr.review.domain.result.ReviewScopeStats;
 import com.acr.review.domain.result.ReviewTopIssue;
@@ -608,6 +609,93 @@ class ReviewNotifyMessageRendererTest
         assertEquals(total, expandedCount + remainderCount);
         int detailSum = detailParts.values().stream().mapToInt(Integer::intValue).sum();
         assertEquals(remainderCount, detailSum);
+    }
+
+    @Test
+    void renderSuccess_dingTalkAtUsesAtMobile()
+    {
+        ReviewSummaryContent content = assigneeContent(mention("张三", "13800000000", "u1", "ou_1"));
+        String body = ReviewNotifyMessageRenderer.renderSuccess(content, ReviewDeliveryConstants.CHANNEL_DINGTALK_ROBOT);
+        assertTrue(body.contains("责任人：@13800000000"));
+        assertEquals(List.of("13800000000"),
+            ReviewNotifyMessageRenderer.collectAtIds(content.getAssignees(), ReviewDeliveryConstants.CHANNEL_DINGTALK_ROBOT));
+    }
+
+    @Test
+    void renderSuccess_weComEmbedsUserId()
+    {
+        ReviewSummaryContent content = assigneeContent(mention("李四", "13900000000", "zhangsan", "ou_1"));
+        String body = ReviewNotifyMessageRenderer.renderSuccess(content, ReviewDeliveryConstants.CHANNEL_WECOM_ROBOT);
+        assertTrue(body.contains("责任人：<@zhangsan>"));
+    }
+
+    @Test
+    void renderSuccess_feishuFallsBackToPlainName()
+    {
+        ReviewSummaryContent content = assigneeContent(mention("王五", "13700000000", "u1", "ou_abc"));
+        String body = ReviewNotifyMessageRenderer.renderSuccess(content, ReviewDeliveryConstants.CHANNEL_FEISHU_BOT);
+        assertTrue(body.contains("责任人：王五"));
+        assertFalse(body.contains("<at"));
+        assertEquals(List.of(),
+            ReviewNotifyMessageRenderer.collectAtIds(content.getAssignees(), ReviewDeliveryConstants.CHANNEL_FEISHU_BOT));
+    }
+
+    @Test
+    void renderSuccess_missingIdentityFallsBackToName()
+    {
+        ReviewSummaryContent content = assigneeContent(mention("赵六", null, null, null));
+        String body = ReviewNotifyMessageRenderer.renderSuccess(content, ReviewDeliveryConstants.CHANNEL_DINGTALK_ROBOT);
+        assertTrue(body.contains("责任人：赵六"));
+        assertFalse(body.contains("@null"));
+    }
+
+    @Test
+    void renderSuccess_truncatesAfterFiveAssignees()
+    {
+        List<ReviewAssigneeMention> mentions = new ArrayList<>();
+        for (int i = 1; i <= 7; i++)
+        {
+            mentions.add(mention("人" + i, null, null, null));
+        }
+        ReviewSummaryContent content = ReviewSummaryContent.builder()
+            .conclusionLabel("通过")
+            .assignees(mentions)
+            .build();
+        String body = ReviewNotifyMessageRenderer.renderSuccess(content, ReviewDeliveryConstants.CHANNEL_DINGTALK_ROBOT);
+        assertTrue(body.contains("人1 人2 人3 人4 人5 …等 7 人"));
+        assertFalse(body.contains("人6"));
+    }
+
+    @Test
+    void renderSuccess_nullMentionDoesNotThrow()
+    {
+        ReviewSummaryContent content = ReviewSummaryContent.builder()
+            .conclusionLabel("通过")
+            .assignees(java.util.Arrays.asList((ReviewAssigneeMention) null))
+            .build();
+        String body = ReviewNotifyMessageRenderer.renderSuccess(content, ReviewDeliveryConstants.CHANNEL_DINGTALK_ROBOT);
+        assertFalse(body.contains("责任人："));
+    }
+
+    @Test
+    void renderFailed_doesNotIncludeAssignees()
+    {
+        ReviewSummaryContent content = assigneeContent(mention("张三", "13800000000", null, null));
+        String body = ReviewNotifyMessageRenderer.renderFailed(content);
+        assertFalse(body.contains("责任人"));
+    }
+
+    private static ReviewSummaryContent assigneeContent(ReviewAssigneeMention mention)
+    {
+        return ReviewSummaryContent.builder()
+            .conclusionLabel("通过")
+            .assignees(List.of(mention))
+            .build();
+    }
+
+    private static ReviewAssigneeMention mention(String name, String ding, String wecom, String feishu)
+    {
+        return new ReviewAssigneeMention(1L, name, ding, wecom, feishu);
     }
 
     private static ReviewTopIssue issue(String severity, String title)

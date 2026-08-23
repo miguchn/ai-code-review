@@ -67,6 +67,8 @@ public final class ReviewDeliveryConstants
     public static final String TRIGGER_ISSUE_DISPOSITION = "ISSUE_DISPOSITION";
     /** 投递记录页或任务详情手动重试/补发。 */
     public static final String TRIGGER_MANUAL_RETRY = "MANUAL_RETRY";
+    /** 逾期聚合提醒（每项目每日一条，不受结论策略与冷却约束）。 */
+    public static final String TRIGGER_OVERDUE_REMIND = "OVERDUE_REMIND";
 
     public static final String ERROR_CONFIGURATION = "DELIVERY_CONFIGURATION";
     public static final String ERROR_EXTERNAL_CALL = "DELIVERY_EXTERNAL_CALL";
@@ -204,6 +206,12 @@ public final class ReviewDeliveryConstants
     public static String imIdempotencyKey(String channelType, Long taskId)
     {
         return channelType + ":" + taskId + ":REVIEW_DONE";
+    }
+
+    /** 逾期提醒幂等键：overdue-remind:{projectId}:{yyyyMMdd} */
+    public static String overdueRemindIdempotencyKey(Long projectId, String yyyyMMdd)
+    {
+        return "overdue-remind:" + projectId + ":" + yyyyMMdd;
     }
 
     public static boolean isImChannel(String channel)

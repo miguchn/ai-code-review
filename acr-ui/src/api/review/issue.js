@@ -35,3 +35,7 @@ export function reopenIssue(issueId) {
 export function batchDisposeIssue(data) {
   return request({ url: '/review/issue/batch', method: 'post', data })
 }
+
+export function transferIssue(issueId, data) {
+  return request({ url: '/review/issue/' + issueId + '/transfer', method: 'put', data })
+}

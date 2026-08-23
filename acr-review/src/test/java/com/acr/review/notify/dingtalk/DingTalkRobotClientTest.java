@@ -46,7 +46,7 @@ class DingTalkRobotClientTest
 
         String title = "AI Code Review · 通过";
         String body = "### ✅ AI Code Review · 通过\n总分 90/100";
-        client.send(server.url("/").toString(), null, title, body);
+        client.send(server.url("/").toString(), null, title, body, null);
 
         RecordedRequest request = server.takeRequest();
         assertEquals("POST", request.getMethod());
@@ -66,7 +66,7 @@ class DingTalkRobotClientTest
         server.enqueue(json(200, "{\"errcode\":0,\"errmsg\":\"ok\"}"));
         String secret = "SECdingtalk";
 
-        client.send(server.url("/").toString(), secret, "title", "body");
+        client.send(server.url("/").toString(), secret, "title", "body", null);
 
         RecordedRequest request = server.takeRequest();
         HttpUrl url = request.getRequestUrl();
@@ -83,7 +83,7 @@ class DingTalkRobotClientTest
         server.enqueue(json(200, "{\"errcode\":310000,\"errmsg\":\"sign not match\"}"));
 
         assertThrows(NotifyRobotException.class,
-            () -> client.send(server.url("/").toString(), null, "t", "b"));
+            () -> client.send(server.url("/").toString(), null, "t", "b", null));
     }
 
     @Test
@@ -103,6 +103,18 @@ class DingTalkRobotClientTest
         String webhookUrl = "https://oapi.dingtalk.com/robot/send?access_token=abc";
         assertEquals(webhookUrl, DingTalkRobotClient.appendSign(webhookUrl, null));
         assertEquals(webhookUrl, DingTalkRobotClient.appendSign(webhookUrl, ""));
+    }
+
+    @Test
+    void sendIncludesAtMobilesWhenAtIdsPresent() throws InterruptedException
+    {
+        server.enqueue(json(200, "{\"errcode\":0,\"errmsg\":\"ok\"}"));
+        client.send(server.url("/").toString(), null, "t", "责任人：@13800000000", java.util.List.of("13800000000"));
+
+        JSONObject payload = JSON.parseObject(server.takeRequest().getBody().readUtf8());
+        JSONObject at = payload.getJSONObject("at");
+        assertEquals(false, at.getBoolean("isAtAll"));
+        assertEquals("13800000000", at.getJSONArray("atMobiles").getString(0));
     }
 
     private static String expectedDingTalkSign(String timestamp, String secret) throws Exception

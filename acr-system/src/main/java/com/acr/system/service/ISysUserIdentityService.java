@@ -9,6 +9,14 @@ public interface ISysUserIdentityService
 
     SysUserIdentity addMineGit(Long userId, String identifier, String displayName, String createBy, String origin);
 
+    List<SysUserIdentity> listMineIm(Long userId);
+
+    SysUserIdentity addMineIm(Long userId, String identityType, String identifier, String createBy);
+
+    void deleteMineIm(Long userId, Long id);
+
+    List<SysUserIdentity> listByUserId(Long userId);
+
     void deleteMine(Long userId, Long id);
 
     SysUserIdentity selectByTypeAndIdentifier(String identityType, String identifier);

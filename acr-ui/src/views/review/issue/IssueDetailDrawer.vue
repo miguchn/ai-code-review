@@ -71,6 +71,12 @@
             <el-descriptions-item v-if="detailIssue.closeSource" label="关闭来源">
               {{ closeSourceLabel(detailIssue.closeSource) }}
             </el-descriptions-item>
+            <el-descriptions-item label="责任人">
+              <span>{{ detailIssue.assigneeName || '未指派' }}</span>
+              <el-tag v-if="detailIssue.overdueFlag === 'Y'" type="danger" size="small" class="overdue-tag">逾期</el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="指派来源">{{ assignSourceLabel(detailIssue.assignSource) }}</el-descriptions-item>
+            <el-descriptions-item label="指派时间">{{ formatDateTime(detailIssue.assignTime) }}</el-descriptions-item>
           </el-descriptions>
           <div v-if="detailIssue.category" class="detail-category">分类：{{ detailIssue.category }}</div>
           <p v-if="detailIssue.description" class="detail-desc">{{ detailIssue.description }}</p>
@@ -240,7 +246,12 @@
           </el-timeline>
         </section>
 
-        <div v-if="showDetailActions" class="drawer-actions">
+        <div v-if="showDetailActions || canTransfer" class="drawer-actions">
+          <el-button
+            v-if="canTransfer"
+            :loading="actionLoading"
+            @click="openTransferDialog"
+          >转派</el-button>
           <el-button
             v-if="detailIssue.status === 'AWAITING_CONFIRM'"
             type="primary"
@@ -286,6 +297,40 @@
     </template>
   </el-dialog>
 
+  <el-dialog v-model="transferDialogVisible" title="转派" width="480px" append-to-body>
+    <el-form ref="transferFormRef" :model="transferForm" :rules="transferRules" label-width="88px">
+      <el-form-item label="目标成员" prop="assigneeUserId">
+        <el-select
+          v-model="transferForm.assigneeUserId"
+          filterable
+          placeholder="请选择项目有效成员"
+          style="width: 100%"
+        >
+          <el-option
+            v-for="member in transferMembers"
+            :key="member.userId"
+            :label="member.userName"
+            :value="member.userId"
+          />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="转派原因" prop="note">
+        <el-input
+          v-model="transferForm.note"
+          type="textarea"
+          :rows="3"
+          maxlength="500"
+          show-word-limit
+          placeholder="必填：说明转派原因"
+        />
+      </el-form-item>
+    </el-form>
+    <template #footer>
+      <el-button @click="transferDialogVisible = false">取消</el-button>
+      <el-button type="primary" :loading="actionLoading" @click="submitTransfer">确定转派</el-button>
+    </template>
+  </el-dialog>
+
   <el-dialog v-model="dismissDialogVisible" :title="dismissDialogTitle" width="480px" append-to-body>
     <el-form ref="dismissFormRef" :model="dismissForm" :rules="dismissRules" label-width="88px">
       <el-form-item label="处置类型" prop="dismissType">
@@ -314,9 +359,11 @@
 
 <script setup>
 import { useRouter } from 'vue-router'
-import { listIssue, getIssue, confirmIssue, closeIssue, dismissIssue, reopenIssue } from '@/api/review/issue'
+import { listIssue, getIssue, confirmIssue, closeIssue, dismissIssue, reopenIssue, transferIssue } from '@/api/review/issue'
+import { listReviewProjectMembers } from '@/api/review/project'
 import { getInlineDeliveryByIssue } from '@/api/review/delivery'
 import auth from '@/plugins/auth'
+import useUserStore from '@/store/modules/user'
 import {
   emptyDash, formatDateTime, formatIssueLines, shortSha, isPushTask,
   buildMergeRequestUrl, formatPushRefDisplay, mergeRequestLabel
@@ -354,7 +401,9 @@ const ACTION_TYPE_LABELS = {
   REOPEN: '重新打开',
   DETECTED: '发现',
   ROUND_HIT: '再次命中',
-  ROUND_MISS: '未命中'
+  ROUND_MISS: '未命中',
+  ASSIGN_AUTO: '自动指派',
+  ASSIGN_TRANSFER: '转派'
 }
 
 const detailLoading = ref(false)
@@ -375,6 +424,15 @@ const dismissRules = {
   dismissType: [{ required: true, message: '请选择处置类型', trigger: 'change' }],
   resolveNote: [{ required: true, message: '请填写原因说明', trigger: 'blur' }]
 }
+const userStore = useUserStore()
+const transferDialogVisible = ref(false)
+const transferFormRef = ref()
+const transferMembers = ref([])
+const transferForm = ref({ assigneeUserId: undefined, note: '' })
+const transferRules = {
+  assigneeUserId: [{ required: true, message: '请选择转派目标', trigger: 'change' }],
+  note: [{ required: true, message: '请填写转派原因', trigger: 'blur' }]
+}
 
 const dismissDialogTitle = computed(() => {
   return dismissForm.value.dismissType === 'FALSE_POSITIVE' ? '标记误报' : '忽略问题'
@@ -391,6 +449,12 @@ const closeSubmitLabel = computed(() => {
 const showDetailActions = computed(() => {
   const status = detailIssue.value?.status
   return status === 'AWAITING_CONFIRM' || isOpenStatus(status) || status === 'RECHECKING'
+})
+const canTransfer = computed(() => {
+  const issue = detailIssue.value
+  if (!issue || !['AWAITING_CONFIRM', 'AWAITING_FIX', 'RECHECKING'].includes(issue.status)) return false
+  const self = issue.assigneeUserId != null && Number(userStore.id) === Number(issue.assigneeUserId)
+  return self || auth.hasPermi('review:issue:close')
 })
 
 const canOpenDeliveryList = computed(() => auth.hasPermi('review:delivery:list'))
@@ -480,7 +544,7 @@ function showStatusPair(action) {
 
 function isSystemAction(action) {
   if (String(action?.operator || '').toLowerCase() === 'system') return true
-  return ['AUTO_RECHECK', 'AUTO_REOPEN', 'DETECTED', 'ROUND_HIT', 'ROUND_MISS'].includes(action?.actionType)
+  return ['AUTO_RECHECK', 'AUTO_REOPEN', 'DETECTED', 'ROUND_HIT', 'ROUND_MISS', 'ASSIGN_AUTO'].includes(action?.actionType)
 }
 
 function actionSourceLabel(action) {
@@ -489,6 +553,46 @@ function actionSourceLabel(action) {
 
 function actionSourceTagType(action) {
   return isSystemAction(action) ? 'info' : 'primary'
+}
+
+function assignSourceLabel(source) {
+  const labels = {
+    AUTO_COMMIT: '按提交作者',
+    AUTO_PR_AUTHOR: '按 PR 发起人',
+    AUTO_OWNER: '按项目负责人',
+    TRANSFER: '人工转派'
+  }
+  return labels[source] || (source ? source : '—')
+}
+
+function openTransferDialog() {
+  transferForm.value = { assigneeUserId: undefined, note: '' }
+  transferMembers.value = []
+  transferDialogVisible.value = true
+  const projectId = detailIssue.value?.projectId
+  if (!projectId) return
+  listReviewProjectMembers(projectId).then(response => {
+    const rows = response.data || []
+    transferMembers.value = rows.filter(member =>
+      ['OWNER', 'ADMIN', 'REVIEWER'].includes(member.projectRole))
+  }).catch(() => {
+    transferMembers.value = []
+  })
+}
+
+function submitTransfer() {
+  transferFormRef.value?.validate(valid => {
+    if (!valid) return
+    actionLoading.value = true
+    transferIssue(detailIssue.value.issueId, {
+      assigneeUserId: transferForm.value.assigneeUserId,
+      note: transferForm.value.note
+    }).then(() => {
+      transferDialogVisible.value = false
+      proxy.$modal.msgSuccess('已转派')
+      reloadDetailAndList()
+    }).finally(() => { actionLoading.value = false })
+  })
 }
 
 function closeSourceLabel(source) {
@@ -783,6 +887,7 @@ function submitDismiss() {
 
 .detail-section { margin-bottom: 16px; }
 .context-descriptions { margin-bottom: 12px; }
+.overdue-tag { margin-left: 8px; }
 .context-descriptions code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 12px;

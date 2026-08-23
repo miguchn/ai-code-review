@@ -12,7 +12,8 @@ public interface NotifyRobotClient
      * @param webhookUrl 完整 Webhook URL（已解密）
      * @param secret     加签 Secret，可空
      * @param title      标题（钉钉 markdown 需要；其他渠道可忽略）
-     * @param body       正文（行式文本 / markdown）
+     * @param body       正文（行式文本 / markdown，已含渠道 @ 语法）
+     * @param atIds      @ 目标：钉钉为手机号写入 at.atMobiles；企微/飞书仅日志与测试断言
      */
-    void send(String webhookUrl, String secret, String title, String body);
+    void send(String webhookUrl, String secret, String title, String body, java.util.List<String> atIds);
 }

@@ -17,6 +17,15 @@ public class SysUserIdentity extends BaseEntity
     public static final String ORIGIN_AUTO = "AUTO";
     public static final String ORIGIN_ADMIN = "ADMIN";
 
+    public static final int MAX_IM_IDENTIFIER_CHARS = 320;
+
+    public static boolean isImType(String identityType)
+    {
+        return TYPE_IM_WECOM.equals(identityType)
+            || TYPE_IM_DINGTALK.equals(identityType)
+            || TYPE_IM_FEISHU.equals(identityType);
+    }
+
     private Long id;
     private Long userId;
     private String identityType;
