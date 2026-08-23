@@ -6,6 +6,7 @@ public final class WorkbenchConstants
     public static final String CARD_ISSUE_AWAITING_CONFIRM = "ISSUE_AWAITING_CONFIRM";
     public static final String CARD_ISSUE_EXISTING_CONFIRM = "ISSUE_EXISTING_CONFIRM";
     public static final String CARD_ISSUE_AWAITING_FIX = "ISSUE_AWAITING_FIX";
+    public static final String CARD_ASSIGNED_TO_ME = "ASSIGNED_TO_ME";
     public static final String CARD_ISSUE_RECHECKING = "ISSUE_RECHECKING";
     public static final String CARD_HIGH_RISK_CONCLUSION = "HIGH_RISK_CONCLUSION";
     public static final String CARD_TASK_FAILED = "TASK_FAILED";
@@ -14,6 +15,7 @@ public final class WorkbenchConstants
     public static final String TITLE_ISSUE_AWAITING_CONFIRM = "待确认问题";
     public static final String TITLE_ISSUE_EXISTING_CONFIRM = "存量待确认";
     public static final String TITLE_ISSUE_AWAITING_FIX = "待修复问题";
+    public static final String TITLE_ASSIGNED_TO_ME = "指派给我";
     public static final String TITLE_ISSUE_RECHECKING = "疑似修复问题";
     public static final String TITLE_HIGH_RISK_CONCLUSION = "高风险结论";
     public static final String TITLE_TASK_FAILED = "失败任务";
@@ -22,6 +24,7 @@ public final class WorkbenchConstants
     public static final String SUBTITLE_ORIGIN_NEW = "本次变更";
     public static final String SUBTITLE_ORIGIN_EXISTING = "存量代码";
     public static final String SUBTITLE_ALL_ORIGIN = "全部归属";
+    public static final String SUBTITLE_ASSIGNED_TO_ME = "我的待办";
     public static final String SUBTITLE_RECHECK_PENDING = "修复待验证";
     public static final String SUBTITLE_HIGH_RISK_WINDOW = "近 7 天";
 

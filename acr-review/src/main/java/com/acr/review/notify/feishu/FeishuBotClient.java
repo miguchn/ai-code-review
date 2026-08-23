@@ -2,6 +2,9 @@ package com.acr.review.notify.feishu;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.crypto.Mac;
@@ -22,6 +25,7 @@ import com.alibaba.fastjson2.JSONObject;
 @Component
 public class FeishuBotClient extends AbstractNotifyRobotClient
 {
+    private static final Logger log = LoggerFactory.getLogger(FeishuBotClient.class);
     private static final Pattern MD_LINK = Pattern.compile("\\[([^\\]]+)]\\((https?://[^)\\s]+)\\)");
 
     public FeishuBotClient(
@@ -38,9 +42,14 @@ public class FeishuBotClient extends AbstractNotifyRobotClient
     }
 
     @Override
-    public void send(String webhookUrl, String secret, String title, String body)
+    public void send(String webhookUrl, String secret, String title, String body, List<String> atIds)
     {
         requireWebhook(webhookUrl);
+        // TODO 待真实群验证：现有 post 转换会把 <at> 当纯文本，不在此猜测厂商标签
+        if (atIds != null && !atIds.isEmpty())
+        {
+            log.debug("飞书机器人 @ 目标 {} 个，已内嵌正文", atIds.size());
+        }
         JSONObject payload = new JSONObject();
         payload.put("msg_type", "post");
         if (StringUtils.isNotEmpty(secret))

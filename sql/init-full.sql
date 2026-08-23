@@ -1,7 +1,7 @@
 -- ============================================================================
 -- AI Code Review 一次性初始化脚本（仅适用于全新环境）
 --
--- 本脚本是 sql/01_core_schema.sql … sql/48_token_usage_analysis.sql
+-- 本脚本是 sql/01_core_schema.sql … sql/49_issue_auto_assignment.sql
 -- 全部执行完成后的最终状态（表结构 + 初始化数据），新环境一条命令即可完成初始化：
 --
 --   mysql --default-character-set=utf8mb4 -u root -p < sql/init-full.sql
@@ -15,8 +15,8 @@
 -- 4. 初始管理员为 admin / admin123，首次登录后请立即修改密码。
 -- 5. 新增编号增量脚本后必须同步重新生成本脚本（生成方式见 sql/README.md）。
 --
--- 生成日期：2026-08-13；基线：企业级架构风险修复 S6 + M11 行内评论 + M12 数据洞察
--- （已含 01-48 全部增量：45 项目权限治理、46 企业标准角色与业务审计、47 上线前收口、48 Token 用量分析）
+-- 生成日期：2026-08-22；基线：企业级架构风险修复 S6 + M11 行内评论 + M12 数据洞察 + M13 问题自动指派
+-- （已含 01-49 全部增量：45 项目权限治理、46 企业标准角色与业务审计、47 上线前收口、48 Token 用量分析、49 问题自动指派）
 -- ============================================================================
 
 CREATE DATABASE IF NOT EXISTS `ai_code_review` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
@@ -331,6 +331,10 @@ CREATE TABLE `review_issue` (
   `recheck_task_id` bigint DEFAULT NULL COMMENT '触发待复核的任务ID',
   `recheck_run_id` bigint DEFAULT NULL COMMENT '触发待复核的 runID',
   `recheck_commit_sha` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '未命中轮 head commit',
+  `assignee_user_id` bigint DEFAULT NULL COMMENT '责任人平台用户ID(自动推断或转派)',
+  `assign_source` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '指派来源(AUTO_COMMIT/AUTO_PR_AUTHOR/AUTO_OWNER/TRANSFER)',
+  `assign_time` datetime DEFAULT NULL COMMENT '最近指派时间',
+  `overdue_flag` char(1) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'N' COMMENT '逾期标志(逾期任务每日重算)',
   `create_by` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT '',
   `create_time` datetime DEFAULT NULL,
   `update_by` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT '',
@@ -339,7 +343,9 @@ CREATE TABLE `review_issue` (
   UNIQUE KEY `uk_issue_ref_fingerprint` (`project_id`,`pr_number`,`ref_branch`,`fingerprint`),
   KEY `idx_issue_project_status` (`project_id`,`status`),
   KEY `idx_issue_origin_status` (`origin`,`status`),
-  KEY `idx_issue_ref_family` (`project_id`,`pr_number`,`ref_branch`,`family_key`)
+  KEY `idx_issue_ref_family` (`project_id`,`pr_number`,`ref_branch`,`family_key`),
+  KEY `idx_issue_assignee` (`project_id`,`assignee_user_id`,`status`),
+  KEY `idx_issue_overdue` (`overdue_flag`,`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='审查问题台账';
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `review_issue_action`;
@@ -1683,6 +1689,7 @@ INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value
 INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (184,11,'Gitee 行内评论','GITEE_PR_INLINE_COMMENT','review_delivery_channel','','primary','N','0','admin','2026-08-10 09:28:50','',NULL,'PR 行内评论投递');
 INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (185,12,'Gitea 行内评论','GITEA_PR_INLINE_COMMENT','review_delivery_channel','','primary','N','0','admin','2026-08-10 09:28:50','',NULL,'PR 行内评论投递');
 INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (186,4,'任务失败通知','TASK_FAILED','review_delivery_trigger_source','','warning','N','0','admin','2026-08-11 07:28:08','',NULL,'');
+INSERT INTO `sys_dict_data` (`dict_code`, `dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (187,5,'逾期提醒','OVERDUE_REMIND','review_delivery_trigger_source','','danger','N','0','admin','2026-08-22 08:00:00','',NULL,'逾期聚合提醒按每项目每日一条自治频控，不走项目冷却');
 /*!40000 ALTER TABLE `sys_dict_data` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -1740,6 +1747,8 @@ INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_valu
 INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (140,'运行告警-失败率阈值百分比','review.runtime.alert.failureRatePercent','40','Y','admin','2026-08-10 09:28:50','',NULL,'窗口内 FAILED/(SUCCESS+FAILED+CANCELLED) 超过该百分比则告警');
 INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (141,'运行告警-判定周期(秒)','review.runtime.alert.scanIntervalSeconds','30','Y','admin','2026-08-10 09:28:50','',NULL,'内置告警规则周期判定间隔');
 INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (142,'优雅停机-排空等待秒数','review.runtime.drain.timeoutSeconds','60','Y','admin','2026-08-10 09:28:50','',NULL,'停机时等待租约内任务完成的最长时间；超时后将 lease_until 置过期由恢复扫描接管');
+INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (143,'问题台账-高严重度逾期天数','review.issue.overdue.highDays','3','Y','admin','2026-08-22 08:00:00','',NULL,'CRITICAL/HIGH 严重度：进入当前状态超过该天数则标逾期');
+INSERT INTO `sys_config` (`config_id`, `config_name`, `config_key`, `config_value`, `config_type`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (144,'问题台账-普通严重度逾期天数','review.issue.overdue.normalDays','7','Y','admin','2026-08-22 08:00:00','',NULL,'非 CRITICAL/HIGH 严重度：进入当前状态超过该天数则标逾期');
 /*!40000 ALTER TABLE `sys_config` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -1747,6 +1756,7 @@ LOCK TABLES `sys_job` WRITE;
 /*!40000 ALTER TABLE `sys_job` DISABLE KEYS */;
 INSERT INTO `sys_job` (`job_id`, `job_name`, `job_group`, `invoke_target`, `cron_expression`, `misfire_policy`, `concurrent`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (1,'数据洞察-近期聚合刷新','DEFAULT','insightStatsJobTask.refreshRecent','0 */10 * * * ?','3','1','0','admin','2026-08-11 01:58:01','',NULL,'每10分钟重算昨日+今日聚合');
 INSERT INTO `sys_job` (`job_id`, `job_name`, `job_group`, `invoke_target`, `cron_expression`, `misfire_policy`, `concurrent`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (2,'数据洞察-夜间全量重算','DEFAULT','insightStatsJobTask.fullRecalc','0 30 2 * * ?','3','1','0','admin','2026-08-11 01:58:01','',NULL,'每日凌晨重算近35天聚合');
+INSERT INTO `sys_job` (`job_id`, `job_name`, `job_group`, `invoke_target`, `cron_expression`, `misfire_policy`, `concurrent`, `status`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`) VALUES (3,'问题台账-逾期扫描提醒','DEFAULT','issueOverdueJobTask.scan','0 30 8 * * ?','3','1','0','admin','2026-08-22 08:00:00','',NULL,'每日 08:30 重算逾期标志；新转逾期且项目启用通知时入队聚合提醒');
 /*!40000 ALTER TABLE `sys_job` ENABLE KEYS */;
 UNLOCK TABLES;
 

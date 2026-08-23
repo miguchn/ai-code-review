@@ -41,7 +41,7 @@ class WeComRobotClientTest
         server.enqueue(json(200, "{\"errcode\":0,\"errmsg\":\"ok\"}"));
         String body = "### ✅ AI Code Review · 通过\n总分 90/100";
 
-        client.send(server.url("/").toString(), null, "ignored", body);
+        client.send(server.url("/").toString(), null, "ignored", body, null);
 
         RecordedRequest request = server.takeRequest();
         assertEquals("POST", request.getMethod());
@@ -56,7 +56,7 @@ class WeComRobotClientTest
         server.enqueue(json(200, "{\"errcode\":0}"));
         String oversized = "x".repeat(ReviewDeliveryConstants.WECOM_MAX_MARKDOWN_BYTES + 200);
 
-        client.send(server.url("/").toString(), null, "t", oversized);
+        client.send(server.url("/").toString(), null, "t", oversized, null);
 
         RecordedRequest request = server.takeRequest();
         String content = JSON.parseObject(request.getBody().readUtf8())
@@ -72,7 +72,7 @@ class WeComRobotClientTest
         server.enqueue(json(200, "{\"errcode\":93000,\"errmsg\":\"invalid webhook url\"}"));
 
         assertThrows(NotifyRobotException.class,
-            () -> client.send(server.url("/").toString(), null, "t", "b"));
+            () -> client.send(server.url("/").toString(), null, "t", "b", null));
     }
 
     @Test

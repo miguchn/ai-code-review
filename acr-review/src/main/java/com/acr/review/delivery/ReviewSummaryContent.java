@@ -52,6 +52,8 @@ public final class ReviewSummaryContent
     private final Integer inlineCommentCount;
     private final Integer inlineCriticalCount;
     private final Integer inlineHighCount;
+    /** 本轮物化/命中问题的责任人（去重，用于 IM @）。 */
+    private final List<ReviewAssigneeMention> assignees;
 
     private ReviewSummaryContent(Builder builder)
     {
@@ -88,6 +90,9 @@ public final class ReviewSummaryContent
         this.inlineCommentCount = builder.inlineCommentCount;
         this.inlineCriticalCount = builder.inlineCriticalCount;
         this.inlineHighCount = builder.inlineHighCount;
+        this.assignees = builder.assignees == null
+            ? List.of()
+            : builder.assignees.stream().filter(item -> item != null).toList();
     }
 
     public static Builder builder()
@@ -140,6 +145,7 @@ public final class ReviewSummaryContent
     public Integer getInlineCommentCount() { return inlineCommentCount; }
     public Integer getInlineCriticalCount() { return inlineCriticalCount; }
     public Integer getInlineHighCount() { return inlineHighCount; }
+    public List<ReviewAssigneeMention> getAssignees() { return assignees; }
 
     public boolean isPushReview()
     {
@@ -190,6 +196,7 @@ public final class ReviewSummaryContent
         private Integer inlineCommentCount;
         private Integer inlineCriticalCount;
         private Integer inlineHighCount;
+        private List<ReviewAssigneeMention> assignees;
 
         public Builder taskStatus(String taskStatus) { this.taskStatus = taskStatus; return this; }
         public Builder taskId(Long taskId) { this.taskId = taskId; return this; }
@@ -224,6 +231,7 @@ public final class ReviewSummaryContent
         public Builder inlineCommentCount(Integer inlineCommentCount) { this.inlineCommentCount = inlineCommentCount; return this; }
         public Builder inlineCriticalCount(Integer inlineCriticalCount) { this.inlineCriticalCount = inlineCriticalCount; return this; }
         public Builder inlineHighCount(Integer inlineHighCount) { this.inlineHighCount = inlineHighCount; return this; }
+        public Builder assignees(List<ReviewAssigneeMention> assignees) { this.assignees = assignees; return this; }
 
         public ReviewSummaryContent build()
         {

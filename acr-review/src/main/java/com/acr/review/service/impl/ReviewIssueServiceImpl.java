@@ -1,6 +1,7 @@
 package com.acr.review.service.impl;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -9,6 +10,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
@@ -37,19 +39,26 @@ import com.acr.review.domain.ReviewRoundReconcileResult;
 import com.acr.review.domain.ReviewTask;
 import com.acr.review.domain.ReviewTaskRun;
 import com.acr.review.domain.result.ReviewTopIssue;
+import com.acr.review.mapper.ReviewCommitFactMapper;
 import com.acr.review.mapper.ReviewIssueActionMapper;
 import com.acr.review.mapper.ReviewIssueMapper;
+import com.acr.review.mapper.ReviewProjectMemberMapper;
 import com.acr.review.mapper.ReviewProjectMapper;
 import com.acr.review.mapper.ReviewTaskMapper;
 import com.acr.review.mapper.ReviewTaskRunMapper;
 import com.acr.review.service.IReviewDeliveryService;
 import com.acr.review.service.IReviewIssueService;
+import com.acr.review.service.ReviewIssueAssignment;
+import com.acr.review.service.ReviewIssueAssigneeResolver;
 import com.acr.review.service.ReviewIssueDispositionEnricher;
 import com.acr.review.service.ReviewIssueFingerprint;
 import com.acr.review.service.ReviewProjectAccessService;
 import com.acr.review.service.ReviewScoringConstants;
 import com.acr.system.service.ISysConfigService;
 import com.acr.system.service.ISysDeptService;
+import com.acr.system.service.ISysUserService;
+import com.acr.common.core.domain.entity.SysUser;
+import com.acr.review.domain.ReviewProjectMember;
 import com.acr.system.domain.SysBusinessAudit;
 import com.acr.system.service.ISysBusinessAuditService;
 import com.alibaba.fastjson2.JSON;
@@ -73,6 +82,10 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
     private final IReviewDeliveryService deliveryService;
     private final ISysConfigService configService;
     private final ReviewProjectAccessService projectAccessService;
+    private final ReviewIssueAssigneeResolver assigneeResolver;
+    private final ReviewCommitFactMapper commitFactMapper;
+    private final ReviewProjectMemberMapper projectMemberMapper;
+    private final ISysUserService userService;
 
     /** 测试中允许不装配，生产环境由系统模块提供。 */
     @Autowired(required = false)
@@ -86,7 +99,11 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
                                   ISysDeptService deptService,
                                   IReviewDeliveryService deliveryService,
                                   ISysConfigService configService,
-                                  ReviewProjectAccessService projectAccessService)
+                                  ReviewProjectAccessService projectAccessService,
+                                  ReviewIssueAssigneeResolver assigneeResolver,
+                                  ReviewCommitFactMapper commitFactMapper,
+                                  ReviewProjectMemberMapper projectMemberMapper,
+                                  ISysUserService userService)
     {
         this.issueMapper = issueMapper;
         this.actionMapper = actionMapper;
@@ -97,6 +114,10 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
         this.deliveryService = deliveryService;
         this.configService = configService;
         this.projectAccessService = projectAccessService;
+        this.assigneeResolver = assigneeResolver;
+        this.commitFactMapper = commitFactMapper;
+        this.projectMemberMapper = projectMemberMapper;
+        this.userService = userService;
     }
 
     @Override
@@ -116,6 +137,8 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
             return ReviewRoundReconcileResult.empty();
         }
         List<ReviewTopIssue> roundIssues = ReviewSummaryContentFactory.resolveTopIssues(run);
+        ReviewProject project = projectMapper.selectReviewProjectById(task.getProjectId());
+        Collection<String> commitAuthorEmails = loadCommitAuthorEmails(task);
         List<ReviewIssue> allIssues = issueMapper.selectByProjectAndPr(
             task.getProjectId(), task.getPrNumber(), resolveRefBranch(task));
         if (allIssues == null)
@@ -170,6 +193,7 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
                     roundHitNote(roundNo, headSha));
             }
             hitIssueIds.add(existing.getIssueId());
+            tryAssignAuto(existing, task, project, commitAuthorEmails);
         }
 
         // Pass 2 单义族合并
@@ -232,6 +256,7 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
             }
             hitIssueIds.add(target.getIssueId());
             consumedRoundIndexes.add(i);
+            tryAssignAuto(target, task, project, commitAuthorEmails);
         }
 
         // Pass 3 新物化
@@ -268,6 +293,7 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
             allIssues.add(created);
             newlyMaterialized.add(created);
             hitIssueIds.add(created.getIssueId());
+            tryAssignAuto(created, task, project, commitAuthorEmails);
         }
 
         // Pass 4 未命中判定（PUSH 线：仅对本轮 diff 覆盖文件计 missed）
@@ -362,6 +388,7 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
     @DataScope(deptAlias = "d", userAlias = "owner", permission = "review:issue:list")
     public List<ReviewIssue> selectIssueList(ReviewIssue query)
     {
+        applyAssignFilter(query);
         projectAccessService.applyQueryScope(query);
         return issueMapper.selectIssueList(query);
     }
@@ -470,6 +497,69 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
         detail.setActions(actionMapper.selectByIssueId(issueId));
         detail.setSummaryDelivery(deliveryService.selectSummaryDelivery(issue.getProjectId(), issue.getPrNumber()));
         return detail;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ReviewIssue transfer(Long issueId, Long assigneeUserId, String note)
+    {
+        ReviewIssue issue = requireIssue(issueId);
+        if (!ReviewIssueConstants.isActive(issue.getStatus()))
+        {
+            throw new ServiceException(terminalOrIllegalMessage(issue.getStatus(), "转派"));
+        }
+        Long operatorId = SecurityUtils.getUserId();
+        boolean self = operatorId != null && operatorId.equals(issue.getAssigneeUserId());
+        if (!self)
+        {
+            if (!SecurityUtils.hasPermi("review:issue:close"))
+            {
+                throw new ServiceException("没有权限转派该问题");
+            }
+            projectAccessService.requireView(issue.getProjectId());
+        }
+        if (assigneeUserId == null)
+        {
+            throw new ServiceException("请选择转派目标");
+        }
+        ReviewProject project = projectMapper.selectReviewProjectById(issue.getProjectId());
+        if (project == null)
+        {
+            throw new ServiceException("代码项目不存在");
+        }
+        if (!isEffectiveProjectMember(project, assigneeUserId))
+        {
+            throw new ServiceException("转派目标必须是项目有效成员");
+        }
+        String reason = note == null ? null : note.trim();
+        if (StringUtils.isEmpty(reason))
+        {
+            throw new ServiceException("转派必须填写原因");
+        }
+        if (reason.length() > ReviewIssueConstants.MAX_RESOLVE_NOTE_CHARS)
+        {
+            reason = reason.substring(0, ReviewIssueConstants.MAX_RESOLVE_NOTE_CHARS);
+        }
+        Long fromUserId = issue.getAssigneeUserId();
+        Date now = new Date();
+        issue.setAssigneeUserId(assigneeUserId);
+        issue.setAssignSource(ReviewIssueConstants.ASSIGN_SOURCE_TRANSFER);
+        issue.setAssignTime(now);
+        issue.setUpdateBy(SecurityUtils.getUsername());
+        issueMapper.updateIssueAssignment(issue);
+
+        ReviewIssueAction action = new ReviewIssueAction();
+        action.setIssueId(issue.getIssueId());
+        action.setOperator(SecurityUtils.getUsername());
+        action.setActionType(ReviewIssueConstants.ACTION_ASSIGN_TRANSFER);
+        action.setFromStatus(issue.getStatus());
+        action.setToStatus(issue.getStatus());
+        action.setResolveNote(userDisplayName(fromUserId) + " → " + userDisplayName(assigneeUserId) + "：" + reason);
+        action.setCreateTime(now);
+        actionMapper.insertAction(action);
+
+        ReviewIssue persisted = issueMapper.selectIssueById(issue.getIssueId());
+        return persisted == null ? issue : persisted;
     }
 
     @Override
@@ -812,6 +902,7 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
     @DataScope(deptAlias = "d", userAlias = "owner", permission = "review:issue:list")
     public int countIssueList(ReviewIssue query)
     {
+        applyAssignFilter(query);
         projectAccessService.applyQueryScope(query);
         return issueMapper.countIssueList(query);
     }
@@ -1179,7 +1270,96 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
         issue.setLastSeenHeadSha(headSha);
         issue.setCreateBy(operator);
         issue.setUpdateBy(operator);
+        issue.setOverdueFlag("N");
         return issue;
+    }
+
+    private Collection<String> loadCommitAuthorEmails(ReviewTask task)
+    {
+        if (task == null || task.getEventId() == null
+            || !ReviewPipelineConstants.EVENT_SOURCE_PUSH.equals(task.getEventSource()))
+        {
+            return List.of();
+        }
+        List<String> emails = commitFactMapper.selectAuthorEmailsByEventId(task.getEventId());
+        return emails == null ? List.of() : emails;
+    }
+
+    private void tryAssignAuto(ReviewIssue issue, ReviewTask task, ReviewProject project,
+                               Collection<String> commitAuthorEmails)
+    {
+        if (issue == null || issue.getIssueId() == null || issue.getAssigneeUserId() != null)
+        {
+            return;
+        }
+        Optional<ReviewIssueAssignment> assignment = assigneeResolver.resolve(
+            issue.getOrigin(),
+            task == null ? null : task.getEventSource(),
+            task == null ? null : task.getPrAuthor(),
+            project == null ? null : project.getOwnerUserId(),
+            commitAuthorEmails);
+        if (assignment.isEmpty())
+        {
+            return;
+        }
+        Date now = new Date();
+        issue.setAssigneeUserId(assignment.get().getUserId());
+        issue.setAssignSource(assignment.get().getSource());
+        issue.setAssignTime(now);
+        issue.setUpdateBy(ReviewIssueConstants.OPERATOR_SYSTEM);
+        issueMapper.updateIssueAssignment(issue);
+        insertSystemAction(issue.getIssueId(), ReviewIssueConstants.ACTION_ASSIGN_AUTO,
+            issue.getStatus(), issue.getStatus(), assignment.get().getNote());
+    }
+
+    private void applyAssignFilter(ReviewIssue query)
+    {
+        if (query == null)
+        {
+            return;
+        }
+        if (ReviewIssueConstants.ASSIGN_FILTER_MINE.equals(query.getAssignFilter()))
+        {
+            query.setAssigneeUserId(SecurityUtils.getUserId());
+        }
+    }
+
+    private boolean isEffectiveProjectMember(ReviewProject project, Long userId)
+    {
+        if (project == null || userId == null)
+        {
+            return false;
+        }
+        if (userId.equals(project.getOwnerUserId()))
+        {
+            return true;
+        }
+        ReviewProjectMember member = projectMemberMapper.selectByProjectAndUser(project.getProjectId(), userId);
+        if (member == null || !"0".equals(member.getStatus()))
+        {
+            return false;
+        }
+        return ReviewProjectMember.ROLE_OWNER.equals(member.getProjectRole())
+            || ReviewProjectMember.ROLE_ADMIN.equals(member.getProjectRole())
+            || ReviewProjectMember.ROLE_REVIEWER.equals(member.getProjectRole());
+    }
+
+    private String userDisplayName(Long userId)
+    {
+        if (userId == null)
+        {
+            return "未指派";
+        }
+        SysUser user = userService.selectUserById(userId);
+        if (user != null && StringUtils.isNotEmpty(user.getNickName()))
+        {
+            return user.getNickName();
+        }
+        if (user != null && StringUtils.isNotEmpty(user.getUserName()))
+        {
+            return user.getUserName();
+        }
+        return "用户" + userId;
     }
 
     private static void applySnapshotFields(ReviewIssue issue, ReviewTopIssue top)

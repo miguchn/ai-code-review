@@ -2,11 +2,16 @@ package com.acr.review.delivery;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import com.acr.common.utils.StringUtils;
+import com.acr.review.domain.ReviewIssue;
 import com.acr.review.domain.ReviewPipelineConstants;
 import com.acr.review.domain.ReviewProject;
 import com.acr.review.domain.ReviewRoundReconcileResult;
@@ -15,7 +20,10 @@ import com.acr.review.domain.ReviewTaskRun;
 import com.acr.review.domain.result.ReviewScopeStats;
 import com.acr.review.domain.result.ReviewTopIssue;
 import com.acr.review.git.GitProviderCodes;
+import com.acr.review.mapper.ReviewIssueMapper;
+import com.acr.system.domain.SysUserIdentity;
 import com.acr.system.service.ISysConfigService;
+import com.acr.system.service.ISysUserIdentityService;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
@@ -28,10 +36,22 @@ public class ReviewSummaryContentFactory
         "^git@github\\.com:([^/]+)/([^/]+?)(?:\\.git)?/?$", Pattern.CASE_INSENSITIVE);
 
     private final ISysConfigService configService;
+    private final ReviewIssueMapper issueMapper;
+    private final ISysUserIdentityService identityService;
 
     public ReviewSummaryContentFactory(ISysConfigService configService)
     {
+        this(configService, null, null);
+    }
+
+    @Autowired
+    public ReviewSummaryContentFactory(ISysConfigService configService,
+                                       ReviewIssueMapper issueMapper,
+                                       ISysUserIdentityService identityService)
+    {
         this.configService = configService;
+        this.issueMapper = issueMapper;
+        this.identityService = identityService;
     }
 
     public ReviewSummaryContent build(ReviewTask task, ReviewTaskRun run, ReviewProject project)
@@ -92,7 +112,71 @@ public class ReviewSummaryContentFactory
                 task == null ? null : task.getBusinessSystemName()));
 
         builder.detailUrl(buildDetailUrl(task));
+        try
+        {
+            if (task != null && task.getTaskId() != null && issueMapper != null)
+            {
+                builder.assignees(collectAssignees(issueMapper.selectAssignedByLastTaskId(task.getTaskId())));
+            }
+        }
+        catch (Exception ignored)
+        {
+            // @ 解析异常静默降级，不阻塞总结正文
+        }
         return builder.build();
+    }
+
+    public List<ReviewAssigneeMention> collectAssignees(List<ReviewIssue> issues)
+    {
+        if (issues == null || issues.isEmpty())
+        {
+            return List.of();
+        }
+        Map<Long, ReviewAssigneeMention> unique = new LinkedHashMap<>();
+        for (ReviewIssue issue : issues)
+        {
+            if (issue == null || issue.getAssigneeUserId() == null)
+            {
+                continue;
+            }
+            unique.computeIfAbsent(issue.getAssigneeUserId(), id -> mentionOf(issue));
+        }
+        return new ArrayList<>(unique.values());
+    }
+
+    private ReviewAssigneeMention mentionOf(ReviewIssue issue)
+    {
+        String name = StringUtils.defaultIfEmpty(issue.getAssigneeName(), "未指派");
+        String ding = null;
+        String wecom = null;
+        String feishu = null;
+        if (identityService != null && issue.getAssigneeUserId() != null)
+        {
+            List<SysUserIdentity> rows = identityService.listByUserId(issue.getAssigneeUserId());
+            if (rows != null)
+            {
+                for (SysUserIdentity row : rows)
+                {
+                    if (row == null)
+                    {
+                        continue;
+                    }
+                    if (SysUserIdentity.TYPE_IM_DINGTALK.equals(row.getIdentityType()))
+                    {
+                        ding = row.getIdentifier();
+                    }
+                    else if (SysUserIdentity.TYPE_IM_WECOM.equals(row.getIdentityType()))
+                    {
+                        wecom = row.getIdentifier();
+                    }
+                    else if (SysUserIdentity.TYPE_IM_FEISHU.equals(row.getIdentityType()))
+                    {
+                        feishu = row.getIdentifier();
+                    }
+                }
+            }
+        }
+        return new ReviewAssigneeMention(issue.getAssigneeUserId(), name, ding, wecom, feishu);
     }
 
     /** 从 run 解析 Top3（优先 topIssuesJson 列，否则 resultJson.topIssues）。 */

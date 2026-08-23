@@ -29,6 +29,11 @@ public final class ReviewNotifyMessageRenderer
 
     public static String renderSuccess(ReviewSummaryContent content)
     {
+        return renderSuccess(content, null);
+    }
+
+    public static String renderSuccess(ReviewSummaryContent content, String channelType)
+    {
         if (content == null)
         {
             return "";
@@ -58,6 +63,7 @@ public final class ReviewNotifyMessageRenderer
             sb.append('\u3000').append(ReviewDeliveryConstants.PUSH_SCOPE_NOTE).append('\n');
         }
 
+        appendAssignees(sb, content.getAssignees(), channelType);
         appendActionLinks(sb, content, true);
         return sb.toString().trim();
     }
@@ -110,6 +116,96 @@ public final class ReviewNotifyMessageRenderer
             case "LOW" -> "💡";
             default -> "ℹ️";
         };
+    }
+
+    /** 责任人段；解析异常静默跳过，不阻塞投递。 */
+    static void appendAssignees(StringBuilder sb, List<ReviewAssigneeMention> assignees, String channelType)
+    {
+        try
+        {
+            if (sb == null || assignees == null || assignees.isEmpty())
+            {
+                return;
+            }
+            int total = assignees.size();
+            int limit = Math.min(total, ReviewIssueConstants.MAX_ASSIGNEES_IN_DELIVERY);
+            StringBuilder joined = new StringBuilder();
+            for (int i = 0; i < limit; i++)
+            {
+                if (i > 0)
+                {
+                    joined.append(' ');
+                }
+                joined.append(formatMention(assignees.get(i), channelType));
+            }
+            if (total > limit)
+            {
+                joined.append(" …等 ").append(total).append(" 人");
+            }
+            sb.append("\n责任人：").append(joined).append('\n');
+        }
+        catch (Exception ignored)
+        {
+            // 不阻塞通知主体
+        }
+    }
+
+    static String formatMention(ReviewAssigneeMention mention, String channelType)
+    {
+        if (mention == null)
+        {
+            return "";
+        }
+        String name = StringUtils.defaultIfEmpty(mention.getDisplayName(), "未指派");
+        // 飞书 post 格式 at 标签支持后续单独立项
+        if (ReviewDeliveryConstants.CHANNEL_FEISHU_BOT.equals(channelType))
+        {
+            return name;
+        }
+        String identifier = mention.channelIdentifier(channelType);
+        if (StringUtils.isEmpty(identifier))
+        {
+            return name;
+        }
+        if (ReviewDeliveryConstants.CHANNEL_DINGTALK_ROBOT.equals(channelType))
+        {
+            return "@" + identifier;
+        }
+        if (ReviewDeliveryConstants.CHANNEL_WECOM_ROBOT.equals(channelType))
+        {
+            return "<@" + identifier + ">";
+        }
+        return name;
+    }
+
+    public static List<String> collectAtIds(List<ReviewAssigneeMention> assignees, String channelType)
+    {
+        try
+        {
+            if (assignees == null || assignees.isEmpty() || StringUtils.isEmpty(channelType)
+                || ReviewDeliveryConstants.CHANNEL_FEISHU_BOT.equals(channelType))
+            {
+                return List.of();
+            }
+            List<String> ids = new ArrayList<>();
+            for (ReviewAssigneeMention mention : assignees)
+            {
+                if (mention == null)
+                {
+                    continue;
+                }
+                String identifier = mention.channelIdentifier(channelType);
+                if (StringUtils.isNotEmpty(identifier))
+                {
+                    ids.add(identifier);
+                }
+            }
+            return ids;
+        }
+        catch (Exception ignored)
+        {
+            return List.of();
+        }
     }
 
     /** 疑似已修复段；装配异常时静默跳过。 */

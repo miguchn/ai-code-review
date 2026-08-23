@@ -1,6 +1,9 @@
 package com.acr.review.notify.wecom;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import com.acr.common.utils.StringUtils;
@@ -14,6 +17,8 @@ import com.alibaba.fastjson2.JSONObject;
 @Component
 public class WeComRobotClient extends AbstractNotifyRobotClient
 {
+    private static final Logger log = LoggerFactory.getLogger(WeComRobotClient.class);
+
     public WeComRobotClient(
         @Value("${review.notify.connect-timeout-ms:5000}") int connectTimeoutMs,
         @Value("${review.notify.read-timeout-ms:15000}") int readTimeoutMs)
@@ -28,9 +33,14 @@ public class WeComRobotClient extends AbstractNotifyRobotClient
     }
 
     @Override
-    public void send(String webhookUrl, String secret, String title, String body)
+    public void send(String webhookUrl, String secret, String title, String body, List<String> atIds)
     {
         requireWebhook(webhookUrl);
+        // TODO 待真实群验证：企微 markdown 仅认正文 <@userid>，atIds 不写入请求体
+        if (atIds != null && !atIds.isEmpty())
+        {
+            log.debug("企微机器人 @ 目标 {} 个，已内嵌正文", atIds.size());
+        }
         String content = body == null ? "" : body;
         byte[] bytes = content.getBytes(StandardCharsets.UTF_8);
         if (bytes.length > ReviewDeliveryConstants.WECOM_MAX_MARKDOWN_BYTES)

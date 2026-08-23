@@ -237,6 +237,7 @@ public class WorkbenchServiceImpl implements IWorkbenchService
                 WorkbenchConstants.SUBTITLE_ALL_ORIGIN,
                 ReviewIssueConstants.STATUS_AWAITING_FIX,
                 null));
+            cards.add(assignedToMeCard());
             cards.add(issueCard(
                 WorkbenchConstants.CARD_ISSUE_RECHECKING,
                 WorkbenchConstants.TITLE_ISSUE_RECHECKING,
@@ -289,6 +290,22 @@ public class WorkbenchServiceImpl implements IWorkbenchService
             q.put("origin", origin);
         }
         return new WorkbenchCard(type, title, subtitle, issueService.countIssueList(query), WorkbenchConstants.LINK_ISSUE, q);
+    }
+
+    private WorkbenchCard assignedToMeCard()
+    {
+        ReviewIssue query = new ReviewIssue();
+        query.setAssignFilter(ReviewIssueConstants.ASSIGN_FILTER_MINE);
+        query.setActiveFlag("Y");
+        Map<String, String> q = new LinkedHashMap<>();
+        q.put("assignFilter", ReviewIssueConstants.ASSIGN_FILTER_MINE);
+        return new WorkbenchCard(
+            WorkbenchConstants.CARD_ASSIGNED_TO_ME,
+            WorkbenchConstants.TITLE_ASSIGNED_TO_ME,
+            WorkbenchConstants.SUBTITLE_ASSIGNED_TO_ME,
+            issueService.countIssueList(query),
+            WorkbenchConstants.LINK_ISSUE,
+            q);
     }
 
     private WorkbenchCard highRiskCard()

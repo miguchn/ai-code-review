@@ -42,7 +42,7 @@ class FeishuBotClientTest
         String title = "AI Code Review · 通过";
         String body = "### ✅ AI Code Review · 通过 · 90/100";
 
-        client.send(server.url("/").toString(), null, title, body);
+        client.send(server.url("/").toString(), null, title, body, null);
 
         RecordedRequest request = server.takeRequest();
         assertEquals("POST", request.getMethod());
@@ -61,7 +61,7 @@ class FeishuBotClientTest
         server.enqueue(json(200, "{\"code\":0,\"msg\":\"success\"}"));
         String secret = "SECfeishu";
 
-        client.send(server.url("/").toString(), secret, "title", "body");
+        client.send(server.url("/").toString(), secret, "title", "body", null);
 
         RecordedRequest request = server.takeRequest();
         JSONObject payload = JSON.parseObject(request.getBody().readUtf8());
@@ -76,7 +76,7 @@ class FeishuBotClientTest
         server.enqueue(json(200, "{\"code\":19021,\"msg\":\"sign match fail\"}"));
 
         assertThrows(NotifyRobotException.class,
-            () -> client.send(server.url("/").toString(), "SEC", "t", "b"));
+            () -> client.send(server.url("/").toString(), "SEC", "t", "b", null));
     }
 
     @Test
@@ -84,7 +84,7 @@ class FeishuBotClientTest
     {
         server.enqueue(json(200, "{\"StatusCode\":0,\"StatusMessage\":\"success\"}"));
 
-        client.send(server.url("/").toString(), null, "t", "b");
+        client.send(server.url("/").toString(), null, "t", "b", null);
     }
 
     @Test

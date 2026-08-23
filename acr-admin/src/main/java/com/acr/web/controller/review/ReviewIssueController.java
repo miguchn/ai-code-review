@@ -21,6 +21,7 @@ import com.acr.review.domain.ReviewCommentSyncResult;
 import com.acr.review.domain.ReviewIssue;
 import com.acr.review.domain.ReviewIssueBatchRequest;
 import com.acr.review.domain.ReviewIssueBatchResult;
+import com.acr.review.domain.ReviewIssueTransferRequest;
 import com.acr.review.service.IReviewIssueService;
 
 /** 问题台账 REST。 */
@@ -64,6 +65,16 @@ public class ReviewIssueController extends BaseController
     public AjaxResult getInfo(@PathVariable Long issueId)
     {
         return success(issueService.selectIssueDetail(issueId));
+    }
+
+    @PreAuthorize("@ss.hasPermi('review:issue:query')")
+    @Log(title = "问题转派", businessType = BusinessType.UPDATE)
+    @PutMapping("/{issueId}/transfer")
+    public AjaxResult transfer(@PathVariable Long issueId, @RequestBody(required = false) ReviewIssueTransferRequest body)
+    {
+        Long assigneeUserId = body == null ? null : body.getAssigneeUserId();
+        String note = body == null ? null : body.getNote();
+        return success(issueService.transfer(issueId, assigneeUserId, note));
     }
 
     @PreAuthorize("@ss.hasPermi('review:issue:confirm')")

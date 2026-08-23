@@ -2,7 +2,9 @@ package com.acr.review.notify.dingtalk;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Base64;
+import java.util.List;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.springframework.beans.factory.annotation.Value;
@@ -32,7 +34,7 @@ public class DingTalkRobotClient extends AbstractNotifyRobotClient
     }
 
     @Override
-    public void send(String webhookUrl, String secret, String title, String body)
+    public void send(String webhookUrl, String secret, String title, String body, List<String> atIds)
     {
         requireWebhook(webhookUrl);
         String url = appendSign(webhookUrl, secret);
@@ -42,6 +44,11 @@ public class DingTalkRobotClient extends AbstractNotifyRobotClient
         markdown.put("title", StringUtils.defaultIfEmpty(title, "AI Code Review"));
         markdown.put("text", body == null ? "" : body);
         payload.put("markdown", markdown);
+        // TODO 待真实群验证：at.atMobiles 需与正文 @手机号 同时出现才会渲染 @
+        JSONObject at = new JSONObject();
+        at.put("atMobiles", atIds == null ? new ArrayList<>() : new ArrayList<>(atIds));
+        at.put("isAtAll", false);
+        payload.put("at", at);
 
         String response = postJson(url, payload.toJSONString(), "钉钉机器人发送");
         JSONObject json = JSON.parseObject(response);

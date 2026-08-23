@@ -39,6 +39,17 @@
           <el-option v-for="dict in review_issue_origin" :key="dict.value" :label="dict.label" :value="dict.value" />
         </el-select>
       </el-form-item>
+      <el-form-item label="责任人" prop="assignFilter">
+        <el-select v-model="queryParams.assignFilter" clearable placeholder="全部" style="width: 130px">
+          <el-option label="指派给我" value="MINE" />
+          <el-option label="未指派" value="UNASSIGNED" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="逾期" prop="overdueFlag">
+        <el-select v-model="queryParams.overdueFlag" clearable placeholder="全部" style="width: 110px">
+          <el-option label="逾期" value="Y" />
+        </el-select>
+      </el-form-item>
       <el-form-item label="关键词" prop="keyword">
         <el-input v-model="queryParams.keyword" placeholder="标题或文件路径" clearable style="width: 180px" @keyup.enter="handleQuery" />
       </el-form-item>
@@ -270,6 +281,14 @@
           <dict-tag :options="review_issue_origin" :value="scope.row.origin" />
         </template>
       </el-table-column>
+      <el-table-column label="责任人" min-width="130">
+        <template #default="scope">
+          <div class="stacked-cell">
+            <span>{{ scope.row.assigneeName || '未指派' }}</span>
+            <el-tag v-if="scope.row.overdueFlag === 'Y'" type="danger" size="small">逾期</el-tag>
+          </div>
+        </template>
+      </el-table-column>
       <el-table-column label="时间" width="185">
         <template #default="scope">
           <div class="stacked-cell time-cell">
@@ -380,6 +399,8 @@ const queryParams = ref({
   closedFlag: undefined,
   severity: undefined,
   origin: undefined,
+  assignFilter: undefined,
+  overdueFlag: undefined,
   keyword: undefined
 })
 
@@ -547,7 +568,7 @@ function loadProjects() {
 
 function syncFilterQuery() {
   const next = { ...route.query }
-  const directFields = ['reviewTaskId', 'projectId', 'prNumber', 'prAuthor', 'branchKeyword', 'severity', 'origin', 'keyword']
+  const directFields = ['reviewTaskId', 'projectId', 'prNumber', 'prAuthor', 'branchKeyword', 'severity', 'origin', 'assignFilter', 'overdueFlag', 'keyword']
   directFields.forEach(field => {
     const value = queryParams.value[field]
     if (value !== undefined && value !== null && value !== '') next[field] = String(value)
@@ -710,6 +731,8 @@ function applyRouteQuery() {
   queryParams.value.closedFlag = undefined
   queryParams.value.severity = undefined
   queryParams.value.origin = undefined
+  queryParams.value.assignFilter = undefined
+  queryParams.value.overdueFlag = undefined
   queryParams.value.keyword = undefined
   dateRange.value = []
   recordContext.value = null
@@ -727,6 +750,8 @@ function applyRouteQuery() {
     queryParams.value.pendingOnly = undefined
   }
   if (q.origin) queryParams.value.origin = String(q.origin)
+  if (q.assignFilter) queryParams.value.assignFilter = String(q.assignFilter)
+  if (q.overdueFlag) queryParams.value.overdueFlag = String(q.overdueFlag)
   if (q.severity) queryParams.value.severity = String(q.severity)
   if (q.projectId) queryParams.value.projectId = Number(q.projectId) || q.projectId
   if (q.reviewTaskId) queryParams.value.reviewTaskId = Number(q.reviewTaskId) || q.reviewTaskId

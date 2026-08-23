@@ -150,7 +150,8 @@ public class ReviewNotifyChannelServiceImpl implements IReviewNotifyChannelServi
                 decrypted.webhookUrl(),
                 decrypted.secret(),
                 ReviewDeliveryConstants.TEST_MESSAGE_TITLE,
-                ReviewDeliveryConstants.TEST_MESSAGE_BODY);
+                ReviewDeliveryConstants.TEST_MESSAGE_BODY,
+                java.util.List.of());
             success = true;
             message = "测试发送成功";
         }

@@ -30,6 +30,9 @@ public interface IReviewIssueService
 
     ReviewIssueDetail selectIssueDetail(Long issueId);
 
+    /** 转派责任人；仅活跃态；本人或持有 review:issue:close。 */
+    ReviewIssue transfer(Long issueId, Long assigneeUserId, String note);
+
     /** 确认：待确认 → 待修复。返回评论同步结果。 */
     ReviewCommentSyncResult confirm(Long issueId);
 

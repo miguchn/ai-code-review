@@ -6,6 +6,8 @@ public class UserIdentityAddRequest
     private String displayName;
     /** SELF / AUTO（本人确认建议时传 AUTO） */
     private String origin;
+    /** IM 身份类型：IM_WECOM / IM_DINGTALK / IM_FEISHU */
+    private String identityType;
 
     public String getIdentifier()
     {
@@ -35,5 +37,15 @@ public class UserIdentityAddRequest
     public void setOrigin(String origin)
     {
         this.origin = origin;
+    }
+
+    public String getIdentityType()
+    {
+        return identityType;
+    }
+
+    public void setIdentityType(String identityType)
+    {
+        this.identityType = identityType;
     }
 }

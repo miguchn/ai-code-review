@@ -25,6 +25,16 @@ public interface ReviewIssueMapper
 
     int updateIssueDisposition(ReviewIssue issue);
 
+    int updateIssueAssignment(ReviewIssue issue);
+
+    int updateOverdueFlag(@Param("issueId") Long issueId, @Param("overdueFlag") String overdueFlag);
+
+    List<ReviewIssue> selectAssignedByLastTaskId(@Param("taskId") Long taskId);
+
+    List<ReviewIssue> selectActiveIssuesForOverdueScan();
+
+    List<ReviewIssue> selectOverdueActiveByProject(@Param("projectId") Long projectId);
+
     int countOpenNewByProject(@Param("projectId") Long projectId);
 
     /** 与 selectIssueList 同筛选、同 DataScope 的计数。 */

@@ -44,9 +44,26 @@
       <p v-if="conflictMsg" class="conflict">{{ conflictMsg }}</p>
     </section>
 
-    <section class="block im-reserve">
+    <section class="block im-block">
       <h4>我的 IM 账号</h4>
-      <p class="hint muted">即将支持</p>
+      <p class="hint">用于审查总结和逾期提醒在群里 @ 到你。取不到对应渠道身份时，消息里只显示姓名。</p>
+      <div v-for="channel in imChannels" :key="channel.type" class="im-row">
+        <div class="im-meta">
+          <span class="identity-id">{{ channel.label }}</span>
+          <span class="identity-name">{{ channel.hint }}</span>
+        </div>
+        <div class="im-edit">
+          <el-input v-model="channel.draft" :placeholder="channel.placeholder" clearable />
+          <el-button type="primary" size="small" @click="saveIm(channel)">保存</el-button>
+          <el-button
+            v-if="channel.id"
+            type="danger"
+            link
+            @click="removeIm(channel)"
+          >移除</el-button>
+        </div>
+        <p v-if="channel.conflict" class="conflict">{{ channel.conflict }}</p>
+      </div>
     </section>
   </div>
 </template>
@@ -54,15 +71,23 @@
 <script setup>
 import {
   addMyIdentity,
+  addMyImIdentity,
   listIdentityCandidates,
   listMyIdentities,
-  removeMyIdentity
+  listMyImIdentities,
+  removeMyIdentity,
+  removeMyImIdentity
 } from '@/api/system/identity'
 
 const identities = ref([])
 const candidates = ref([])
 const manualInput = ref('')
 const conflictMsg = ref('')
+const imChannels = ref([
+  { type: 'IM_DINGTALK', label: '钉钉', hint: '登记手机号，用于群内 @', placeholder: '手机号', id: null, draft: '', conflict: '' },
+  { type: 'IM_WECOM', label: '企业微信', hint: '登记企业微信 userid', placeholder: 'userid', id: null, draft: '', conflict: '' },
+  { type: 'IM_FEISHU', label: '飞书', hint: '登记 open_id', placeholder: 'open_id', id: null, draft: '', conflict: '' }
+])
 
 const originMap = {
   SELF: '自己添加',
@@ -76,9 +101,45 @@ function originLabel(origin) {
 
 async function reload() {
   conflictMsg.value = ''
-  const [mineRes, candRes] = await Promise.all([listMyIdentities(), listIdentityCandidates()])
+  const [mineRes, candRes, imRes] = await Promise.all([
+    listMyIdentities(),
+    listIdentityCandidates(),
+    listMyImIdentities()
+  ])
   identities.value = mineRes.data || []
   candidates.value = candRes.data || []
+  applyImIdentities(imRes.data || [])
+}
+
+function applyImIdentities(rows) {
+  imChannels.value.forEach(channel => {
+    const match = rows.find(item => item.identityType === channel.type)
+    channel.id = match?.id || null
+    channel.draft = match?.identifier || ''
+    channel.conflict = ''
+  })
+}
+
+async function saveIm(channel) {
+  const identifier = (channel.draft || '').trim()
+  channel.conflict = ''
+  if (!identifier) {
+    channel.conflict = '请填写 ' + channel.placeholder
+    return
+  }
+  try {
+    await addMyImIdentity({ identityType: channel.type, identifier })
+    await reload()
+  } catch (e) {
+    channel.conflict = e?.message || e?.msg || '保存失败'
+  }
+}
+
+async function removeIm(channel) {
+  if (!channel.id) return
+  channel.conflict = ''
+  await removeMyImIdentity(channel.id)
+  await reload()
 }
 
 async function confirmCandidate(item) {
@@ -162,10 +223,20 @@ onMounted(reload)
     color: #c2413a;
     font-size: 13px;
   }
-  .im-reserve {
-    opacity: 0.72;
+  .im-block {
     border-top: 1px solid var(--divider, #ebefed);
     padding-top: 16px;
+  }
+  .im-row {
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border-light, #e5eae7);
+  }
+  .im-row:last-child { border-bottom: 0; }
+  .im-meta { margin-bottom: 8px; }
+  .im-edit {
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
 }
 </style>

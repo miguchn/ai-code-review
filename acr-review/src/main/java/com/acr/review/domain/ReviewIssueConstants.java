@@ -23,6 +23,23 @@ public final class ReviewIssueConstants
     public static final String ACTION_ROUND_HIT = "ROUND_HIT";
     /** 本轮审查未命中且未达转复核阈值。 */
     public static final String ACTION_ROUND_MISS = "ROUND_MISS";
+    /** 系统自动指派责任人。 */
+    public static final String ACTION_ASSIGN_AUTO = "ASSIGN_AUTO";
+    /** 人工转派责任人。 */
+    public static final String ACTION_ASSIGN_TRANSFER = "ASSIGN_TRANSFER";
+
+    public static final String ASSIGN_SOURCE_AUTO_COMMIT = "AUTO_COMMIT";
+    public static final String ASSIGN_SOURCE_AUTO_PR_AUTHOR = "AUTO_PR_AUTHOR";
+    public static final String ASSIGN_SOURCE_AUTO_OWNER = "AUTO_OWNER";
+    public static final String ASSIGN_SOURCE_TRANSFER = "TRANSFER";
+
+    public static final String ASSIGN_FILTER_MINE = "MINE";
+    public static final String ASSIGN_FILTER_UNASSIGNED = "UNASSIGNED";
+
+    public static final String CONFIG_OVERDUE_HIGH_DAYS = "review.issue.overdue.highDays";
+    public static final String CONFIG_OVERDUE_NORMAL_DAYS = "review.issue.overdue.normalDays";
+    public static final int DEFAULT_OVERDUE_HIGH_DAYS = 3;
+    public static final int DEFAULT_OVERDUE_NORMAL_DAYS = 7;
 
     public static final String CLOSE_SOURCE_MANUAL = "manual";
     public static final String CLOSE_SOURCE_AUTO_RECHECK = "auto_recheck";
@@ -46,6 +63,10 @@ public final class ReviewIssueConstants
     public static final int MAX_DISPOSITION_NOTE_IN_COMMENT = 80;
     /** 「疑似已修复」段最多展示标题数。 */
     public static final int MAX_RECHECKING_TITLES_IN_DELIVERY = 3;
+    /** 总结消息责任人最多展示人数。 */
+    public static final int MAX_ASSIGNEES_IN_DELIVERY = 5;
+    /** 逾期聚合提醒最多列出的问题条数。 */
+    public static final int MAX_ISSUES_IN_OVERDUE_REMIND = 5;
 
     private ReviewIssueConstants()
     {
@@ -93,6 +114,22 @@ public final class ReviewIssueConstants
             case STATUS_FALSE_POSITIVE -> "误报";
             case STATUS_RECHECKING -> "疑似修复";
             default -> status;
+        };
+    }
+
+    public static String assignSourceLabel(String source)
+    {
+        if (source == null)
+        {
+            return "--";
+        }
+        return switch (source)
+        {
+            case ASSIGN_SOURCE_AUTO_COMMIT -> "按提交作者";
+            case ASSIGN_SOURCE_AUTO_PR_AUTHOR -> "按 PR 发起人";
+            case ASSIGN_SOURCE_AUTO_OWNER -> "按项目负责人";
+            case ASSIGN_SOURCE_TRANSFER -> "人工转派";
+            default -> source;
         };
     }
 }
