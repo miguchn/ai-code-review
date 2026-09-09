@@ -2,6 +2,7 @@ package com.acr.system.mapper;
 
 import java.util.List;
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Update;
 import com.acr.system.domain.SysUserIdentity;
 
 public interface SysUserIdentityMapper
@@ -25,4 +26,7 @@ public interface SysUserIdentityMapper
 
     int deleteByTypeAndIdentifier(@Param("identityType") String identityType,
                                   @Param("identifier") String identifier);
+
+    @Update("UPDATE sys_user_identity SET user_id = #{userId}, origin = #{origin} WHERE id = #{id}")
+    int updateUserIdAndOrigin(@Param("id") Long id, @Param("userId") Long userId, @Param("origin") String origin);
 }

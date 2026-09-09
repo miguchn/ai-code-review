@@ -173,6 +173,51 @@ public class SysUserIdentityServiceImpl implements ISysUserIdentityService
     }
 
     @Override
+    public void recordAutoDiscovered(String identityType, String identifier, String displayName)
+    {
+        if (StringUtils.isEmpty(identifier))
+        {
+            return;
+        }
+        // 与 ReviewIssueAssigneeResolver.normalizeIdentifier 对齐：trim + 小写
+        String normalized = identifier.trim().toLowerCase();
+        if (normalized.isEmpty())
+        {
+            return;
+        }
+        SysUserIdentity existing = identityMapper.selectByTypeAndIdentifier(identityType, normalized);
+        if (existing != null)
+        {
+            return;
+        }
+        SysUserIdentity row = new SysUserIdentity();
+        row.setUserId(null);
+        row.setIdentityType(identityType);
+        row.setIdentifier(normalized);
+        row.setDisplayName(StringUtils.isNotEmpty(displayName) ? displayName.trim() : null);
+        row.setOrigin(SysUserIdentity.ORIGIN_AUTO);
+        row.setCreateBy("system");
+        try
+        {
+            identityMapper.insert(row);
+        }
+        catch (DuplicateKeyException ex)
+        {
+            // 并发插入，忽略
+        }
+    }
+
+    @Override
+    public void mapIdentity(Long id, Long userId)
+    {
+        if (id == null || userId == null)
+        {
+            throw new ServiceException("身份ID和系统用户ID均不能为空");
+        }
+        identityMapper.updateUserIdAndOrigin(id, userId, SysUserIdentity.ORIGIN_ADMIN);
+    }
+
+    @Override
     public List<SysUserIdentity> listByType(String identityType)
     {
         return identityMapper.selectByType(identityType);

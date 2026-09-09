@@ -39,6 +39,7 @@ import com.acr.review.security.CredentialCryptoService;
 import com.acr.review.service.IReviewIssueService;
 import com.acr.review.service.IReviewTaskCreateService;
 import com.acr.system.service.ISysConfigService;
+import com.acr.system.service.ISysUserIdentityService;
 
 class ReviewWebhookServiceImplTest
 {
@@ -63,6 +64,7 @@ class ReviewWebhookServiceImplTest
     private IReviewTaskCreateService taskCreateService;
     private IReviewIssueService issueService;
     private ReviewCommitFactIngestService commitFactIngestService;
+    private ISysUserIdentityService identityService;
     private ReviewWebhookServiceImpl service;
 
     @BeforeEach
@@ -77,8 +79,9 @@ class ReviewWebhookServiceImplTest
         taskCreateService = mock(IReviewTaskCreateService.class);
         issueService = mock(IReviewIssueService.class);
         commitFactIngestService = mock(ReviewCommitFactIngestService.class);
+        identityService = mock(ISysUserIdentityService.class);
         service = new ReviewWebhookServiceImpl(eventMapper, projectMapper, adapterRegistry,
-            cryptoService, configService, taskCreateService, issueService, commitFactIngestService, 262144);
+            cryptoService, configService, taskCreateService, issueService, commitFactIngestService, identityService, 262144);
 
         when(adapterRegistry.requireWebhookAdapter("GITHUB")).thenReturn(webhookAdapter);
         when(webhookAdapter.resolveDeliveryId(any(), eq(PAYLOAD))).thenReturn("d-1");

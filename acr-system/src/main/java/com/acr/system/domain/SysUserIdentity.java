@@ -9,6 +9,7 @@ public class SysUserIdentity extends BaseEntity
     private static final long serialVersionUID = 1L;
 
     public static final String TYPE_GIT_COMMIT = "GIT_COMMIT";
+    public static final String TYPE_GIT_PLATFORM_USER = "GIT_PLATFORM_USER";
     public static final String TYPE_IM_WECOM = "IM_WECOM";
     public static final String TYPE_IM_DINGTALK = "IM_DINGTALK";
     public static final String TYPE_IM_FEISHU = "IM_FEISHU";
