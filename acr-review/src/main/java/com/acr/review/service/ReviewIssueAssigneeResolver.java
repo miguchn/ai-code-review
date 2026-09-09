@@ -59,7 +59,7 @@ public class ReviewIssueAssigneeResolver
             return Optional.empty();
         }
         String email = emails.iterator().next();
-        return matchIdentity(email).map(hit -> new ReviewIssueAssignment(
+        return matchIdentity(SysUserIdentity.TYPE_GIT_COMMIT, email).map(hit -> new ReviewIssueAssignment(
             hit.userId(),
             ReviewIssueConstants.ASSIGN_SOURCE_AUTO_COMMIT,
             "按提交邮箱 " + email + " 自动指派给" + hit.displayName()));
@@ -72,10 +72,15 @@ public class ReviewIssueAssigneeResolver
         {
             return Optional.empty();
         }
-        return matchIdentity(identifier).map(hit -> new ReviewIssueAssignment(
-            hit.userId(),
+        Optional<IdentityHit> hit = matchIdentity(SysUserIdentity.TYPE_GIT_COMMIT, identifier);
+        if (hit.isEmpty())
+        {
+            hit = matchIdentity(SysUserIdentity.TYPE_GIT_PLATFORM_USER, identifier);
+        }
+        return hit.map(h -> new ReviewIssueAssignment(
+            h.userId(),
             ReviewIssueConstants.ASSIGN_SOURCE_AUTO_PR_AUTHOR,
-            "按 PR 发起人 " + identifier + " 自动指派给" + hit.displayName()));
+            "按 PR 发起人 " + identifier + " 自动指派给" + h.displayName()));
     }
 
     private Optional<ReviewIssueAssignment> matchOwner(Long ownerUserId)
@@ -90,10 +95,9 @@ public class ReviewIssueAssigneeResolver
             "PR 发起人匹配失败，按项目负责人兜底指派"));
     }
 
-    private Optional<IdentityHit> matchIdentity(String identifier)
+    private Optional<IdentityHit> matchIdentity(String identityType, String identifier)
     {
-        SysUserIdentity row = identityService.selectByTypeAndIdentifier(
-            SysUserIdentity.TYPE_GIT_COMMIT, identifier);
+        SysUserIdentity row = identityService.selectByTypeAndIdentifier(identityType, identifier);
         if (row == null || row.getUserId() == null)
         {
             return Optional.empty();

@@ -271,7 +271,7 @@
             </el-form-item>
             <el-form-item v-if="form.projectId" label="最近接收">
               <span v-if="form.lastWebhookTime">{{ formatDateTime(form.lastWebhookTime) }} · {{ form.lastWebhookResult }}</span>
-              <span v-else class="inline-tip">尚未接收 Webhook 事件</span>
+              <span v-else class="inline-tip">尚未接收 Webhook 事件。若 GitLab 已配置 Webhook 但此处始终为空，请检查 GitLab 服务器到回调地址的网络连通性（GitLab Admin Area 的「Allow requests to the local network from web hooks」开关 / 防火墙策略）</span>
             </el-form-item>
             </div>
           </el-tab-pane>

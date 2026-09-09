@@ -32,6 +32,8 @@ import com.acr.review.service.IReviewIssueService;
 import com.acr.review.service.IReviewTaskCreateService;
 import com.acr.review.service.IReviewWebhookService;
 import com.acr.system.service.ISysConfigService;
+import com.acr.system.service.ISysUserIdentityService;
+import com.acr.system.domain.SysUserIdentity;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 
@@ -52,6 +54,7 @@ public class ReviewWebhookServiceImpl implements IReviewWebhookService
     private final IReviewTaskCreateService taskCreateService;
     private final IReviewIssueService issueService;
     private final ReviewCommitFactIngestService commitFactIngestService;
+    private final ISysUserIdentityService identityService;
     private final int maxPayloadBytes;
 
     public ReviewWebhookServiceImpl(ReviewWebhookEventMapper eventMapper,
@@ -62,6 +65,7 @@ public class ReviewWebhookServiceImpl implements IReviewWebhookService
                                     IReviewTaskCreateService taskCreateService,
                                     IReviewIssueService issueService,
                                     ReviewCommitFactIngestService commitFactIngestService,
+                                    ISysUserIdentityService identityService,
                                     @Value("${review.webhook.max-payload-bytes:262144}") int maxPayloadBytes)
     {
         this.eventMapper = eventMapper;
@@ -72,6 +76,7 @@ public class ReviewWebhookServiceImpl implements IReviewWebhookService
         this.taskCreateService = taskCreateService;
         this.issueService = issueService;
         this.commitFactIngestService = commitFactIngestService;
+        this.identityService = identityService;
         this.maxPayloadBytes = maxPayloadBytes;
     }
 
@@ -259,6 +264,13 @@ public class ReviewWebhookServiceImpl implements IReviewWebhookService
             return WebhookHandleResult.ok("推送载荷解析失败，已记录");
         }
         fillPushFields(event, pushEvent);
+
+        // 自动发现 Git 平台用户身份（管理员可在身份映射页绑定到系统用户后精准指派）
+        if (pushEvent.pusher() != null && !pushEvent.pusher().isBlank())
+        {
+            identityService.recordAutoDiscovered(
+                SysUserIdentity.TYPE_GIT_PLATFORM_USER, pushEvent.pusher(), pushEvent.pusher());
+        }
 
         if (pushEvent.deleted())
         {

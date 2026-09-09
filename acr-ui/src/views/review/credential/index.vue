@@ -67,6 +67,7 @@
         <template #default="scope">
           <el-button link type="primary" icon="Connection" :loading="testingId === scope.row.credentialId"
             @click="handleTest(scope.row)" v-hasPermi="['review:credential:test']">检测</el-button>
+          <el-button link type="primary" icon="User" @click="openIdentityMapping" v-hasPermi="['review:credential:edit']">映射</el-button>
           <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-hasPermi="['review:credential:edit']">修改</el-button>
           <el-button link type="primary" icon="Delete" @click="handleDelete(scope.row)" v-hasPermi="['review:credential:remove']">删除</el-button>
         </template>
@@ -123,12 +124,33 @@
         </div>
       </template>
     </el-dialog>
+
+    <el-drawer v-model="mappingOpen" title="Git 平台用户身份映射" size="480px" append-to-body>
+      <el-table :data="mappingList" v-loading="mappingLoading" size="small">
+        <el-table-column label="Git 用户名" prop="identifier" min-width="140" :show-overflow-tooltip="true" />
+        <el-table-column label="绑定系统用户" min-width="180">
+          <template #default="scope">
+            <el-select v-model="scope.row.selectedUserId" placeholder="未映射" filterable size="small" style="width: 100%">
+              <el-option v-for="u in userOptions" :key="u.userId" :label="u.nickName || u.userName" :value="u.userId" />
+            </el-select>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="80">
+          <template #default="scope">
+            <el-button link type="primary" size="small" :disabled="!scope.row.selectedUserId || scope.row.selectedUserId === scope.row.userId" @click="handleBind(scope.row)">绑定</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <div class="mapping-hint">仅显示通过 Webhook 自动发现的 Git 平台用户；未映射的按项目负责人兜底指派。</div>
+    </el-drawer>
   </div>
 </template>
 
 <script setup name="ReviewCredential">
 import { listGitCredential, getGitCredential, addGitCredential, updateGitCredential, delGitCredential, testGitCredential } from '@/api/review/credential'
 import { GIT_PROVIDER_FALLBACK, requiresServerUrl } from '@/constants/gitProviders'
+import { listPlatformUsers, bindIdentity } from '@/api/review/identityMapping'
+import { listUser } from '@/api/system/user'
 import useGuideStore from '@/store/modules/guide'
 
 const { proxy } = getCurrentInstance()
@@ -281,6 +303,35 @@ function handleTest(row) {
   }).finally(() => { testingId.value = undefined })
 }
 
+// === Git 平台用户身份映射 ===
+const mappingOpen = ref(false)
+const mappingList = ref([])
+const mappingLoading = ref(false)
+const userOptions = ref([])
+
+function openIdentityMapping() {
+  mappingOpen.value = true
+  loadMappingList()
+  if (!userOptions.value.length) {
+    listUser({ pageNum: 1, pageSize: 999 }).then(res => { userOptions.value = res.rows || [] })
+  }
+}
+
+function loadMappingList() {
+  mappingLoading.value = true
+  listPlatformUsers().then(res => {
+    mappingList.value = (res.data || []).map(item => ({ ...item, selectedUserId: item.userId || undefined }))
+  }).finally(() => { mappingLoading.value = false })
+}
+
+function handleBind(row) {
+  if (!row.selectedUserId) return
+  bindIdentity(row.id, row.selectedUserId).then(() => {
+    proxy.$modal.msgSuccess('身份映射成功')
+    loadMappingList()
+  })
+}
+
 function checkStatusText(status) { return { SUCCESS: '连接正常', FAILED: '连接失败', UNTESTED: '未检测' }[status] || '未检测' }
 function checkTagType(status) { return { SUCCESS: 'success', FAILED: 'danger', UNTESTED: 'info' }[status] || 'info' }
 
@@ -315,4 +366,5 @@ getList()
   margin: -8px 0 10px;
   line-height: 22px;
 }
+.mapping-hint { margin: 12px 0 0; font-size: 13px; color: var(--el-text-color-secondary); line-height: 22px; }
 </style>
