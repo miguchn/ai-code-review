@@ -41,8 +41,15 @@ public class ReviewIdentityMappingController extends BaseController
         {
             return AjaxResult.error("请选择系统用户");
         }
-        Long userId = Long.valueOf(userIdObj.toString());
-        identityService.mapIdentity(id, userId);
-        return AjaxResult.success();
+        try
+        {
+            Long userId = Long.valueOf(userIdObj.toString());
+            identityService.mapIdentity(id, userId);
+            return AjaxResult.success();
+        }
+        catch (NumberFormatException ex)
+        {
+            return AjaxResult.error("系统用户ID格式非法");
+        }
     }
 }
