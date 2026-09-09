@@ -33,5 +33,6 @@
 
 - 后端：`mvn test`
 - 前端：`cd acr-ui && npm run build:prod`
+- 前端单测：`cd acr-ui && npm run test:unit`
 
 后续业务实现必须补充与风险相匹配的测试。

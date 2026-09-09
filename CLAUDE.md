@@ -14,6 +14,7 @@
 ```bash
 mvn test
 cd acr-ui && npm run build:prod
+cd acr-ui && npm run test:unit
 ```
 
 不要在未完成单项功能规划前生成业务 CRUD，也不要新增框架、组件或继续拆分业务 Maven 模块。
