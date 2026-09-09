@@ -176,6 +176,8 @@ public class GiteaProvider implements GitProvider
             htmlUrl = repository.canonicalUrl();
         }
 
+        String mainLanguage = fetchMainLanguage(access, repository);
+
         Set<String> branchNames = new LinkedHashSet<>();
         for (int page = 1; page <= MAX_BRANCH_PAGES; page++)
         {
@@ -198,10 +200,29 @@ public class GiteaProvider implements GitProvider
             }
             if (branchResponse.body().size() < BRANCH_PAGE_SIZE)
             {
-                return GitRepositoryInfoResult.success(repository, htmlUrl, defaultBranch, new ArrayList<>(branchNames));
+                return GitRepositoryInfoResult.success(repository, htmlUrl, defaultBranch, new ArrayList<>(branchNames), mainLanguage);
             }
         }
         return GitRepositoryInfoResult.failure(GitConnectionFailure.API_ERROR, "Gitea 分支数量超过单次同步上限");
+    }
+
+    /** Gitea Languages API 返回 {语言: 字节数}，取首个作为主语言；失败返回 null。 */
+    private String fetchMainLanguage(GitAccessContext access, GitRepositoryCoordinates repository)
+    {
+        try
+        {
+            String path = "repos/" + repository.owner() + "/" + repository.repository() + "/languages";
+            ApiResponse response = getObject(access, path);
+            if (!response.success() || response.body() == null || response.body().isEmpty())
+            {
+                return null;
+            }
+            return response.body().keySet().stream().findFirst().orElse(null);
+        }
+        catch (Exception ignored)
+        {
+            return null;
+        }
     }
 
     private ApiResponse getRepository(GitAccessContext access, GitRepositoryCoordinates repository)

@@ -456,6 +456,7 @@
                   <el-option v-for="dict in review_tech_stack" :key="dict.value" :label="dict.label" :value="dict.value" />
                 </el-select>
                 <div class="inline-tip">用于筛选推荐审查模板；不强制模板必须同技术栈。</div>
+                <div v-if="detectedMainLanguage" class="inline-tip">仓库主语言检测为 {{ detectedMainLanguage }}，请据此选择技术栈。</div>
               </div>
             </el-form-item>
             <el-form-item label="审查方式" prop="reviewMode">
@@ -624,6 +625,7 @@ const ocrAvailabilityLoading = ref(false)
 const ocrAvailabilityError = ref('')
 const repositoryReading = ref(false)
 const repositoryInfoLoaded = ref(false)
+const detectedMainLanguage = ref('')
 const loadedRepositorySignature = ref('')
 const originalRepositorySignature = ref('')
 const availableBranches = ref([])
@@ -1174,6 +1176,7 @@ function handleReadRepositoryInfo() {
     form.value.repositoryName = result.repositoryName
     form.value.repositoryFullPath = result.repositoryFullPath
     form.value.defaultBranch = result.defaultBranch
+    detectedMainLanguage.value = result.mainLanguage || ''
     form.value.prTargetBranches = selectedPr.length ? selectedPr : [...(result.recommendedTargetBranches || [])]
     if (!selectedPush.length && form.value.pushReviewEnabled === '0' && !form.value.pushTriggerBranches?.length) {
       form.value.pushTriggerBranches = result.defaultBranch ? [result.defaultBranch] : []
@@ -1273,10 +1276,26 @@ function submitForm() {
     }
     submitting.value = true
     const action = form.value.projectId ? updateReviewProject(payload) : addReviewProject(payload)
-    action.then(() => {
-      proxy.$modal.msgSuccess(form.value.projectId ? '修改成功' : '新增成功')
-      open.value = false
-      getList()
+    action.then(response => {
+      if (form.value.projectId) {
+        proxy.$modal.msgSuccess('修改成功')
+        open.value = false
+        getList()
+      } else {
+        const newId = response && response.data
+        open.value = false
+        getList()
+        if (newId) {
+          proxy.$modal.confirm('项目已创建，当前为停用状态，是否立即启用？').then(() => {
+            return changeReviewProjectStatus(newId, '0')
+          }).then(() => {
+            proxy.$modal.msgSuccess('项目已启用')
+            getList()
+          }).catch(() => {})
+        } else {
+          proxy.$modal.msgSuccess('新增成功，请在列表中启用项目')
+        }
+      }
     }).finally(() => { submitting.value = false })
   })
 }

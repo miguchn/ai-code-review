@@ -69,7 +69,13 @@ public class ReviewProjectController extends BaseController
     @PostMapping
     public AjaxResult add(@Validated @RequestBody ReviewProject project)
     {
-        return toAjax(projectService.insertReviewProject(project));
+        int rows = projectService.insertReviewProject(project);
+        AjaxResult ajax = toAjax(rows);
+        if (rows > 0)
+        {
+            ajax.put("data", project.getProjectId());
+        }
+        return ajax;
     }
 
     @PreAuthorize("@ss.hasPermi('review:project:edit')")

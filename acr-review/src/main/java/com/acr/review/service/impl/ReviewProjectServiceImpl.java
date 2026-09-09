@@ -115,7 +115,7 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
         this.templateService = templateService;
         this.cryptoService = cryptoService;
         this.projectAccessService = projectAccessService;
-        this.webhookCallbackBaseUrl = webhookCallbackBaseUrl;
+        this.webhookCallbackBaseUrl = resolveCallbackBaseUrl(webhookCallbackBaseUrl);
     }
 
     @Override
@@ -315,7 +315,7 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
         if (credential == null || !"0".equals(credential.getStatus()))
         {
             return new ReviewRepositoryInfo(false, GitConnectionFailure.INVALID_REPOSITORY_URL, "Git 凭据不存在或已停用",
-                null, null, null, null, null, List.of(), List.of(), new Date());
+                null, null, null, null, null, List.of(), List.of(), new Date(), null);
         }
         String provider = credential.getProvider();
         GitProvider gitProvider = adapterRegistry.requireProvider(provider);
@@ -329,7 +329,7 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
         catch (IllegalArgumentException e)
         {
             return new ReviewRepositoryInfo(false, GitConnectionFailure.INVALID_REPOSITORY_URL, e.getMessage(),
-                null, null, null, null, null, List.of(), List.of(), new Date());
+                null, null, null, null, null, List.of(), List.of(), new Date(), null);
         }
 
         String token = credentialService.getPlainToken(request.getCredentialId(), true);
@@ -348,7 +348,7 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
 
         return new ReviewRepositoryInfo(result.success(), result.failure(), result.message(), result.repositoryUrl(),
             result.repositoryOwner(), result.repositoryName(), repository.fullPath(), result.defaultBranch(),
-            result.branches(), recommended, result.syncedAt());
+            result.branches(), recommended, result.syncedAt(), result.mainLanguage());
     }
 
     @Override
@@ -937,6 +937,69 @@ public class ReviewProjectServiceImpl implements IReviewProjectService
             : webhookCallbackBaseUrl;
         String code = StringUtils.isNotEmpty(provider) ? provider.toLowerCase(java.util.Locale.ROOT) : "github";
         return base + "/webhook/" + code;
+    }
+
+    /**
+     * 回调地址基址解析：当配置为 localhost/127.0.0.1（默认值）时，尝试用本机内网 IP 替换，
+     * 方便内网 GitLab/Gitea 直接复制回调地址；探测失败或已显式配置外网地址时不改。
+     */
+    private String resolveCallbackBaseUrl(String configured)
+    {
+        if (configured == null || configured.isBlank())
+        {
+            return configured;
+        }
+        try
+        {
+            java.net.URI uri = java.net.URI.create(configured);
+            String host = uri.getHost();
+            if (host == null || "localhost".equals(host) || "127.0.0.1".equals(host) || "0.0.0.0".equals(host))
+            {
+                String lanIp = detectLanIp();
+                if (lanIp != null)
+                {
+                    int port = uri.getPort();
+                    return (uri.getScheme() == null ? "http" : uri.getScheme()) + "://" + lanIp
+                        + (port == -1 ? "" : ":" + port);
+                }
+            }
+        }
+        catch (Exception ignored)
+        {
+            // URI 解析失败时保持原值
+        }
+        return configured;
+    }
+
+    /** 探测本机首个站点本地 IPv4（10.x / 172.16-31.x / 192.168.x），失败返回 null。 */
+    private static String detectLanIp()
+    {
+        try
+        {
+            for (java.util.Enumeration<java.net.NetworkInterface> ifaces = java.net.NetworkInterface.getNetworkInterfaces();
+                 ifaces != null && ifaces.hasMoreElements(); )
+            {
+                java.net.NetworkInterface ni = ifaces.nextElement();
+                if (!ni.isUp() || ni.isLoopback() || ni.isVirtual())
+                {
+                    continue;
+                }
+                for (java.util.Enumeration<java.net.InetAddress> addrs = ni.getInetAddresses();
+                     addrs.hasMoreElements(); )
+                {
+                    java.net.InetAddress addr = addrs.nextElement();
+                    if (addr instanceof java.net.Inet4Address && addr.isSiteLocalAddress())
+                    {
+                        return addr.getHostAddress();
+                    }
+                }
+            }
+        }
+        catch (Exception ignored)
+        {
+            // 探测失败不影响启动
+        }
+        return null;
     }
 
     private List<String> recommendTargetBranches(List<String> branches, String defaultBranch)

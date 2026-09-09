@@ -17,6 +17,7 @@ public record ReviewRepositoryInfo(
     String defaultBranch,
     List<String> branches,
     List<String> recommendedTargetBranches,
-    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss") Date syncedAt)
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss") Date syncedAt,
+    String mainLanguage)
 {
 }

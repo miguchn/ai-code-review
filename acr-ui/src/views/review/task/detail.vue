@@ -60,6 +60,9 @@
               <dict-tag v-if="detailTask.currentStep" :options="review_task_step" :value="detailTask.currentStep" />
               <span v-else>—</span>
             </el-descriptions-item>
+            <el-descriptions-item v-if="isInProgress(detailTask)" label="进度提示" :span="2">
+              <span class="progress-hint">审查进行中，页面每 5 秒自动刷新进度；LLM 审查可能耗时数十秒，请耐心等待</span>
+            </el-descriptions-item>
             <el-descriptions-item label="执行次数">{{ detailTask.attemptCount == null ? '—' : detailTask.attemptCount }}</el-descriptions-item>
             <el-descriptions-item label="耗时">{{ formatDuration(detailTask.durationMs) }}</el-descriptions-item>
             <el-descriptions-item label="审查方式">
@@ -202,13 +205,18 @@ function loadInlineDeliveries() {
 
 function schedulePolling() {
   clearPolling()
-  if (detailTask.value?.taskStatus === 'RUNNING') {
+  if (['PENDING', 'RUNNING', 'RETRYING'].includes(detailTask.value?.taskStatus)) {
     pollTimer.value = setTimeout(() => loadDetail(), 5000)
   }
 }
 
 function clearPolling() {
   if (pollTimer.value) { clearTimeout(pollTimer.value); pollTimer.value = null }
+}
+
+function isInProgress(row) {
+  const s = row?.taskStatus
+  return s === 'PENDING' || s === 'RUNNING' || s === 'RETRYING'
 }
 
 onBeforeUnmount(() => clearPolling())
@@ -323,4 +331,5 @@ watch(taskId, () => loadDetail(), { immediate: true })
 .superseded-link { color: var(--el-color-primary); font-size: 13px; text-decoration: none; }
 .superseded-link:hover { text-decoration: underline; }
 .next-run { font-size: 13px; color: #64748b; }
+.progress-hint { font-size: 13px; color: var(--el-color-primary); }
 </style>

@@ -189,6 +189,8 @@ public class GiteeProvider implements GitProvider
             htmlUrl = repository.canonicalUrl();
         }
 
+        String mainLanguage = fetchMainLanguage(repositoryPath, token);
+
         Set<String> branchNames = new LinkedHashSet<>();
         for (int page = 1; page <= MAX_BRANCH_PAGES; page++)
         {
@@ -210,10 +212,28 @@ public class GiteeProvider implements GitProvider
             }
             if (branchResponse.body().size() < BRANCH_PAGE_SIZE)
             {
-                return GitRepositoryInfoResult.success(repository, htmlUrl, defaultBranch, new ArrayList<>(branchNames));
+                return GitRepositoryInfoResult.success(repository, htmlUrl, defaultBranch, new ArrayList<>(branchNames), mainLanguage);
             }
         }
         return GitRepositoryInfoResult.failure(GitConnectionFailure.API_ERROR, "Gitee 分支数量超过单次同步上限");
+    }
+
+    /** Gitee Languages API 返回 {语言: 字节数}，取首个作为主语言；失败返回 null。 */
+    private String fetchMainLanguage(String repositoryPath, String token)
+    {
+        try
+        {
+            ApiResponse response = getObject(repositoryPath + "/languages", token);
+            if (!response.success() || response.body() == null || response.body().isEmpty())
+            {
+                return null;
+            }
+            return response.body().keySet().stream().findFirst().orElse(null);
+        }
+        catch (Exception ignored)
+        {
+            return null;
+        }
     }
 
     private ApiResponse getObject(String relativePath, String token)

@@ -9,6 +9,7 @@
     <div v-else class="im-summary">
       <dict-tag :options="review_delivery_channel" :value="imDelivery.channel" size="small" />
       <dict-tag :options="review_delivery_status" :value="imDelivery.deliveryStatus" size="small" />
+      <span v-if="deliveryReason" class="delivery-reason">{{ deliveryReason }}</span>
       <span v-if="imDelivery.lastAttemptTime" class="attempt-time">{{ formatDateTime(imDelivery.lastAttemptTime) }}</span>
     </div>
   </section>
@@ -30,6 +31,20 @@ const imDelivery = ref(null)
 const loaded = ref(false)
 
 const visible = computed(() => props.taskId != null)
+const deliveryReason = computed(() => {
+  const d = imDelivery.value
+  if (!d) return ''
+  const status = d.deliveryStatus
+  const trigger = d.triggerSource
+  if (status === 'SKIPPED') {
+    if (trigger === 'TASK_SUCCESS') return '审查通过且无风险问题，按通知策略跳过通知'
+    return '按通知策略跳过通知'
+  }
+  if (status === 'SUCCESS') return '已送达通知渠道'
+  if (status === 'FAILED') return d.failureMessage || '投递失败'
+  if (status === 'PENDING' || status === 'RETRYING') return '投递中…'
+  return ''
+})
 const deliveryListLink = computed(() => ({
   path: '/notify/delivery',
   query: props.taskId ? { taskId: String(props.taskId) } : undefined
@@ -79,4 +94,5 @@ watch(() => props.taskId, () => loadImDelivery(), { immediate: true })
   gap: 8px;
 }
 .attempt-time { font-size: 12px; color: var(--el-text-color-secondary); }
+.delivery-reason { font-size: 12px; color: var(--el-text-color-secondary); }
 </style>
