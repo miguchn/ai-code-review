@@ -44,6 +44,8 @@ services:
       dockerfile: docker/Dockerfile.backend
     container_name: acr-backend
     restart: unless-stopped
+    volumes:
+      - acr-upload-data:/tmp/acr/uploadPath
     depends_on:
       mysql:
         condition: service_healthy
@@ -96,3 +98,4 @@ services:
 
 volumes:
   acr-mysql-data:
+  acr-upload-data:
