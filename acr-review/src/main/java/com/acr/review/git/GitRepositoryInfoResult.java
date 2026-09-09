@@ -13,19 +13,29 @@ public record GitRepositoryInfoResult(
     String repositoryName,
     String defaultBranch,
     List<String> branches,
-    Date syncedAt)
+    Date syncedAt,
+    String mainLanguage)
 {
     public static GitRepositoryInfoResult success(GitRepositoryCoordinates repository,
                                                    String repositoryUrl,
                                                    String defaultBranch,
                                                    List<String> branches)
     {
+        return success(repository, repositoryUrl, defaultBranch, branches, null);
+    }
+
+    public static GitRepositoryInfoResult success(GitRepositoryCoordinates repository,
+                                                   String repositoryUrl,
+                                                   String defaultBranch,
+                                                   List<String> branches,
+                                                   String mainLanguage)
+    {
         return new GitRepositoryInfoResult(true, null, "仓库信息读取成功", repositoryUrl,
-            repository.owner(), repository.repository(), defaultBranch, List.copyOf(branches), new Date());
+            repository.owner(), repository.repository(), defaultBranch, List.copyOf(branches), new Date(), mainLanguage);
     }
 
     public static GitRepositoryInfoResult failure(GitConnectionFailure failure, String message)
     {
-        return new GitRepositoryInfoResult(false, failure, message, null, null, null, null, List.of(), new Date());
+        return new GitRepositoryInfoResult(false, failure, message, null, null, null, null, List.of(), new Date(), null);
     }
 }

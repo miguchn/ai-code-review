@@ -371,6 +371,8 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         throws java.io.IOException
     {
         updateStep(task, run, ReviewPipelineConstants.STEP_PREPARE_WORKSPACE);
+        log.info("开始 OCR 审查, taskId={}, projectId={}, provider={}",
+            task.getTaskId(), task.getProjectId(), plan.provider());
         // C8：工作区与 OCR 预算必须在准备工作区/外部调用之前获取；抢不到一律 RETRYING，不置 FAILED。
         ReviewBudgetLease budgetLease = budgetService.tryAcquireOcrExecution();
         if (budgetLease == null)
@@ -453,8 +455,13 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
     private void executeLlmPath(ReviewTask task, ReviewTaskRun run, ExecutionPlan plan, long beginMs)
     {
         updateStep(task, run, ReviewPipelineConstants.STEP_PREPARE_WORKSPACE);
+        log.info("开始 LLM 审查, taskId={}, projectId={}, provider={}, modelId={}",
+            task.getTaskId(), task.getProjectId(), plan.provider(), plan.modelId());
         GitPullRequestDiffResult diffResult = adapterRegistry.requireDiffFetcher(plan.provider()).fetchDiff(
             plan.repository(), plan.access(), task.getBaseSha(), task.getHeadSha());
+        log.info("Diff 拉取完成, taskId={}, 成功={}, 内容长度={}",
+            task.getTaskId(), diffResult.success(),
+            diffResult.diffContent() == null ? 0 : diffResult.diffContent().length());
         if (!diffResult.success())
         {
             fail(task, run, beginMs, diffResult.failureType(),
@@ -514,6 +521,9 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         try
         {
             LlmCallResult llmResult = llmCallService.chat(plan.modelId(), finalPrompt, llmTimeoutMillis());
+            log.info("模型调用完成, taskId={}, 成功={}, 耗时={}ms, 输入token={}, 输出token={}",
+                task.getTaskId(), llmResult.isSuccess(), llmResult.getLatencyMs(),
+                llmResult.getPromptTokens(), llmResult.getCompletionTokens());
             applyLlmTokenUsage(run, llmResult);
             if (!llmResult.isSuccess())
             {
@@ -553,6 +563,10 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
             DiffParseResult parsed = diffParser.parse(rawDiff);
             ReviewScopeConfig config = ReviewScopeConfig.fromTaskSnapshot(task);
             ReviewScopeDecision decision = scopeDecisionService.decide(parsed, config);
+            log.info("范围决策完成, taskId={}, 纳入={}, 排除={}, 记录类={}, 丢弃={}",
+                task.getTaskId(),
+                decision.includedFiles().size(), decision.excludedFiles().size(),
+                decision.recordOnlyFiles().size(), decision.droppedFiles().size());
 
             Map<String, String> fetchedContents = new HashMap<>();
             Map<String, String> fetchFailures = new java.util.LinkedHashMap<>();

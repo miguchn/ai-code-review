@@ -100,6 +100,7 @@ class GiteeProviderTest
     {
         server.enqueue(json(200, "{\"login\":\"octocat\"}"));
         server.enqueue(json(200, "{\"default_branch\":\"main\",\"html_url\":\"https://gitee.com/openai/codex\"}"));
+        server.enqueue(json(200, "{\"Python\": 100}"));
         server.enqueue(json(200, branches(0, 100)));
         server.enqueue(json(200, branches(100, 2)));
 
@@ -109,6 +110,7 @@ class GiteeProviderTest
         assertTrue(result.success());
         assertEquals(102, result.branches().size());
         assertEquals("branch-101", result.branches().get(101));
+        server.takeRequest();
         server.takeRequest();
         server.takeRequest();
         assertTrue(server.takeRequest().getPath().startsWith("/repos/openai/codex/branches"));

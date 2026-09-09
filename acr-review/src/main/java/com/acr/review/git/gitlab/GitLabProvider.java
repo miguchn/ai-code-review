@@ -182,6 +182,8 @@ public class GitLabProvider implements GitProvider
             webUrl = repository.canonicalUrl();
         }
 
+        String mainLanguage = fetchMainLanguage(access, repository.fullPath());
+
         Set<String> branchNames = new LinkedHashSet<>();
         for (int page = 1; page <= MAX_BRANCH_PAGES; page++)
         {
@@ -205,10 +207,28 @@ public class GitLabProvider implements GitProvider
             }
             if (branchResponse.body().size() < BRANCH_PAGE_SIZE)
             {
-                return GitRepositoryInfoResult.success(repository, webUrl, defaultBranch, new ArrayList<>(branchNames));
+                return GitRepositoryInfoResult.success(repository, webUrl, defaultBranch, new ArrayList<>(branchNames), mainLanguage);
             }
         }
         return GitRepositoryInfoResult.failure(GitConnectionFailure.API_ERROR, "GitLab 分支数量超过单次同步上限");
+    }
+
+    /** GitLab Languages API 返回 {语言: 占比}，取首个（占比最高）作为主语言；失败返回 null。 */
+    private String fetchMainLanguage(GitAccessContext access, String fullPath)
+    {
+        try
+        {
+            ApiResponse response = getObject(access, projectUrl(access, fullPath, "languages"));
+            if (!response.success() || response.body() == null || response.body().isEmpty())
+            {
+                return null;
+            }
+            return response.body().keySet().stream().findFirst().orElse(null);
+        }
+        catch (Exception ignored)
+        {
+            return null;
+        }
     }
 
     private ApiResponse getProject(GitAccessContext access, String fullPath)

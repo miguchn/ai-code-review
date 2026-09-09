@@ -102,6 +102,7 @@ class GitLabProviderTest
         server.enqueue(json(200, "{\"username\":\"devops\"}"));
         server.enqueue(json(200, "{\"default_branch\":\"main\",\"web_url\":\""
             + access.serverUrl() + "/acme/demo\"}"));
+        server.enqueue(json(200, "{\"Java\": 100}"));
         server.enqueue(json(200, branches(0, 100)));
         server.enqueue(json(200, branches(100, 2)));
 
@@ -111,6 +112,7 @@ class GitLabProviderTest
         assertTrue(result.success());
         assertEquals(102, result.branches().size());
         assertEquals("branch-101", result.branches().get(101));
+        server.takeRequest();
         server.takeRequest();
         server.takeRequest();
         assertTrue(server.takeRequest().getPath().contains("repository/branches"));
