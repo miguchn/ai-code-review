@@ -157,7 +157,10 @@ public class GitLabPullRequestDiffFetcher implements GitPullRequestDiffFetcher
                     continue;
                 }
                 String diff = item.getString("diff");
-                if (diff == null || diff.isBlank())
+                boolean hasHunks = diff != null && !diff.isBlank();
+                boolean renamed = Boolean.TRUE.equals(item.getBoolean("renamed_file"));
+                // 纯改名/拷贝无内容变更时 diff 为空，仍需输出改名记录段供下游按记录类变更处理
+                if (!hasHunks && !renamed)
                 {
                     continue;
                 }
@@ -165,7 +168,17 @@ public class GitLabPullRequestDiffFetcher implements GitPullRequestDiffFetcher
                 {
                     builder.append('\n');
                 }
-                builder.append(diff);
+                // 部分 GitLab 版本的 diff 字段自带完整文件头，直接透传避免双重头
+                if (hasHunks && diff.startsWith("diff --git "))
+                {
+                    builder.append(diff);
+                    continue;
+                }
+                appendGitDiffHeader(builder, item, hasHunks);
+                if (hasHunks)
+                {
+                    builder.append(diff);
+                }
             }
             return builder.toString();
         }
@@ -173,6 +186,54 @@ public class GitLabPullRequestDiffFetcher implements GitPullRequestDiffFetcher
         {
             return body;
         }
+    }
+
+    /**
+     * GitLab Compare API 的 diffs[].diff 只有裸 hunk 文本，文件路径与改名/增删元数据在独立字段；
+     * 拼装标准 git diff 文件头，保证下游 UnifiedDiffParser 能识别文件与变更类型。
+     */
+    private static void appendGitDiffHeader(StringBuilder builder, JSONObject item, boolean hasHunks)
+    {
+        String oldPath = defaultPath(item.getString("old_path"), item.getString("new_path"));
+        String newPath = defaultPath(item.getString("new_path"), item.getString("old_path"));
+        builder.append("diff --git a/").append(oldPath).append(" b/").append(newPath).append('\n');
+        if (Boolean.TRUE.equals(item.getBoolean("new_file")))
+        {
+            builder.append("new file mode ").append(defaultMode(item.getString("b_mode"))).append('\n');
+            builder.append("--- /dev/null\n");
+            builder.append("+++ b/").append(newPath).append('\n');
+            return;
+        }
+        if (Boolean.TRUE.equals(item.getBoolean("deleted_file")))
+        {
+            builder.append("deleted file mode ").append(defaultMode(item.getString("a_mode"))).append('\n');
+            builder.append("--- a/").append(oldPath).append('\n');
+            builder.append("+++ /dev/null\n");
+            return;
+        }
+        if (Boolean.TRUE.equals(item.getBoolean("renamed_file")) && !oldPath.equals(newPath))
+        {
+            builder.append("rename from ").append(oldPath).append('\n');
+            builder.append("rename to ").append(newPath).append('\n');
+            if (hasHunks)
+            {
+                builder.append("--- a/").append(oldPath).append('\n');
+                builder.append("+++ b/").append(newPath).append('\n');
+            }
+            return;
+        }
+        builder.append("--- a/").append(oldPath).append('\n');
+        builder.append("+++ b/").append(newPath).append('\n');
+    }
+
+    private static String defaultPath(String path, String fallback)
+    {
+        return path == null || path.isBlank() ? (fallback == null ? "" : fallback) : path;
+    }
+
+    private static String defaultMode(String mode)
+    {
+        return mode == null || mode.isBlank() ? "100644" : mode;
     }
 
     private static String readBodyCapped(Response response) throws IOException
