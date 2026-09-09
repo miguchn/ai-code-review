@@ -112,7 +112,7 @@ Compose 会为 Linux 自动补充 `host-gateway` 映射，macOS / Windows 可直
 
 ## OCR 引擎安装（可选）
 
-默认 Docker 后端镜像不安装 open-code-review CLI。未使用 `OCR_ENGINE` 的项目无需安装；需要在容器中使用时，应采用自定义镜像或挂载已安装的可执行文件，不要假定宿主机的 `ocr` 命令会自动出现在容器内。
+Docker Compose 后端镜像已内置 open-code-review CLI（node:22-slim 阶段安装 `@alibaba-group/open-code-review@1.11.6`，linux 平台二进制由 npm optionalDependencies 自动选配）。本地 `java -jar` 运行时需自行安装：
 
 ```bash
 # 安装
