@@ -1,4 +1,9 @@
 # AI Code Review — backend (multi-stage, trial / compose)
+
+# OCR 引擎（可选审查方式）：与宿主一致的 node 22 + open-code-review 1.11.6，linux 平台二进制由 npm 自动选配
+FROM node:22-slim AS ocr
+RUN npm install -g @alibaba-group/open-code-review@1.11.6
+
 FROM maven:3.9-eclipse-temurin-17 AS build
 WORKDIR /build
 
@@ -19,6 +24,11 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /tmp/acr/uploadPath
+
+# OCR 引擎运行时：node 二进制 + 全局 node_modules + ocr 入口 symlink（探针与审查经 PATH 解析裸命令 ocr）
+COPY --from=ocr /usr/local/bin/node /usr/local/bin/node
+COPY --from=ocr /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -s /usr/local/lib/node_modules/@alibaba-group/open-code-review/bin/ocr.js /usr/local/bin/ocr
 
 COPY --from=build /build/acr-admin/target/acr-admin.jar /app/acr-admin.jar
 
