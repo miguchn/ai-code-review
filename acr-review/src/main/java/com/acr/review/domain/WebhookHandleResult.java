@@ -22,4 +22,10 @@ public record WebhookHandleResult(int httpStatus, String message)
     {
         return new WebhookHandleResult(413, message);
     }
+
+    /** 验签去重前的内部失败：返回 5xx 以便 Git 平台重试，避免事件被静默丢弃。 */
+    public static WebhookHandleResult serverError(String message)
+    {
+        return new WebhookHandleResult(500, message);
+    }
 }

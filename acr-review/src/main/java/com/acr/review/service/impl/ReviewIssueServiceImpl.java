@@ -516,8 +516,8 @@ public class ReviewIssueServiceImpl implements IReviewIssueService
             {
                 throw new ServiceException("没有权限转派该问题");
             }
-            projectAccessService.requireView(issue.getProjectId());
         }
+        projectAccessService.requireView(issue.getProjectId());
         if (assigneeUserId == null)
         {
             throw new ServiceException("请选择转派目标");

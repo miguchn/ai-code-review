@@ -78,7 +78,7 @@
 </template>
 
 <script setup name="DeliveryStatusView">
-import { retryReviewDelivery } from '@/api/review/delivery'
+import { retryDelivery } from '@/api/review/delivery'
 import { formatDateTime } from '@/utils/reviewDisplay'
 import auth from '@/plugins/auth'
 
@@ -163,7 +163,7 @@ function onRetry() {
   proxy.$modal.confirm(tip)
     .then(() => {
       retrying.value = true
-      return retryReviewDelivery(props.taskId)
+      return retryDelivery(props.taskId)
     })
     .then(() => {
       proxy.$modal.msgSuccess(isMissingOnSuccess.value ? '补投递已完成' : '投递重试已完成')

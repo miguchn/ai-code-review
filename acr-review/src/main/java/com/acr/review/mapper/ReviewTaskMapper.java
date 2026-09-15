@@ -83,6 +83,15 @@ public interface ReviewTaskMapper
     int releaseWorkerLeases(@Param("leaseOwner") String leaseOwner);
 
     /**
+     * 领取后无法继续或终态落库失败：仅放弃本任务租约并回队。
+     * 不碰同实例其他 RUNNING 任务，避免误伤并行审查。
+     */
+    int abandonClaimedTask(@Param("taskId") Long taskId,
+                           @Param("leaseOwner") String leaseOwner,
+                           @Param("errorCode") String errorCode,
+                           @Param("message") String message);
+
+    /**
      * 优雅停机超时：仅将本实例持有的 RUNNING 租约置为已过期，由恢复扫描接管。
      * 不立刻改写 task_status，保留租约围栏语义。
      */

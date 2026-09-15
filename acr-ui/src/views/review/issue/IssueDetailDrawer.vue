@@ -12,7 +12,7 @@
         <span class="drawer-head-title">
           {{ detailIssue ? ('问题 #' + detailIssue.issueId + ' · ' + (detailIssue.title || '问题详情')) : '问题详情' }}
         </span>
-        <dict-tag v-if="detailIssue?.status" :options="review_issue_status" :value="detailIssue.status" />
+        <dict-tag v-if="detailIssue?.status" :options="issueStatusOptions" :value="detailIssue.status" />
       </div>
     </template>
 
@@ -236,9 +236,9 @@
                   v-if="showStatusPair(action) && (action.fromStatus || action.toStatus)"
                   class="action-status"
                 >
-                  <dict-tag v-if="action.fromStatus" :options="review_issue_status" :value="action.fromStatus" />
+                  <dict-tag v-if="action.fromStatus" :options="issueStatusOptions" :value="action.fromStatus" />
                   <span v-if="action.fromStatus && action.toStatus" class="action-arrow">→</span>
-                  <dict-tag v-if="action.toStatus" :options="review_issue_status" :value="action.toStatus" />
+                  <dict-tag v-if="action.toStatus" :options="issueStatusOptions" :value="action.toStatus" />
                 </div>
                 <p v-if="action.resolveNote" class="action-note">{{ action.resolveNote }}</p>
               </div>
@@ -279,15 +279,15 @@
   </el-drawer>
 
   <el-dialog v-model="closeDialogVisible" :title="closeDialogTitle" width="480px" append-to-body>
-    <el-form ref="closeFormRef" :model="closeForm" label-width="88px">
-      <el-form-item label="关闭说明">
+    <el-form ref="closeFormRef" :model="closeForm" :rules="closeRules" label-width="88px">
+      <el-form-item label="关闭说明" prop="resolveNote">
         <el-input
           v-model="closeForm.resolveNote"
           type="textarea"
           :rows="3"
           maxlength="500"
           show-word-limit
-          placeholder="可选：说明关闭原因或修复方式"
+          placeholder="请说明关闭原因或修复方式"
         />
       </el-form-item>
     </el-form>
@@ -368,7 +368,7 @@ import {
   emptyDash, formatDateTime, formatIssueLines, shortSha, isPushTask,
   buildMergeRequestUrl, formatPushRefDisplay, mergeRequestLabel
 } from '@/utils/reviewDisplay'
-import { buildLifecycleNodes } from './issueLifecycle'
+import { buildLifecycleNodes, relabelIssueStatusOptions } from './issueLifecycle'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -392,6 +392,7 @@ const {
 )
 
 const OPEN_STATUSES = ['AWAITING_CONFIRM', 'AWAITING_FIX']
+const issueStatusOptions = computed(() => relabelIssueStatusOptions(review_issue_status.value))
 const ACTION_TYPE_LABELS = {
   CONFIRM: '确认问题',
   CLOSE: '关闭问题',
@@ -418,6 +419,9 @@ const actionLoading = ref(false)
 
 const closeDialogVisible = ref(false)
 const closeForm = ref({ resolveNote: '' })
+const closeRules = {
+  resolveNote: [{ required: true, message: '请填写关闭原因', trigger: 'blur' }]
+}
 const dismissDialogVisible = ref(false)
 const dismissForm = ref({ dismissType: 'IGNORED', resolveNote: '' })
 const dismissRules = {
@@ -748,17 +752,21 @@ function handleConfirm() {
 function openCloseDialog() {
   closeForm.value = { resolveNote: '' }
   closeDialogVisible.value = true
+  nextTick(() => proxy.resetForm('closeFormRef'))
 }
 
 function submitClose() {
-  const wasRechecking = detailIssue.value?.status === 'RECHECKING'
-  actionLoading.value = true
-  closeIssue(props.issueId, { resolveNote: closeForm.value.resolveNote || undefined }).then(response => {
-    proxy.$modal.msgSuccess(wasRechecking ? '已确认修复并关闭' : '已关闭')
-    notifyCommentSync(response)
-    closeDialogVisible.value = false
-    reloadDetailAndList()
-  }).catch(() => {}).finally(() => { actionLoading.value = false })
+  proxy.$refs.closeFormRef.validate(valid => {
+    if (!valid) return
+    const wasRechecking = detailIssue.value?.status === 'RECHECKING'
+    actionLoading.value = true
+    closeIssue(props.issueId, { resolveNote: closeForm.value.resolveNote }).then(response => {
+      proxy.$modal.msgSuccess(wasRechecking ? '已确认修复并关闭' : '已关闭')
+      notifyCommentSync(response)
+      closeDialogVisible.value = false
+      reloadDetailAndList()
+    }).catch(() => {}).finally(() => { actionLoading.value = false })
+  })
 }
 
 function handleReopen() {

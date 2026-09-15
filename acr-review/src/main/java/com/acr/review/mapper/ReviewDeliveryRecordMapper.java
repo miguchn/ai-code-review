@@ -80,7 +80,7 @@ public interface ReviewDeliveryRecordMapper
 
     int releaseWorkerLeases(@Param("leaseOwner") String leaseOwner);
 
-    /** 优雅停机超时：将本实例持有的投递租约置过期。 */
+    /** 优雅停机超时：将本实例持有的 PENDING/FAILED 投递租约置过期。 */
     int expireWorkerLeases(@Param("leaseOwner") String leaseOwner);
 
     /** 人工标记已处理：MANUAL → SKIPPED，不再自动投递。 */

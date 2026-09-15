@@ -59,11 +59,11 @@ class GitLabPullRequestWorkspacePreparerTest
     }
 
     @Test
-    void resolveRemoteUrlEmbedsOauth2Token()
+    void resolveRemoteUrlDoesNotEmbedToken()
     {
         String url = GitLabPullRequestWorkspacePreparer.resolveRemoteUrl(
-            new GitRepositoryCoordinates("group", "repo", "group/repo", "https://gitlab.example.com/group/repo"),
-            "my-token");
-        assertEquals("https://oauth2:my-token@gitlab.example.com/group/repo.git", url);
+            new GitRepositoryCoordinates("group", "repo", "group/repo", "https://gitlab.example.com/group/repo"));
+        assertEquals("https://gitlab.example.com/group/repo.git", url);
+        assertFalse(url.contains("@"));
     }
 }

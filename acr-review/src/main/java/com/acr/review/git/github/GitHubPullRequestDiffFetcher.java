@@ -2,7 +2,6 @@ package com.acr.review.git.github;
 
 import java.io.IOException;
 import java.io.InterruptedIOException;
-import java.util.concurrent.TimeUnit;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import com.acr.review.domain.ReviewPipelineConstants;
@@ -15,6 +14,7 @@ import okhttp3.HttpUrl;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
+import com.acr.review.git.GitHttpSupport;
 
 /** 通过 GitHub Compare Diff API 拉取 PR 变更。响应体按上限截断读取，避免超大 Diff 压垮内存。 */
 @Component
@@ -38,11 +38,7 @@ public class GitHubPullRequestDiffFetcher implements GitPullRequestDiffFetcher
             throw new IllegalArgumentException("GitHub API 地址配置无效");
         }
         this.apiBaseUrl = parsed;
-        this.client = new OkHttpClient.Builder()
-            .connectTimeout(connectTimeoutMs, TimeUnit.MILLISECONDS)
-            .readTimeout(readTimeoutMs, TimeUnit.MILLISECONDS)
-            .callTimeout(readTimeoutMs, TimeUnit.MILLISECONDS)
-            .build();
+        this.client = GitHttpSupport.clientBuilder(connectTimeoutMs, readTimeoutMs).build();
     }
 
     @Override

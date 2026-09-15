@@ -113,9 +113,11 @@
                COUNT(DISTINCT t.task_id) AS task_covered
         FROM review_task t
         INNER JOIN review_delivery_record d ON d.task_id = t.task_id AND d.delivery_status = 'SUCCESS'
+        LEFT JOIN review_task_run r ON r.run_id = t.latest_run_id
         WHERE t.project_id = #{projectId}
           AND t.task_status = 'SUCCESS'
           AND t.finished_time IS NOT NULL
+          AND (r.result_summary IS NULL OR r.result_summary NOT LIKE CONCAT('%', '无有效审查范围', '%'))
           AND DATE(t.finished_time) &gt;= #{beginDate}
           AND DATE(t.finished_time) &lt;= #{endDate}
         GROUP BY DATE(t.finished_time)

@@ -347,6 +347,7 @@ import {
 } from '@/utils/reviewDisplay'
 import IssueDetailDrawer from './IssueDetailDrawer.vue'
 import IssueBatchBar from './IssueBatchBar.vue'
+import { relabelIssueStatusOptions } from './issueLifecycle'
 
 const route = useRoute()
 const router = useRouter()
@@ -355,12 +356,7 @@ const { review_issue_status, review_issue_origin } = proxy.useDict(
   'review_issue_status',
   'review_issue_origin'
 )
-/** 字典 RECHECKING 展示为「疑似修复」（本切片不改 SQL，前端消费侧对齐）。 */
-const issueStatusOptions = computed(() =>
-  (review_issue_status.value || []).map(item =>
-    item.value === 'RECHECKING' ? { ...item, label: '疑似修复' } : item
-  )
-)
+const issueStatusOptions = computed(() => relabelIssueStatusOptions(review_issue_status.value))
 
 const TERMINAL_STATUSES = ['CLOSED', 'IGNORED', 'FALSE_POSITIVE']
 const severityOptions = [

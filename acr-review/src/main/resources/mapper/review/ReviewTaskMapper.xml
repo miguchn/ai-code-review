@@ -370,6 +370,23 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
           and lease_owner = #{leaseOwner}
     </update>
 
+    <update id="abandonClaimedTask">
+        update review_task
+        set task_status = 'RETRYING',
+            last_error_code = #{errorCode},
+            failure_type = #{errorCode},
+            failure_message = #{message},
+            next_run_at = sysdate(),
+            lease_owner = null,
+            lease_until = null,
+            heartbeat_at = null,
+            update_by = 'system',
+            update_time = sysdate()
+        where task_id = #{taskId}
+          and task_status = 'RUNNING'
+          and lease_owner = #{leaseOwner}
+    </update>
+
     <update id="expireWorkerLeases">
         update review_task
         set lease_until = date_sub(sysdate(), interval 1 second),

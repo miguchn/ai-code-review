@@ -10,21 +10,21 @@ class GiteePullRequestWorkspacePreparerTest
     @Test
     void buildsFullFetchArgsWithoutDepth()
     {
-        String[] args = GiteePullRequestWorkspacePreparer.buildFetchArgs(
-            "https://oauth2:tok@gitee.com/acme/demo.git", "abc1234");
+        String[] args = GiteePullRequestWorkspacePreparer.buildFetchArgs("origin", "abc1234");
         org.junit.jupiter.api.Assertions.assertArrayEquals(
-            new String[] { "fetch", "https://oauth2:tok@gitee.com/acme/demo.git", "abc1234" }, args);
+            new String[] { "fetch", "origin", "abc1234" }, args);
         org.junit.jupiter.api.Assertions.assertFalse(java.util.Arrays.asList(args).contains("--depth"));
     }
 
     @Test
-    void resolveRemoteUrlUsesOauth2Token()
+    void resolveRemoteUrlDoesNotEmbedToken()
     {
         GitRepositoryCoordinates repo = new GitRepositoryCoordinates("acme", "demo", "https://gitee.com/acme/demo");
-        String url = GiteePullRequestWorkspacePreparer.resolveRemoteUrl(repo, "my-token");
+        String url = GiteePullRequestWorkspacePreparer.resolveRemoteUrl(repo);
 
-        assertTrue(url.startsWith("https://oauth2:my-token@gitee.com/"));
+        assertTrue(url.startsWith("https://gitee.com/"));
         assertTrue(url.endsWith("acme/demo.git"));
+        assertFalse(url.contains("@"));
     }
 
     @Test

@@ -87,7 +87,8 @@ public class ReviewDeliveryDispatcher implements SmartLifecycle
                 }
                 catch (RuntimeException ex)
                 {
-                    log.error("投递工作节点执行异常，租约到期后将由扫描恢复, deliveryId={}", deliveryId);
+                    log.error("投递工作节点执行异常，已释放租约等待扫描恢复, deliveryId={}", deliveryId, ex);
+                    deliveryMapper.releaseDeliveryLease(deliveryId, leaseOwner);
                 }
             });
         }

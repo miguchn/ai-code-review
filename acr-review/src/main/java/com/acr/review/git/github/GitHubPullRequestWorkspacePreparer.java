@@ -73,6 +73,7 @@ public class GitHubPullRequestWorkspacePreparer implements GitPullRequestWorkspa
         {
             Files.createDirectories(workspace);
             runGit(workspace, null, "init");
+            runGit(workspace, null, "config", "core.symlinks", "false");
             runGit(workspace, null, "remote", "add", "origin", remoteUrl);
             runGit(workspace, null, "config", "core.sparseCheckout", "false");
             fetchCommit(workspace, token, request.headSha());

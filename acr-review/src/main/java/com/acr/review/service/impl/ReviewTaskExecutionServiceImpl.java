@@ -253,6 +253,8 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
             if (task == null)
             {
                 log.warn("审查任务领取后未找到记录, taskId={}", taskId);
+                abandonClaimedTask(taskId, ReviewPipelineConstants.FAILURE_UNKNOWN,
+                    "审查任务领取后未找到记录，已放弃租约并回队");
                 return;
             }
 
@@ -404,8 +406,8 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
             if (hasNoCommitDiff(workspaceResult.workingDirectory(), task.getBaseSha(), task.getHeadSha()))
             {
                 String emptySummary = ReviewPipelineConstants.EVENT_SOURCE_PUSH.equals(task.getEventSource())
-                    ? "本次推送无代码变更，未调用审查引擎，按通过处理"
-                    : "本次变更无代码变更，未调用审查引擎，按通过处理";
+                    ? "本次推送无代码变更，未调用审查引擎，按通过处理（" + ReviewPipelineConstants.EMPTY_SCOPE_SUMMARY_MARKER + "）"
+                    : "本次变更无代码变更，未调用审查引擎，按通过处理（" + ReviewPipelineConstants.EMPTY_SCOPE_SUMMARY_MARKER + "）";
                 persistEmptyScopeSuccess(task, run, beginMs, emptySummary);
                 return;
             }
@@ -736,7 +738,8 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
     private void persistEmptyScopeSuccess(ReviewTask task, ReviewTaskRun run, long beginMs)
     {
         persistEmptyScopeSuccess(task, run, beginMs,
-            "本次变更无有效审查范围（全部文件被排除规则命中或为删除、改名等记录类变更），未调用模型，按通过处理");
+            "本次变更" + ReviewPipelineConstants.EMPTY_SCOPE_SUMMARY_MARKER
+                + "（全部文件被排除规则命中或为删除、改名等记录类变更），未调用模型，按通过处理");
     }
 
     private void persistEmptyScopeSuccess(ReviewTask task, ReviewTaskRun run, long beginMs, String summary)
@@ -1396,32 +1399,59 @@ public class ReviewTaskExecutionServiceImpl implements IReviewTaskExecutionServi
         long duration = System.currentTimeMillis() - beginMs;
         String safeMessage = truncate(message, 480);
 
-        if (run != null && run.getRunId() != null)
+        try
         {
-            run.setRunStatus(ReviewPipelineConstants.RUN_FAILED);
-            run.setCurrentStep(failureStep);
-            run.setFailureStep(failureStep);
-            run.setFailureType(failureType);
-            run.setFailureMessage(safeMessage);
-            run.setDurationMs(duration);
-            run.setFinishedTime(finished);
-        }
+            if (run != null && run.getRunId() != null)
+            {
+                run.setRunStatus(ReviewPipelineConstants.RUN_FAILED);
+                run.setCurrentStep(failureStep);
+                run.setFailureStep(failureStep);
+                run.setFailureType(failureType);
+                run.setFailureMessage(safeMessage);
+                run.setDurationMs(duration);
+                run.setFinishedTime(finished);
+            }
 
-        if (task != null)
+            if (task != null)
+            {
+                ReviewTaskRetryPolicy.RetryDecision decision = retryPolicy.decide(failureType, task.getRetryCount());
+                task.setTaskStatus(decision.retry()
+                    ? ReviewPipelineConstants.TASK_RETRYING : ReviewPipelineConstants.TASK_FAILED);
+                task.setCurrentStep(failureStep);
+                task.setFailureStep(failureStep);
+                task.setFailureType(failureType);
+                task.setFailureMessage(safeMessage);
+                task.setLastErrorCode(failureType);
+                task.setRetryCount(decision.retryCount());
+                task.setRetryDelaySeconds(decision.delaySeconds());
+                task.setFinishedTime(decision.retry() ? null : finished);
+                task.setDurationMs(duration);
+                completionService.persistFailure(task, run, !decision.retry());
+            }
+        }
+        catch (ReviewTaskLeaseLostException ex)
         {
-            ReviewTaskRetryPolicy.RetryDecision decision = retryPolicy.decide(failureType, task.getRetryCount());
-            task.setTaskStatus(decision.retry()
-                ? ReviewPipelineConstants.TASK_RETRYING : ReviewPipelineConstants.TASK_FAILED);
-            task.setCurrentStep(failureStep);
-            task.setFailureStep(failureStep);
-            task.setFailureType(failureType);
-            task.setFailureMessage(safeMessage);
-            task.setLastErrorCode(failureType);
-            task.setRetryCount(decision.retryCount());
-            task.setRetryDelaySeconds(decision.delaySeconds());
-            task.setFinishedTime(decision.retry() ? null : finished);
-            task.setDurationMs(duration);
-            completionService.persistFailure(task, run, !decision.retry());
+            log.warn("审查失败写入时租约已丢失, taskId={}", task == null ? null : task.getTaskId());
+        }
+        catch (RuntimeException ex)
+        {
+            Long taskId = task == null ? null : task.getTaskId();
+            log.error("审查失败终态落库失败，放弃本任务租约并回队, taskId={}", taskId, ex);
+            if (taskId != null)
+            {
+                abandonClaimedTask(taskId, failureType,
+                    "审查失败终态落库失败，已放弃租约并回队：" + safeMessage);
+            }
+        }
+    }
+
+    private void abandonClaimedTask(Long taskId, String errorCode, String message)
+    {
+        int abandoned = taskMapper.abandonClaimedTask(taskId, workerIdentity.owner(),
+            errorCode, truncate(message, 480));
+        if (abandoned != 1)
+        {
+            log.error("无法放弃已领取任务的租约，等待恢复扫描接管, taskId={}", taskId);
         }
     }
 

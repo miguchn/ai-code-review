@@ -58,7 +58,7 @@ public final class InsightMetrics
     {
         List<InsightMetricDef> list = new ArrayList<>();
         list.add(def("coverageRate", "有效审查覆盖率",
-            "SUCCESS 且至少一次投递 SUCCESS 的任务数 / ACCEPTED 事件数", "ratio"));
+            "SUCCESS 且至少一次投递 SUCCESS、且非空范围审查的任务数 / ACCEPTED 事件数", "ratio"));
         list.add(def("successRate", "审查成功率",
             "SUCCESS 任务数 / 终态任务数（SUCCESS+FAILED）", "ratio"));
         list.add(def("durationP95Ms", "P95 审查时延",

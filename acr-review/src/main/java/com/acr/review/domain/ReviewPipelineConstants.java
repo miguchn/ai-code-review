@@ -62,6 +62,9 @@ public final class ReviewPipelineConstants
     /** 单次执行允许拉取全文的扩展文件数量上限：超出部分不再拉取，记 FETCH_LIMIT_SKIPPED。 */
     public static final int MAX_EXPANDED_FETCH_COUNT = 30;
 
+    /** 空范围审查摘要标记：任务仍记 PASS，但不计入有效审查覆盖率。 */
+    public static final String EMPTY_SCOPE_SUMMARY_MARKER = "无有效审查范围";
+
     private ReviewPipelineConstants()
     {
     }

@@ -130,7 +130,7 @@
                         <el-tag v-if="issueOriginLabel(issue.origin)" :type="issueOriginTagType(issue.origin)" size="small" effect="plain">
                           {{ issueOriginLabel(issue.origin) }}
                         </el-tag>
-                        <dict-tag v-if="issue.dispositionStatus" :options="review_issue_status" :value="issue.dispositionStatus" />
+                        <dict-tag v-if="issue.dispositionStatus" :options="issueStatusOptions" :value="issue.dispositionStatus" />
                         <span v-if="issue.category" class="issue-category">{{ issue.category }}</span>
                         <strong class="issue-title">{{ recordDisplayValue(issue.title) }}</strong>
                         <el-button v-if="issue.issueId" link type="primary" size="small" class="issue-ledger-link"
@@ -167,7 +167,7 @@
                           {{ severityLabel(issue.severity) }}
                         </el-tag>
                         <el-tag type="info" size="small" effect="plain">存量</el-tag>
-                        <dict-tag v-if="issue.dispositionStatus" :options="review_issue_status" :value="issue.dispositionStatus" />
+                        <dict-tag v-if="issue.dispositionStatus" :options="issueStatusOptions" :value="issue.dispositionStatus" />
                         <span v-if="issue.category" class="issue-category">{{ issue.category }}</span>
                         <strong class="issue-title">{{ recordDisplayValue(issue.title) }}</strong>
                         <el-button v-if="issue.issueId" link type="primary" size="small" class="issue-ledger-link"
@@ -267,10 +267,12 @@ import {
   issueOriginLabel, issueOriginTagType, formatDateTime,
   isPushTask, formatPushRefDisplay, readableFailureMessage, PUSH_SCOPE_NOTE
 } from '@/utils/reviewDisplay'
+import { relabelIssueStatusOptions } from '@/views/review/issue/issueLifecycle'
 
 const { proxy } = getCurrentInstance()
 const route = useRoute()
 const { review_task_status, review_issue_status } = proxy.useDict('review_task_status', 'review_issue_status')
+const issueStatusOptions = computed(() => relabelIssueStatusOptions(review_issue_status.value))
 
 const detailLoading = ref(false)
 const detailTask = ref(null)
@@ -437,6 +439,15 @@ function handleRetry() {
 
 watch(taskId, () => loadDetail(), { immediate: true })
 watch(() => route.query.focus, () => focusIssuesIfNeeded())
+
+let firstActivated = true
+onActivated(() => {
+  if (firstActivated) {
+    firstActivated = false
+    return
+  }
+  loadDetail()
+})
 </script>
 
 <style scoped>

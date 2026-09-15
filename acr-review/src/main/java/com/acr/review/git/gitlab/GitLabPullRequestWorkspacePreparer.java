@@ -18,8 +18,8 @@ import com.acr.review.git.GitPullRequestWorkspaceRequest;
 import com.acr.review.git.GitPullRequestWorkspaceResult;
 
 /**
- * 使用 PAT 按需 fetch base/head SHA，为 OCR --from/--to 准备真实 Git 工作区。
- * Token 通过 https://oauth2:{token}@host/... 注入远端 URL，不出现在命令行参数中。
+ * 使用项目 PAT 按需 fetch base/head SHA，为 OCR --from/--to 准备真实 Git 工作区。
+ * Token 仅通过进程环境变量注入 git 配置（GIT_CONFIG_*），不出现在命令行参数、日志或落盘文件中。
  */
 @Component
 public class GitLabPullRequestWorkspacePreparer implements GitPullRequestWorkspacePreparer
@@ -70,11 +70,12 @@ public class GitLabPullRequestWorkspacePreparer implements GitPullRequestWorkspa
         }
 
         Path workspace = Path.of(request.workingDirectory()).toAbsolutePath().normalize();
-        String remoteUrl = resolveRemoteUrl(request.repository(), token);
+        String remoteUrl = resolveRemoteUrl(request.repository());
         try
         {
             Files.createDirectories(workspace);
             runGit(workspace, null, "init");
+            runGit(workspace, null, "config", "core.symlinks", "false");
             runGit(workspace, null, "remote", "add", "origin", remoteUrl);
             runGit(workspace, null, "config", "core.sparseCheckout", "false");
             fetchCommit(workspace, token, request.headSha());
@@ -108,7 +109,7 @@ public class GitLabPullRequestWorkspacePreparer implements GitPullRequestWorkspa
         return sha != null && SHA_PATTERN.matcher(sha).matches();
     }
 
-    static String resolveRemoteUrl(com.acr.review.git.GitRepositoryCoordinates repository, String token)
+    static String resolveRemoteUrl(com.acr.review.git.GitRepositoryCoordinates repository)
     {
         String canonical = repository.canonicalUrl();
         if (canonical == null || canonical.isBlank())
@@ -140,7 +141,7 @@ public class GitLabPullRequestWorkspacePreparer implements GitPullRequestWorkspa
                 path = path.substring(0, path.length() - 4);
             }
             String scheme = uri.getScheme() == null ? "https" : uri.getScheme();
-            return scheme + "://oauth2:" + token + "@" + hostPort + path + ".git";
+            return scheme + "://" + hostPort + path + ".git";
         }
         catch (IllegalArgumentException ex)
         {

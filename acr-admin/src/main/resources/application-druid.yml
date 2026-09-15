@@ -18,9 +18,9 @@ spring:
       testOnBorrow: false
       testOnReturn: false
       webStatFilter:
-        enabled: true
+        enabled: false
       statViewServlet:
-        enabled: true
+        enabled: false
         allow:
         url-pattern: /druid/*
         login-username: ${DRUID_USER:admin}
