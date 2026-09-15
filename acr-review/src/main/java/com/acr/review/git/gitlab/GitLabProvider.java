@@ -12,7 +12,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Value;
@@ -30,6 +29,7 @@ import okhttp3.HttpUrl;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
+import com.acr.review.git.GitHttpSupport;
 
 /** GitLab REST API 适配（自建实例 serverUrl + /api/v4）。 */
 @Component
@@ -45,11 +45,7 @@ public class GitLabProvider implements GitProvider
             @Value("${review.gitlab.connect-timeout-ms:5000}") int connectTimeoutMs,
             @Value("${review.gitlab.read-timeout-ms:10000}") int readTimeoutMs)
     {
-        this.client = new OkHttpClient.Builder()
-            .connectTimeout(connectTimeoutMs, TimeUnit.MILLISECONDS)
-            .readTimeout(readTimeoutMs, TimeUnit.MILLISECONDS)
-            .callTimeout(readTimeoutMs, TimeUnit.MILLISECONDS)
-            .build();
+        this.client = GitHttpSupport.clientBuilder(connectTimeoutMs, readTimeoutMs).build();
     }
 
     @Override

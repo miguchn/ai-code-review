@@ -2,7 +2,6 @@ package com.acr.review.git.gitee;
 
 import java.io.IOException;
 import java.io.InterruptedIOException;
-import java.util.concurrent.TimeUnit;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -18,6 +17,7 @@ import okhttp3.HttpUrl;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
+import com.acr.review.git.GitHttpSupport;
 
 /** 通过 Gitee REST API v5 拉取 PR 描述、提交者、增删行与提交说明。 */
 @Component
@@ -38,11 +38,7 @@ public class GiteePullRequestMetadataFetcher implements GitPullRequestMetadataFe
     GiteePullRequestMetadataFetcher(HttpUrl apiBaseUrl, int connectTimeoutMs, int readTimeoutMs)
     {
         this.apiBaseUrl = apiBaseUrl;
-        this.client = new OkHttpClient.Builder()
-            .connectTimeout(connectTimeoutMs, TimeUnit.MILLISECONDS)
-            .readTimeout(readTimeoutMs, TimeUnit.MILLISECONDS)
-            .callTimeout(readTimeoutMs, TimeUnit.MILLISECONDS)
-            .build();
+        this.client = GitHttpSupport.clientBuilder(connectTimeoutMs, readTimeoutMs).build();
     }
 
     @Override

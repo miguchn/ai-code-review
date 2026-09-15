@@ -1,8 +1,12 @@
 package com.acr.review.git.gitee;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Base64;
+import java.util.HashMap;
+import java.util.Map;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import com.acr.review.domain.ReviewPipelineConstants;
@@ -14,7 +18,7 @@ import com.acr.review.git.GitPullRequestWorkspaceResult;
 
 /**
  * 使用项目 Token 按需 fetch base/head SHA，为 OCR --from/--to 准备真实 Git 工作区。
- * 远端使用 oauth2 Token 注入 HTTPS URL，不出现在命令行参数与日志中。
+ * Token 仅通过进程环境变量注入 git 配置（GIT_CONFIG_*），不出现在命令行参数或远端 URL 中。
  */
 @Component
 public class GiteePullRequestWorkspacePreparer implements GitPullRequestWorkspacePreparer
@@ -64,17 +68,18 @@ public class GiteePullRequestWorkspacePreparer implements GitPullRequestWorkspac
         }
 
         Path workspace = Path.of(request.workingDirectory()).toAbsolutePath().normalize();
-        String remoteUrl = resolveRemoteUrl(request.repository(), token);
+        String remoteUrl = resolveRemoteUrl(request.repository());
         try
         {
             Files.createDirectories(workspace);
             runGit(workspace, null, "init");
+            runGit(workspace, null, "config", "core.symlinks", "false");
             runGit(workspace, null, "remote", "add", "origin", remoteUrl);
             runGit(workspace, null, "config", "core.sparseCheckout", "false");
-            fetchCommit(workspace, remoteUrl, request.headSha());
+            fetchCommit(workspace, token, request.headSha());
             if (!request.baseSha().equals(request.headSha()))
             {
-                fetchCommit(workspace, remoteUrl, request.baseSha());
+                fetchCommit(workspace, token, request.baseSha());
             }
             runGit(workspace, null, "checkout", "--force", request.headSha());
             ensureCommitExists(workspace, request.baseSha());
@@ -102,23 +107,18 @@ public class GiteePullRequestWorkspacePreparer implements GitPullRequestWorkspac
         return sha != null && SHA_PATTERN.matcher(sha).matches();
     }
 
-    /** oauth2 风格 HTTPS 远端，Token 嵌入 URL 供 git fetch 使用。 */
-    static String resolveRemoteUrl(com.acr.review.git.GitRepositoryCoordinates repository, String token)
+    /** 远端不含凭据；Token 仅经 http.extraHeader 注入。 */
+    static String resolveRemoteUrl(com.acr.review.git.GitRepositoryCoordinates repository)
     {
-        String host = GitProviderCodes.DEFAULT_GITEE_SERVER.replace("https://", "");
         String path = repository.owner() + "/" + repository.repository() + ".git";
-        if (token == null || token.isBlank())
-        {
-            return GitProviderCodes.DEFAULT_GITEE_SERVER + "/" + path;
-        }
-        return "https://oauth2:" + token + "@" + host + "/" + path;
+        return GitProviderCodes.DEFAULT_GITEE_SERVER + "/" + path;
     }
 
-    private void fetchCommit(Path workspace, String remoteUrl, String sha)
+    private void fetchCommit(Path workspace, String token, String sha)
         throws IOException, InterruptedException, WorkspacePrepareException
     {
         // 禁止 --depth：浅拉取会使 base/head 成为互不连通的浅根，OCR 无法选择 base..head 变更。
-        runGit(workspace, null, buildFetchArgs(remoteUrl, sha));
+        runGit(workspace, token, buildFetchArgs("origin", sha));
     }
 
     /** 完整按 SHA fetch；供单测断言不含 --depth。 */
@@ -136,8 +136,15 @@ public class GiteePullRequestWorkspacePreparer implements GitPullRequestWorkspac
     private void runGit(Path workspace, String token, String... args)
         throws IOException, InterruptedException, WorkspacePrepareException
     {
+        Map<String, String> environment = new HashMap<>();
+        if (token != null && !token.isBlank())
+        {
+            environment.put("GIT_CONFIG_COUNT", "1");
+            environment.put("GIT_CONFIG_KEY_0", "http.extraHeader");
+            environment.put("GIT_CONFIG_VALUE_0", buildAuthorizationExtraHeader(token));
+        }
         GitCommandRunner.GitCommandResult result = gitCommandRunner.execute(
-            workspace, null, prepareTimeoutSeconds, args);
+            workspace, environment, prepareTimeoutSeconds, args);
         if (result.timedOut())
         {
             throw new WorkspacePrepareException(ReviewPipelineConstants.FAILURE_TIMEOUT,
@@ -152,6 +159,13 @@ public class GiteePullRequestWorkspacePreparer implements GitPullRequestWorkspac
                 : ReviewPipelineConstants.FAILURE_WORKSPACE_PREPARE,
                 "git " + String.join(" ", args) + " 失败: " + detail);
         }
+    }
+
+    static String buildAuthorizationExtraHeader(String token)
+    {
+        String credentials = "oauth2:" + token;
+        String encoded = Base64.getEncoder().encodeToString(credentials.getBytes(StandardCharsets.UTF_8));
+        return "Authorization: Basic " + encoded;
     }
 
     static String sanitize(String message, String token)

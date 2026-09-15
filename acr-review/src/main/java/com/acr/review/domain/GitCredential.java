@@ -90,7 +90,7 @@ public class GitCredential extends BaseEntity
         this.serverUrl = serverUrl;
     }
 
-    @Size(max = 500, message = "GitHub Token 不能超过500个字符")
+    @Size(max = 500, message = "Git Token 不能超过500个字符")
     public String getToken()
     {
         return token;

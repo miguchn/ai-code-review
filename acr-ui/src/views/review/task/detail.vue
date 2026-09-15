@@ -276,7 +276,13 @@ function handleRetry() {
     return
   }
   const pending = detailTask.value.taskStatus === 'PENDING'
-  proxy.$modal.confirm(pending ? '确认立即执行该待执行任务？' : '确认重试？历史执行记录将保留。')
+  const running = detailTask.value.taskStatus === 'RUNNING'
+  const confirmText = pending
+    ? '确认立即执行该待执行任务？'
+    : running
+      ? '仅当本次执行已中断（超过 30 分钟）时才可回收重试，确认继续？'
+      : '确认重新执行该任务？历史执行记录将保留。'
+  proxy.$modal.confirm(confirmText)
     .then(() => retryReviewTask(detailTask.value.taskId))
     .then(() => {
       proxy.$modal.msgSuccess(pending ? '已提交执行' : '已提交重试')
@@ -306,6 +312,15 @@ function goRecord() {
 }
 
 watch(taskId, () => loadDetail(), { immediate: true })
+
+let firstActivated = true
+onActivated(() => {
+  if (firstActivated) {
+    firstActivated = false
+    return
+  }
+  loadDetail()
+})
 </script>
 
 <style scoped>

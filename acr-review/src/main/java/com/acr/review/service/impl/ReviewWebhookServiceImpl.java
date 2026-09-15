@@ -1,9 +1,12 @@
 package com.acr.review.service.impl;
 
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -94,11 +97,8 @@ public class ReviewWebhookServiceImpl implements IReviewWebhookService
             return WebhookHandleResult.payloadTooLarge("Webhook 载荷超过大小限制");
         }
 
-        String deliveryId = webhookAdapter.resolveDeliveryId(safeHeaders, payload);
-        if (deliveryId == null || deliveryId.isBlank())
-        {
-            return WebhookHandleResult.badRequest("缺少 Webhook 投递 ID");
-        }
+        String platformDeliveryId = webhookAdapter.resolveDeliveryId(safeHeaders, payload);
+        String deliveryId = payloadDedupId(payload);
         String eventType = webhookAdapter.resolveEventType(safeHeaders);
         if (eventType == null || eventType.isBlank())
         {
@@ -108,13 +108,17 @@ public class ReviewWebhookServiceImpl implements IReviewWebhookService
         ReviewWebhookEvent event = buildReceivedEvent(provider, eventType, deliveryId, payloadSize);
         try
         {
-            return process(event, webhookAdapter, safeHeaders, payload);
+            return process(event, webhookAdapter, safeHeaders, payload, platformDeliveryId);
         }
         catch (RuntimeException e)
         {
             log.error("Webhook 事件处理异常, provider={}, deliveryId={}", provider, deliveryId, e);
-            finishEvent(event, "FAILED", "事件处理内部异常");
-            return WebhookHandleResult.ok("事件接收成功，处理结果请查看平台记录");
+            if (event.getEventId() != null)
+            {
+                finishEvent(event, "FAILED", "事件处理内部异常");
+                return WebhookHandleResult.ok("事件接收成功，处理结果请查看平台记录");
+            }
+            return WebhookHandleResult.serverError("事件处理失败，请稍后重试");
         }
     }
 
@@ -139,7 +143,7 @@ public class ReviewWebhookServiceImpl implements IReviewWebhookService
     }
 
     private WebhookHandleResult process(ReviewWebhookEvent event, GitWebhookAdapter webhookAdapter,
-                                        WebhookRequestHeaders headers, byte[] payload)
+                                        WebhookRequestHeaders headers, byte[] payload, String platformDeliveryId)
     {
         // 验签必须用原始 body；JSON 解析用 unwrap 后的字节（GitHub form 编码 push/ping）。
         byte[] parsePayload = webhookAdapter.unwrapPayload(payload);
@@ -185,21 +189,22 @@ public class ReviewWebhookServiceImpl implements IReviewWebhookService
 
         if (webhookAdapter.isPullRequestEventType(event.getEventType()))
         {
-            return processPullRequest(event, project, webhookAdapter, parsePayload);
+            return processPullRequest(event, project, webhookAdapter, parsePayload, platformDeliveryId);
         }
         if (webhookAdapter.isPushEventType(event.getEventType()))
         {
-            return processPush(event, project, webhookAdapter, parsePayload);
+            return processPush(event, project, webhookAdapter, parsePayload, platformDeliveryId);
         }
         finishEventWithProject(event, project, "IGNORED", "非合并请求事件（" + event.getEventType() + "），已忽略");
         return WebhookHandleResult.ok("非合并请求事件，已忽略");
     }
 
     private WebhookHandleResult processPullRequest(ReviewWebhookEvent event, ReviewProject project,
-                                                   GitWebhookAdapter webhookAdapter, byte[] payload)
+                                                   GitWebhookAdapter webhookAdapter, byte[] payload,
+                                                   String platformDeliveryId)
     {
         GitPullRequestEvent prEvent = webhookAdapter.parsePullRequestEvent(
-            event.getEventType(), event.getDeliveryId(), payload);
+            event.getEventType(), firstNonBlank(platformDeliveryId, event.getDeliveryId()), payload);
         if (prEvent == null)
         {
             finishEventWithProject(event, project, "FAILED", "合并请求载荷解析失败");
@@ -248,10 +253,11 @@ public class ReviewWebhookServiceImpl implements IReviewWebhookService
     }
 
     private WebhookHandleResult processPush(ReviewWebhookEvent event, ReviewProject project,
-                                            GitWebhookAdapter webhookAdapter, byte[] payload)
+                                            GitWebhookAdapter webhookAdapter, byte[] payload,
+                                            String platformDeliveryId)
     {
         GitPushEvent pushEvent = webhookAdapter.parsePushEvent(
-            event.getEventType(), event.getDeliveryId(), payload);
+            event.getEventType(), firstNonBlank(platformDeliveryId, event.getDeliveryId()), payload);
         if (pushEvent == null)
         {
             // GitHub/Gitea 的 tag push 事件类型仍为 push，适配器因非 heads ref 返回 null；记 IGNORED 而非 FAILED。
@@ -468,6 +474,30 @@ public class ReviewWebhookServiceImpl implements IReviewWebhookService
             .map(String::trim)
             .filter(value -> !value.isEmpty())
             .collect(Collectors.toList());
+    }
+
+    private static String firstNonBlank(String preferred, String fallback)
+    {
+        if (preferred != null && !preferred.isBlank())
+        {
+            return preferred;
+        }
+        return fallback;
+    }
+
+    /** 去重键：载荷 SHA-256，避免更换投递头重放同一 body。 */
+    static String payloadDedupId(byte[] payload)
+    {
+        try
+        {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                .digest(payload == null ? new byte[0] : payload);
+            return HexFormat.of().formatHex(digest);
+        }
+        catch (NoSuchAlgorithmException ex)
+        {
+            throw new IllegalStateException("SHA-256 不可用", ex);
+        }
     }
 
     private static String normalizeProvider(String providerCode)

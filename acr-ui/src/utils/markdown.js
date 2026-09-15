@@ -20,5 +20,16 @@ export function renderMarkdown(raw) {
   const text = raw == null ? '' : String(raw)
   if (!text.trim()) return ''
   const html = marked.parse(text, { async: false })
-  return DOMPurify.sanitize(typeof html === 'string' ? html : String(html))
+  return sanitizeHtml(typeof html === 'string' ? html : String(html))
+}
+
+/**
+ * 消毒富文本 HTML（公告等后台编辑器内容），供 v-html 使用。
+ * @param {string} raw
+ * @returns {string}
+ */
+export function sanitizeHtml(raw) {
+  const html = raw == null ? '' : String(raw)
+  if (!html.trim()) return ''
+  return DOMPurify.sanitize(html)
 }

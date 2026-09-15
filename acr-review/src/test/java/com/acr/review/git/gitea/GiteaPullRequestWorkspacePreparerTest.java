@@ -56,16 +56,16 @@ class GiteaPullRequestWorkspacePreparerTest
     }
 
     @Test
-    void remoteUrlEmbedsTokenForSelfHosted()
+    void remoteUrlDoesNotEmbedTokenForSelfHosted()
     {
         GitAccessContext access = GitAccessContext.of("mytoken", "https://gitea.example.com:8443");
         GitRepositoryCoordinates repo = new GitRepositoryCoordinates("org", "repo", "org/repo",
             "https://gitea.example.com:8443/org/repo");
 
-        String url = GiteaPullRequestWorkspacePreparer.resolveRemoteUrl(access, repo, "mytoken");
+        String url = GiteaPullRequestWorkspacePreparer.resolveRemoteUrl(access, repo);
 
-        assertEquals("https://mytoken@gitea.example.com:8443/org/repo.git", url);
-        assertFalse(url.contains("mytoken@gitea.example.com:8443/org/repo.git".replace("mytoken", "***")));
+        assertEquals("https://gitea.example.com:8443/org/repo.git", url);
+        assertFalse(url.contains("mytoken"));
     }
 
     @Test
@@ -75,8 +75,9 @@ class GiteaPullRequestWorkspacePreparerTest
         GitRepositoryCoordinates repo = new GitRepositoryCoordinates("org/team", "demo", "org/team/demo",
             "http://gitea.local:3000/org/team/demo");
 
-        String url = GiteaPullRequestWorkspacePreparer.resolveRemoteUrl(access, repo, "tok");
+        String url = GiteaPullRequestWorkspacePreparer.resolveRemoteUrl(access, repo);
 
-        assertEquals("http://tok@gitea.local:3000/org/team/demo.git", url);
+        assertEquals("http://gitea.local:3000/org/team/demo.git", url);
+        assertFalse(url.contains("tok@"));
     }
 }

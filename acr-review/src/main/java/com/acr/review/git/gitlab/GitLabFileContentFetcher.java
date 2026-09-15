@@ -4,7 +4,6 @@ import java.io.IOException;
 import java.io.InterruptedIOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.util.concurrent.TimeUnit;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import com.acr.review.domain.ReviewPipelineConstants;
@@ -17,6 +16,7 @@ import okhttp3.HttpUrl;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
+import com.acr.review.git.GitHttpSupport;
 
 /** 通过 GitLab Repository Files API 拉取单文件全文。 */
 @Component
@@ -30,11 +30,7 @@ public class GitLabFileContentFetcher implements GitFileContentFetcher
         @Value("${review.gitlab.connect-timeout-ms:5000}") int connectTimeoutMs,
         @Value("${review.gitlab.read-timeout-ms:30000}") int readTimeoutMs)
     {
-        this.client = new OkHttpClient.Builder()
-            .connectTimeout(connectTimeoutMs, TimeUnit.MILLISECONDS)
-            .readTimeout(readTimeoutMs, TimeUnit.MILLISECONDS)
-            .callTimeout(readTimeoutMs, TimeUnit.MILLISECONDS)
-            .build();
+        this.client = GitHttpSupport.clientBuilder(connectTimeoutMs, readTimeoutMs).build();
     }
 
     @Override

@@ -374,7 +374,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             failure_message = '投递节点优雅停机超时，租约已置过期，等待恢复扫描接管',
             update_time = sysdate()
         where lease_owner = #{leaseOwner}
-          and delivery_status = 'PENDING'
+          and delivery_status in ('PENDING', 'FAILED')
           and (lease_until is null or lease_until &gt;= sysdate())
     </update>
 

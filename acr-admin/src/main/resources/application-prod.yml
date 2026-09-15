@@ -47,6 +47,13 @@ spring:
     restart:
       enabled: false
 
+# 生产环境关闭匿名 OpenAPI 文档；开发/试用 profile 仍可按 application.yml 开启
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
 # 日志配置
 logging:
   level:

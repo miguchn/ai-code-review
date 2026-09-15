@@ -3,7 +3,6 @@ package com.acr.review.git.gitea;
 import java.io.IOException;
 import java.io.InterruptedIOException;
 import java.util.Optional;
-import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -23,6 +22,7 @@ import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
+import com.acr.review.git.GitHttpSupport;
 
 /** Gitea Issue/PR 总结评论适配（list / create / update）。 */
 @Component
@@ -37,11 +37,7 @@ public class GiteaPullRequestCommentClient implements GitPullRequestCommentClien
         @Value("${review.gitea.connect-timeout-ms:5000}") int connectTimeoutMs,
         @Value("${review.gitea.read-timeout-ms:30000}") int readTimeoutMs)
     {
-        this.client = new OkHttpClient.Builder()
-            .connectTimeout(connectTimeoutMs, TimeUnit.MILLISECONDS)
-            .readTimeout(readTimeoutMs, TimeUnit.MILLISECONDS)
-            .callTimeout(readTimeoutMs, TimeUnit.MILLISECONDS)
-            .build();
+        this.client = GitHttpSupport.clientBuilder(connectTimeoutMs, readTimeoutMs).build();
     }
 
     @Override

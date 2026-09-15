@@ -32,6 +32,7 @@ server:
     threads:
       max: 800
       min-spare: 100
+    max-swallow-size: 262144
 
 # 用户配置
 user:
@@ -56,7 +57,7 @@ spring:
 # token配置
 token:
   header: Authorization
-  secret: abcdefghijklmnopqrstuvwxyz
+  secret: ${ACR_TOKEN_SECRET:abcdefghijklmnopqrstuvwxyz}
   expireTime: 30
 
 # MyBatis配置
@@ -71,12 +72,13 @@ pagehelper:
   supportMethodsArguments: true
   params: count=countSql
 
-# Springdoc配置
+# Springdoc 关闭；需要文档时在对应 profile 显式打开
 springdoc:
   api-docs:
+    enabled: false
     path: /v3/api-docs
   swagger-ui:
-    enabled: true
+    enabled: false
     path: /swagger-ui.html
     tags-sorter: alpha
   group-configs:
@@ -112,7 +114,9 @@ review:
   github:
     api-url: ${GITHUB_API_URL:https://api.github.com}
     connect-timeout-ms: 5000
-    read-timeout-ms: 10000
+    # Compare Diff / 文件全文 / 评论共用读取与 call timeout。
+    # 200～300 文件级 PR 的 unified diff 在 10s 内经常读不完，会误判为 TIMEOUT 并整任务重跑。
+    read-timeout-ms: ${ACR_GITHUB_READ_TIMEOUT_MS:60000}
     # PR 审查工作区准备（git fetch base/head）超时秒数
     workspace-prepare-timeout-seconds: ${ACR_GITHUB_WORKSPACE_PREPARE_TIMEOUT_SECONDS:180}
   webhook:
@@ -120,6 +124,8 @@ review:
     callback-base-url: ${ACR_WEBHOOK_CALLBACK_URL:http://localhost:8080}
     # Webhook 载荷大小上限（字节）
     max-payload-bytes: 262144
+    rate-limit-count: 120
+    rate-limit-seconds: 60
   engine:
     # open-code-review CLI 可执行文件（需在 PATH 中或通过 ACR_OCR_EXECUTABLE 指定绝对路径）
     executable-path: ${ACR_OCR_EXECUTABLE:ocr}

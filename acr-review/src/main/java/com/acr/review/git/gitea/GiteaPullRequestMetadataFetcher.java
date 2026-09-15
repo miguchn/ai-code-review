@@ -2,7 +2,6 @@ package com.acr.review.git.gitea;
 
 import java.io.IOException;
 import java.io.InterruptedIOException;
-import java.util.concurrent.TimeUnit;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import com.acr.review.git.GitAccessContext;
@@ -16,6 +15,7 @@ import okhttp3.HttpUrl;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
+import com.acr.review.git.GitHttpSupport;
 
 /** 通过 Gitea REST API 拉取 PR 描述、提交者、增删行与提交说明。 */
 @Component
@@ -27,11 +27,7 @@ public class GiteaPullRequestMetadataFetcher implements GitPullRequestMetadataFe
         @Value("${review.gitea.connect-timeout-ms:5000}") int connectTimeoutMs,
         @Value("${review.gitea.read-timeout-ms:30000}") int readTimeoutMs)
     {
-        this.client = new OkHttpClient.Builder()
-            .connectTimeout(connectTimeoutMs, TimeUnit.MILLISECONDS)
-            .readTimeout(readTimeoutMs, TimeUnit.MILLISECONDS)
-            .callTimeout(readTimeoutMs, TimeUnit.MILLISECONDS)
-            .build();
+        this.client = GitHttpSupport.clientBuilder(connectTimeoutMs, readTimeoutMs).build();
     }
 
     @Override

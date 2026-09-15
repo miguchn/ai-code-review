@@ -13,7 +13,7 @@ export function getLatestImDelivery(taskId) {
   return request({ url: '/review/delivery/task/' + taskId + '/im-latest', method: 'get' })
 }
 
-/** 重试 GitHub PR 总结评论投递（以该 PR 最近 SUCCESS 结论渲染）。 */
+/** 重试 PR/MR 总结评论投递（以该变更最近 SUCCESS 结论渲染）。 */
 export function retryDelivery(taskId) {
   return request({ url: '/review/delivery/' + taskId + '/retry', method: 'post' })
 }

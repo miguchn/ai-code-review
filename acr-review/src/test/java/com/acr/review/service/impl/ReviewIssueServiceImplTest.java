@@ -1122,6 +1122,7 @@ class ReviewIssueServiceImplTest
         project.setProjectId(10L);
         project.setOwnerUserId(99L);
         when(issueMapper.selectIssueById(80L)).thenReturn(issue);
+        when(projectAccessService.requireView(10L)).thenReturn(project);
         when(projectMapper.selectReviewProjectById(10L)).thenReturn(project);
         ReviewProjectMember member = new ReviewProjectMember();
         member.setProjectRole(ReviewProjectMember.ROLE_REVIEWER);
@@ -1142,6 +1143,7 @@ class ReviewIssueServiceImplTest
             ReviewIssue result = service.transfer(80L, 22L, "该模块已移交李四负责");
 
             assertEquals(22L, result.getAssigneeUserId());
+            verify(projectAccessService).requireView(10L);
             assertEquals(ReviewIssueConstants.ASSIGN_SOURCE_TRANSFER, result.getAssignSource());
             ArgumentCaptor<ReviewIssueAction> actionCaptor = ArgumentCaptor.forClass(ReviewIssueAction.class);
             verify(actionMapper).insertAction(actionCaptor.capture());
@@ -1196,6 +1198,26 @@ class ReviewIssueServiceImplTest
     }
 
     @Test
+    void transferRejectsAssigneeWithoutProjectAccess()
+    {
+        ReviewIssue issue = openIssue(86L, "SEC", "a.java", "leak");
+        issue.setAssigneeUserId(11L);
+        when(issueMapper.selectIssueById(86L)).thenReturn(issue);
+        doThrow(new ServiceException("没有权限访问或操作该代码项目"))
+            .when(projectAccessService).requireView(10L);
+
+        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class))
+        {
+            security.when(SecurityUtils::getUserId).thenReturn(11L);
+
+            ServiceException ex = assertThrows(ServiceException.class,
+                () -> service.transfer(86L, 22L, "已不在项目内仍转派"));
+            assertEquals("没有权限访问或操作该代码项目", ex.getMessage());
+            verify(issueMapper, never()).updateIssueAssignment(any());
+        }
+    }
+
+    @Test
     void transferRejectsNonMemberTarget()
     {
         ReviewIssue issue = openIssue(83L, "SEC", "a.java", "leak");
@@ -1204,6 +1226,7 @@ class ReviewIssueServiceImplTest
         project.setProjectId(10L);
         project.setOwnerUserId(99L);
         when(issueMapper.selectIssueById(83L)).thenReturn(issue);
+        when(projectAccessService.requireView(10L)).thenReturn(project);
         when(projectMapper.selectReviewProjectById(10L)).thenReturn(project);
         when(projectMemberMapper.selectByProjectAndUser(10L, 44L)).thenReturn(null);
 

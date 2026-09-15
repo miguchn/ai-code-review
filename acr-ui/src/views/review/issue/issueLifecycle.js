@@ -1,5 +1,7 @@
 /** 问题详情生命线：由 actions + issue 状态纯前端推导。 */
 
+export const RECHECKING_DISPLAY_LABEL = '疑似修复'
+
 const TERMINAL_STATUSES = ['CLOSED', 'IGNORED', 'FALSE_POSITIVE']
 const TERMINAL_LABELS = {
   CLOSED: '已关闭',
@@ -33,6 +35,16 @@ function findLastAction(actions, predicate) {
 
 function isTerminalStatus(status) {
   return TERMINAL_STATUSES.includes(status)
+}
+
+/** 字典 RECHECKING 展示为「疑似修复」，与列表页、后端 statusLabel 对齐。 */
+export function relabelIssueStatusOptions(options) {
+  if (!Array.isArray(options)) {
+    return []
+  }
+  return options.map((item) => (
+    item && item.value === 'RECHECKING' ? { ...item, label: RECHECKING_DISPLAY_LABEL } : item
+  ))
 }
 
 /**

@@ -197,8 +197,8 @@ public class ReviewResourceBudgetService
         }
         catch (IOException ex)
         {
-            log.warn("统计工作区磁盘占用失败，按 0 处理: {}", ex.toString());
-            return 0L;
+            log.warn("统计工作区磁盘占用失败，按已达上限处理: {}", ex.toString());
+            return Math.max(0L, settings.workspaceMaxDiskMb());
         }
     }
 }

@@ -22,6 +22,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.springframework.dao.DuplicateKeyException;
+import com.acr.common.exception.ServiceException;
 import com.acr.review.domain.ReviewProject;
 import com.acr.review.domain.ReviewWebhookEvent;
 import com.acr.review.domain.WebhookHandleResult;
@@ -135,7 +136,7 @@ class ReviewWebhookServiceImplTest
         InOrder order = inOrder(webhookAdapter, eventMapper);
         order.verify(webhookAdapter).verify(eq("secret"), eq(PAYLOAD), any());
         order.verify(eventMapper).insertEvent(any());
-        verify(eventMapper).incrementDuplicate("GITHUB", "d-1");
+        verify(eventMapper).incrementDuplicate("GITHUB", ReviewWebhookServiceImpl.payloadDedupId(PAYLOAD));
         verify(taskCreateService, never()).createTaskFromEvent(any(), any(), any());
     }
 
@@ -192,6 +193,42 @@ class ReviewWebhookServiceImplTest
         assertEquals(401, result.httpStatus());
         verify(eventMapper, never()).insertEvent(any());
         verify(taskCreateService, never()).createTaskFromEvent(any(), any(), any());
+    }
+
+    @Test
+    void returnsServerErrorWhenFailureOccursBeforeEventPersist()
+    {
+        when(projectMapper.selectByFullPath("GITHUB", "miguchn/demo", null)).thenReturn(enabledProject());
+        when(cryptoService.decryptWebhookSecret("cipher")).thenThrow(new ServiceException("主密钥无效"));
+
+        WebhookHandleResult result = service.handleGitHubWebhook("pull_request", "d-1", "sig", PAYLOAD);
+
+        assertEquals(500, result.httpStatus());
+        verify(eventMapper, never()).insertEvent(any());
+        verify(eventMapper, never()).updateProcessResult(any());
+        verify(taskCreateService, never()).createTaskFromEvent(any(), any(), any());
+    }
+
+    @Test
+    void keepsAcceptedResponseWhenFailureOccursAfterEventPersist()
+    {
+        ReviewProject project = enabledProject();
+        when(projectMapper.selectByFullPath("GITHUB", "miguchn/demo", null)).thenReturn(project);
+        when(cryptoService.decryptWebhookSecret("cipher")).thenReturn("secret");
+        when(webhookAdapter.verify(eq("secret"), eq(PAYLOAD), any())).thenReturn(true);
+        when(webhookAdapter.parsePullRequestEvent("pull_request", "d-1", PAYLOAD)).thenReturn(PR_EVENT);
+        doAnswer(invocation -> {
+            ReviewWebhookEvent event = invocation.getArgument(0);
+            event.setEventId(88L);
+            return 1;
+        }).when(eventMapper).insertEvent(any());
+        when(taskCreateService.createTaskFromEvent(eq(project), any(), eq(PR_EVENT)))
+            .thenThrow(new RuntimeException("create boom"));
+
+        WebhookHandleResult result = service.handleGitHubWebhook("pull_request", "d-1", "sig", PAYLOAD);
+
+        assertEquals(200, result.httpStatus());
+        verify(eventMapper).updateProcessResult(argMatchesStatus("FAILED"));
     }
 
     @Test
@@ -314,13 +351,36 @@ class ReviewWebhookServiceImplTest
     }
 
     @Test
-    void rejectsMissingDeliveryId()
+    void missingPlatformDeliveryIdStillDedupsByPayloadHash()
     {
         when(webhookAdapter.resolveDeliveryId(any(), eq(PAYLOAD))).thenReturn(null);
+        when(projectMapper.selectByFullPath("GITHUB", "miguchn/demo", null)).thenReturn(null);
 
         WebhookHandleResult result = service.handleGitHubWebhook("pull_request", null, "sig", PAYLOAD);
 
-        assertEquals(400, result.httpStatus());
+        assertEquals(200, result.httpStatus());
+        assertTrue(result.message().contains("未匹配"));
+    }
+
+    @Test
+    void dedupsSameBodyWhenDeliveryHeaderChanges()
+    {
+        ReviewProject project = enabledProject();
+        when(projectMapper.selectByFullPath("GITHUB", "miguchn/demo", null)).thenReturn(project);
+        when(cryptoService.decryptWebhookSecret("cipher")).thenReturn("secret");
+        when(webhookAdapter.verify(eq("secret"), eq(PAYLOAD), any())).thenReturn(true);
+        when(webhookAdapter.resolveDeliveryId(any(), eq(PAYLOAD))).thenReturn("d-1", "d-2");
+        when(eventMapper.insertEvent(any())).thenThrow(new DuplicateKeyException("dup"));
+
+        WebhookHandleResult first = service.handleGitHubWebhook("pull_request", "d-1", "sig", PAYLOAD);
+        WebhookHandleResult second = service.handleGitHubWebhook("pull_request", "d-2", "sig", PAYLOAD);
+
+        assertEquals(200, first.httpStatus());
+        assertEquals(200, second.httpStatus());
+        String dedupId = ReviewWebhookServiceImpl.payloadDedupId(PAYLOAD);
+        verify(eventMapper, org.mockito.Mockito.times(2)).insertEvent(any());
+        verify(eventMapper, org.mockito.Mockito.times(2)).incrementDuplicate("GITHUB", dedupId);
+        verify(taskCreateService, never()).createTaskFromEvent(any(), any(), any());
     }
 
     @Test

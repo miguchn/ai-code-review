@@ -98,11 +98,11 @@ class DingTalkRobotClientTest
     }
 
     @Test
-    void appendSignReturnsOriginalUrlWhenSecretEmpty()
+    void rejectsMetadataWebhookUrl()
     {
-        String webhookUrl = "https://oapi.dingtalk.com/robot/send?access_token=abc";
-        assertEquals(webhookUrl, DingTalkRobotClient.appendSign(webhookUrl, null));
-        assertEquals(webhookUrl, DingTalkRobotClient.appendSign(webhookUrl, ""));
+        NotifyRobotException ex = assertThrows(NotifyRobotException.class,
+            () -> client.send("http://169.254.169.254/robot/send", null, "t", "b", null));
+        assertTrue(ex.getMessage().contains("链路本地") || ex.getMessage().contains("元数据"));
     }
 
     @Test

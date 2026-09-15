@@ -150,6 +150,45 @@ class ReviewTaskExecutionServiceImplTest
         when(taskMapper.claimTask(eq(9L), any(), any(), anyInt())).thenReturn(0);
         service.executeTask(9L);
         verify(runMapper, never()).insertReviewTaskRun(any());
+        verify(taskMapper, never()).abandonClaimedTask(any(), any(), any(), any());
+    }
+
+    @Test
+    void abandonsLeaseWhenClaimedTaskDisappears()
+    {
+        when(taskMapper.claimTask(eq(8L), any(), any(), anyInt())).thenReturn(1);
+        when(taskMapper.selectReviewTaskById(8L)).thenReturn(null);
+        when(taskMapper.abandonClaimedTask(eq(8L), eq("worker-test"), any(), any())).thenReturn(1);
+
+        service.executeTask(8L);
+
+        verify(taskMapper).abandonClaimedTask(eq(8L), eq("worker-test"),
+            eq(ReviewPipelineConstants.FAILURE_UNKNOWN), any());
+        verify(runMapper, never()).insertReviewTaskRun(any());
+        verify(deliveryIntentService, never()).enqueueAfterSuccess(any(), any());
+    }
+
+    @Test
+    void abandonsLeaseWhenFailurePersistThrows()
+    {
+        ReviewTask task = new ReviewTask();
+        task.setTaskId(11L);
+        task.setProjectId(2L);
+        task.setBaseSha("abc1234");
+        task.setHeadSha("def5678");
+        task.setRetryCount(0);
+        when(taskMapper.claimTask(eq(11L), any(), any(), anyInt())).thenReturn(1);
+        when(taskMapper.selectReviewTaskById(11L)).thenReturn(task);
+        when(runMapper.selectMaxAttemptNo(11L)).thenReturn(null);
+        org.mockito.Mockito.doThrow(new org.springframework.dao.DataIntegrityViolationException("Column 'snapshot_review_mode' cannot be null"))
+            .when(runMapper).insertReviewTaskRun(any(ReviewTaskRun.class));
+        when(taskMapper.updateTaskExecution(any())).thenThrow(new IllegalStateException("db down"));
+        when(taskMapper.abandonClaimedTask(eq(11L), eq("worker-test"), any(), any())).thenReturn(1);
+
+        service.executeTask(11L);
+
+        verify(taskMapper).abandonClaimedTask(eq(11L), eq("worker-test"),
+            eq(ReviewPipelineConstants.FAILURE_UNKNOWN), any());
     }
 
     @Test

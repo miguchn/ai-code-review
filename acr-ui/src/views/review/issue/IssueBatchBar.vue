@@ -55,15 +55,15 @@
   </div>
 
   <el-dialog v-model="closeDialogVisible" :title="closeDialogTitle" width="480px" append-to-body>
-    <el-form :model="closeForm" label-width="88px">
-      <el-form-item label="关闭说明">
+    <el-form ref="closeFormRef" :model="closeForm" :rules="closeRules" label-width="88px">
+      <el-form-item label="关闭说明" prop="resolveNote">
         <el-input
           v-model="closeForm.resolveNote"
           type="textarea"
           :rows="3"
           maxlength="500"
           show-word-limit
-          placeholder="可选：说明关闭原因或修复方式"
+          placeholder="请说明关闭原因或修复方式"
         />
       </el-form-item>
     </el-form>
@@ -118,6 +118,9 @@ const DISMISS_STATUSES = ['AWAITING_CONFIRM', 'AWAITING_FIX']
 const loading = ref(false)
 const closeDialogVisible = ref(false)
 const closeForm = ref({ resolveNote: '' })
+const closeRules = {
+  resolveNote: [{ required: true, message: '请填写关闭原因', trigger: 'blur' }]
+}
 const dismissDialogVisible = ref(false)
 const dismissForm = ref({ dismissType: 'IGNORED', resolveNote: '' })
 const dismissRules = {
@@ -237,13 +240,17 @@ function openCloseDialog() {
   if (!closeEnabled.value) return
   closeForm.value = { resolveNote: '' }
   closeDialogVisible.value = true
+  nextTick(() => proxy.resetForm('closeFormRef'))
 }
 
 function submitClose() {
-  runBatch({
-    action: 'CLOSE',
-    issueIds: issueIds(),
-    resolveNote: closeForm.value.resolveNote || undefined
+  proxy.$refs.closeFormRef.validate(valid => {
+    if (!valid) return
+    runBatch({
+      action: 'CLOSE',
+      issueIds: issueIds(),
+      resolveNote: closeForm.value.resolveNote
+    })
   })
 }
 

@@ -34,7 +34,7 @@ public class CredentialCryptoService
 
     public String encrypt(String plaintext)
     {
-        return encrypt(plaintext, AAD, "GitHub Token 不能为空");
+        return encrypt(plaintext, AAD, "Git Token 不能为空");
     }
 
     public String decrypt(String ciphertext)

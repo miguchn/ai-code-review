@@ -42,7 +42,7 @@
         </div>
 
         <div class="notice-body">
-          <div v-if="hasContent" class="notice-content" v-html="detail.noticeContent" />
+          <div v-if="hasContent" class="notice-content" v-html="safeContent" />
           <div v-else class="notice-empty notice-empty--inner">
             <el-icon><Document /></el-icon> 暂无内容
           </div>
@@ -54,6 +54,7 @@
 
 <script setup>
 import { getNotice } from '@/api/system/notice'
+import { sanitizeHtml } from '@/utils/markdown'
 
 const visible = ref(false)
 const loading = ref(false)
@@ -65,8 +66,11 @@ const isStatusNormal = computed(() => {
 })
 
 const hasContent = computed(() => {
-  const content = detail.value && detail.value.noticeContent
-  return content != null && String(content).trim() !== ''
+  return safeContent.value !== ''
+})
+
+const safeContent = computed(() => {
+  return sanitizeHtml(detail.value && detail.value.noticeContent)
 })
 
 function open(payload) {

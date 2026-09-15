@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.InterruptedIOException;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
+import com.acr.common.utils.http.RestrictedHost;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -22,6 +23,20 @@ public abstract class AbstractNotifyRobotClient implements NotifyRobotClient
     protected AbstractNotifyRobotClient(int connectTimeoutMs, int readTimeoutMs)
     {
         this.client = new OkHttpClient.Builder()
+            .followRedirects(false)
+            .followSslRedirects(false)
+            .addInterceptor(chain -> {
+                try
+                {
+                    java.net.URI uri = chain.request().url().uri();
+                    RestrictedHost.requireAllowed(uri.getHost());
+                }
+                catch (IllegalArgumentException ex)
+                {
+                    throw new java.io.IOException(ex.getMessage());
+                }
+                return chain.proceed(chain.request());
+            })
             .connectTimeout(connectTimeoutMs, TimeUnit.MILLISECONDS)
             .readTimeout(readTimeoutMs, TimeUnit.MILLISECONDS)
             .callTimeout(readTimeoutMs, TimeUnit.MILLISECONDS)
@@ -83,6 +98,15 @@ public abstract class AbstractNotifyRobotClient implements NotifyRobotClient
         if (!webhookUrl.startsWith("https://") && !webhookUrl.startsWith("http://"))
         {
             throw new NotifyRobotException("Webhook URL 必须以 http(s):// 开头");
+        }
+        try
+        {
+            java.net.URI uri = java.net.URI.create(webhookUrl);
+            RestrictedHost.requireAllowed(uri.getHost());
+        }
+        catch (IllegalArgumentException ex)
+        {
+            throw new NotifyRobotException(ex.getMessage());
         }
     }
 }
