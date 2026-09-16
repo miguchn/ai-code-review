@@ -60,6 +60,9 @@ services:
       ACR_MYSQL_USERNAME: ${ACR_MYSQL_USERNAME:-root}
       ACR_MYSQL_PASSWORD: ${ACR_MYSQL_PASSWORD:-${MYSQL_ROOT_PASSWORD:-root}}
       REDIS_PASSWORD: ${REDIS_PASSWORD:-redis}
+      # 登录 JWT 签名密钥：未设置时使用系统内置默认值（仅为本地试用/调试方便），
+      # 生产或对外环境请务必自行改为随机值：openssl rand -base64 32
+      ACR_TOKEN_SECRET: ${ACR_TOKEN_SECRET:-abcdefghijklmnopqrstuvwxyz}
       # 试用环境允许连接本机/内网兼容模型服务（可按需关闭）
       ACR_LLM_ALLOW_HTTP: ${ACR_LLM_ALLOW_HTTP:-true}
       ACR_LLM_ALLOW_PRIVATE_ENDPOINTS: ${ACR_LLM_ALLOW_PRIVATE_ENDPOINTS:-true}

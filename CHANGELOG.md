@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### 全量代码审计修复批（2026-09-15，安全加固 + 调度健壮性 + UI 修复）
+
+- Webhook 入口加固：新增 `WebhookIngressFilter`（载荷大小限制 + IP 限流，Redis 故障时放行不阻断合法回调）；事件去重键由平台 Delivery ID 改为载荷 SHA-256，防更换投递头重放；去重落库前的内部失败返回 5xx 交平台重试，不再静默丢事件（路线图 M2 已注记）
+- Git 凭据零落盘：四平台工作区准备的 fetch Token 不再嵌入 remote URL（原方式会把 Token 持久写入 `.git/config`），改经 `GIT_CONFIG_*` 环境变量注入 `http.extraHeader`；工作区统一 `core.symlinks=false` 防恶意仓库符号链接攻击
+- SSRF 收敛：新增 `RestrictedHost` / `GitHttpSupport`，Git 与通知机器人 HTTP 客户端统一禁止跟随重定向、拦截链路本地与云元数据地址（169.254.169.254、100.100.100.200、metadata.* 主机名）
+- 配置面收敛：Swagger/OpenAPI 与 Druid 控制台默认关闭并移除匿名放行；JWT 签名密钥支持 `ACR_TOKEN_SECRET` 环境注入（未设置时用系统内置默认值，仅供试用/调试方便，生产或对外环境须自行修改；docker-compose 已透传）；GitHub read timeout 默认提至 60s（`ACR_GITHUB_READ_TIMEOUT_MS`），防大 PR Compare Diff 误判 TIMEOUT 整任务重跑
+- 调度健壮性：任务领取后记录消失、失败终态落库异常时放弃租约回队（`abandonClaimedTask` 带 task_status + lease_owner 双围栏，不误伤并行任务）；投递工作节点异常主动释放租约；优雅停机租约置过期覆盖 FAILED 投递；磁盘统计失败改按上限处理（fail-safe）
+- 问题转派权限：`requireView` 项目校验移出条件分支，所有转派路径强制校验
+- 统计口径：空范围审查统一标记「无有效审查范围」，有效审查覆盖率排除空范围任务（InsightMetrics 口径说明同步）
+- 前端：公告详情 `v-html` 经 DOMPurify 消毒（XSS）；修复 `DeliveryStatusView` 引用不存在的 `retryReviewDelivery` 导致的运行时错误；问题关闭原因必填（单个 + 批量，表单校验）；RECHECKING 字典标签统一显示「疑似修复」并抽公共函数（列表/详情/记录页一致）；record/task 详情页 keep-alive 激活时自动刷新；任务重试确认文案按 PENDING/RUNNING/终态区分
+- 测试：后端同步更新（`RestrictedHostTest`、租约放弃、webhook 5xx 路径、转派权限等）；前端新增 `issue-lifecycle.test.js`；`mvn test` + `npm run test:unit` + `npm run build:prod` 全过
+
 ### 首次登录任务式指引 + OCR 引擎可见性 + 端到端 review 修复
 
 - 首次登录指引：三条任务线 tour（管理员接项目/开发者处置问题/管理者读洞察，各 ≤8 步），`data-tour` 稳定锚点，锚点缺失自动跳过；按角色首登自动启动、localStorage 按用户记完成，功能助手抽屉可重触发；零新依赖、零后端改动；`npm run test:unit`（node --test）覆盖 manifest

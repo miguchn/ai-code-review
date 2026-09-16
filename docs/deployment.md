@@ -40,6 +40,8 @@ mysql --default-character-set=utf8mb4 -u root -p < sql/init-full.sql
 |---|---|---|
 | `ACR_WEBHOOK_CALLBACK_URL` | `http://localhost:8080` | 生成各平台 Webhook 回调地址的外网 base URL（`/webhook/{provider}`），生产环境必须改为公网可达地址 |
 | `ACR_REVIEW_LLM_TIMEOUT_SECONDS` | `120` | 大模型审查单次执行超时秒数，记录进任务运行快照 |
+| `ACR_TOKEN_SECRET` | 系统内置默认值（仅供试用/调试） | 登录 JWT 签名密钥。未设置时使用系统内置默认值（docker-compose 已透传该变量），生产或对外环境请务必自行改为随机值（`openssl rand -base64 32`） |
+| `ACR_GITHUB_READ_TIMEOUT_MS` | `60000` | GitHub API 读取/调用超时（毫秒），大 PR 的 Compare Diff 拉取慢时可调大 |
 
 ### 2. 后端配置
 
@@ -91,8 +93,7 @@ npm run dev
 
 - 前端页面：http://localhost
 - 后端 API：http://localhost:8080
-- Swagger 文档：http://localhost:8080/swagger-ui.html
-- Druid 监控：http://localhost:8080/druid
+- Swagger 文档、Druid 监控：默认关闭且不开放匿名访问（2026-09-15 安全加固）。需要时在对应 profile 显式开启 springdoc / Druid statViewServlet，并同步恢复 SecurityConfig 放行与鉴权配置
 
 默认管理员：`admin / admin123`
 
