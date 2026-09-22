@@ -17,7 +17,7 @@
 </p>
 <p align="center">
   <img src="https://img.shields.io/badge/GitHub-E2E_verified-181717.svg" alt="GitHub E2E verified" />
-  <img src="https://img.shields.io/badge/GitLab-adapter_tested-FC6D26.svg" alt="GitLab adapter tested" />
+  <img src="https://img.shields.io/badge/GitLab-maintainer_tested-FC6D26.svg" alt="GitLab maintainer tested" />
   <img src="https://img.shields.io/badge/Gitee-adapter_tested-C71D23.svg" alt="Gitee adapter tested" />
   <img src="https://img.shields.io/badge/Gitea-adapter_tested-609926.svg" alt="Gitea adapter tested" />
 </p>
@@ -47,7 +47,7 @@ The goal is not to generate more comments. It addresses platform-level problems:
 | Enterprise governance | Primarily repository- or tool-level configuration | Central project authorization, credential governance, runtime recovery, business traces, and quality insights |
 | Deployment boundary | Often depends on an externally hosted service | Open-source and self-hosted, with encrypted credentials and controlled model endpoints |
 
-The current release is **V0.2 Core under controlled rollout**. GitHub has passed an end-to-end acceptance run against a real repository. GitLab, Gitee, and Gitea have adapter and contract-test coverage, but still require acceptance against each target enterprise's real instance. This is not yet V1.0 enterprise production readiness.
+The current release is **V0.2 Core under controlled rollout**. GitHub has passed an end-to-end acceptance run against a real repository. GitLab has been tested by the maintainer and is usable. Gitee and Gitea have adapter and contract-test coverage and still need acceptance on the target instance. This is not yet V1.0 enterprise production readiness.
 
 ## Implemented Capabilities
 
@@ -55,14 +55,14 @@ The current release is **V0.2 Core under controlled rollout**. GitHub has passed
 |---|---|
 | 🧩 Multi-platform intake and triggers | A unified adapter contract for GitHub / GitLab / Gitee / Gitea; MR/PR events and push review on configured branches. Push review is post-merge detection and governance, not a pre-merge enforcement gate |
 | 🔐 Trusted webhooks | Per-platform signature verification, payload limits, repository-path and target-branch matching, and delivery-idempotent deduplication. A dedup key is claimed only after successful verification; forged or misrouted events are rejected |
-| ⚙️ Dual execution modes and scope governance | Direct LLM review with `LLM_DIRECT`, or optional `OCR_ENGINE`; frozen policies for diff inclusion/exclusion, test files, existing findings, and high-impact file expansion. The default Docker image does not bundle the OCR CLI |
+| ⚙️ Dual execution modes and scope governance | Direct LLM review with `LLM_DIRECT`, or optional `OCR_ENGINE`; frozen policies for diff inclusion/exclusion, test files, existing findings, and high-impact file expansion. The default backend image bundles open-code-review CLI 1.11.6 |
 | 🧠 Structured review results | Five-dimension scoring, backend-recomputed totals, a structured issue list, top-three highlights, and NEW/EXISTING classification; model, template, prompt, scope, and execution snapshots are retained per run |
 | 💬 Low-noise delivery | Idempotent creation or update of an MR/PR summary comment; project-controlled inline comments for critical/high findings; conclusion, summary, inline-comment, and IM delivery states remain independent |
 | 📣 Chinese enterprise IM | DingTalk / WeCom / Feishu group bots; project-level conclusion policy, cooldown for lower-priority messages, failure notifications, body snapshots, retry, and delivery tracing. One project currently binds one channel |
 | 📒 Issue-governance loop | All new findings enter the ledger; confirmation, closure, dismissal, false-positive marking, recheck, reopen, batch disposition, and a lifecycle timeline; automatic assignment from commit author/PR author/project owner plus overdue scans and aggregated reminders |
 | 👥 Authorization and sensitive assets | Effective access is the intersection of **functional RBAC × department DataScope × project membership role**; project roles are OWNER / ADMIN / REVIEWER / VIEWER. Git tokens, webhook secrets, notification endpoints, and model API keys use AES-GCM encryption and are never returned in plaintext |
 | 🛡️ Reliability and operations | Database-driven task and delivery dispatch, lease/epoch fencing, backoff and recovery, bounded executors, per-project concurrency, Git/workspace/OCR/LLM resource budgets, plus a runtime overview for backlog, failures, resources, and dependency alerts |
-| 📊 Data insights | Quality overview, project detail, member analysis, commit trends, added/deleted lines, identity binding, and metric definitions; token usage is captured per run and cost is estimated using current model prices. Price versions, budgets, and quotas are not implemented |
+| 📊 Data insights | Quality overview, project detail, member analysis, commit trends, added/deleted lines, identity binding, and metric definitions. Token usage is captured per run and cost is estimated from the current model unit price. Which model to use, and what it costs, is the operator's choice |
 | 🧭 In-product guidance | A global feature assistant with 14 Chinese guides covering first setup, all four platforms, models and engines, commit messages, delivery, and troubleshooting; key configuration pages deep-link into the relevant guide |
 
 ## Governance Loop and Architecture
@@ -139,7 +139,7 @@ docker compose up -d --build
 docker compose ps
 ```
 
-When all four services report `healthy`, open <http://127.0.0.1> and sign in with the default administrator `admin / admin123`. Change the default password immediately. This is a trial environment, not a hardened production setup; see the [deployment guide](docs/deployment.md) for production configuration, upgrades, and rollback.
+When all four services report `healthy`, open <http://127.0.0.1> and sign in with the default administrator `admin / admin123`. Change the default password immediately. On first MySQL volume initialization, Compose runs `sql/init-full.sql` (equivalent to incremental scripts `01`–`50`). This is a trial environment, not a hardened production setup; manual install and upgrades of an existing database are in the [deployment guide](docs/deployment.md).
 
 To receive callbacks from a public Git provider, first expose an HTTPS address reachable by that provider and set `ACR_WEBHOOK_CALLBACK_URL` in `.env`. If teammates need to open detail links from IM messages, set the `review.ui.base-url` system parameter to a frontend address they can reach.
 
@@ -159,7 +159,7 @@ Compose uses its bundled MySQL service by default. To reuse an existing test dat
 
 ### OCR engine (optional)
 
-The default backend image does not install the open-code-review CLI, and `LLM_DIRECT` works without it. To enable `OCR_ENGINE`, install it in a custom runtime with `npm install -g @alibaba-group/open-code-review`, or mount an existing executable into the container, then set its in-container command or absolute path, for example `ACR_OCR_EXECUTABLE=ocr`. Project configuration and the runtime overview expose the probe result; an unavailable OCR engine becomes a runtime alert only when at least one enabled project uses it.
+`docker/Dockerfile.backend` installs `@alibaba-group/open-code-review@1.11.6` and exposes it as the in-container command `ocr`. `LLM_DIRECT` does not need that CLI. A local `java -jar` run still needs `npm install -g @alibaba-group/open-code-review`, or `ACR_OCR_EXECUTABLE` set to the executable's absolute path. Project configuration and the runtime overview expose the probe result; an unavailable OCR engine becomes a runtime alert only when at least one enabled project uses it.
 
 ## Product Boundaries & Selection Guidance
 
@@ -174,7 +174,7 @@ The default backend image does not install the open-code-review CLI, and `LLM_DI
 |---|---|
 | V0.1 MVP | Project onboarding, trusted webhooks, dual execution modes, summary write-back, IM notifications, a basic issue loop, and workbench are delivered; GitHub passed a real-repository end-to-end acceptance run |
 | V0.2 Core | Under controlled rollout; delivered capabilities include the complete issue lifecycle and auto-assignment, push review, inline comments, data insights and token usage, project-level authorization, persistent dispatch/recovery, resource budgets, and runtime overview |
-| V1.0 enterprise acceptance | Not complete: enterprise identity or a complete account lifecycle, complete sensitive-object business audit and export, data retention and backup/recovery exercises, immutable reports/subscriptions, price versions and quotas, and real-instance acceptance for every provider planned for production |
+| V1.0 enterprise acceptance | Account lifecycle stays on the open-source RuoYi base. Sensitive-operation audit is the existing log views. Retention, backup, and recovery are the operator's data policy. Model choice and cost are the operator's concern. Immutable reports and subscriptions are not a current commitment. GitLab is maintainer-tested and usable; Gitee and Gitea still need acceptance on the target instance |
 | Later candidates | Quality-gate shadow evaluation, evidence-preserving insight drill-down and tabular exports, and model/template publishing and rollback governance. Each requires separate scope and acceptance and is not a current capability commitment |
 
 See the [product roadmap](docs/planning/product-roadmap.md) for the full business boundary, dependencies, and acceptance criteria, and [production-readiness governance](docs/planning/production-readiness-governance.md) for the enterprise acceptance truth table.
@@ -183,7 +183,7 @@ See the [product roadmap](docs/planning/product-roadmap.md) for the full busines
 
 | Document | What it covers |
 |---|---|
-| [Deployment](docs/deployment.md) | Docker Compose trial, manual deployment, production configuration, and upgrades |
+| [Deployment](docs/deployment.md) | Manual install, the Docker Compose trial, and upgrades of an existing database |
 | [Product roadmap](docs/planning/product-roadmap.md) | Positioning, non-goals, capability truth, and milestone acceptance |
 | [Architecture](docs/planning/architecture-scaffold.md) | Module ownership, dependency direction, and workflow boundaries |
 | [SQL guide](sql/README.md) | Fresh initialization, existing-database upgrades, and script inventory |
