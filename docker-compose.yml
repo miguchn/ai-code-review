@@ -67,9 +67,9 @@ services:
       ACR_LLM_ALLOW_HTTP: ${ACR_LLM_ALLOW_HTTP:-true}
       ACR_LLM_ALLOW_PRIVATE_ENDPOINTS: ${ACR_LLM_ALLOW_PRIVATE_ENDPOINTS:-true}
       ACR_WEBHOOK_CALLBACK_URL: ${ACR_WEBHOOK_CALLBACK_URL:-http://127.0.0.1}
-      # OCR_ENGINE 是可选审查方式，默认后端镜像不安装 open-code-review CLI。
-      # 需要时请在自定义镜像中执行 npm install -g @alibaba-group/open-code-review，
-      # 或挂载已安装的可执行文件，并将下方变量设为容器内可执行路径。
+      # OCR_ENGINE 是可选审查方式。docker/Dockerfile.backend 已安装
+      # @alibaba-group/open-code-review@1.11.6，并把入口链接为 /usr/local/bin/ocr。
+      # 下方变量是容器内命令或绝对路径，默认 ocr 即可解析到该入口。
       ACR_OCR_EXECUTABLE: ${ACR_OCR_EXECUTABLE:-ocr}
     extra_hosts:
       - "host.docker.internal:host-gateway"

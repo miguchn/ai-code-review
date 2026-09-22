@@ -1,7 +1,7 @@
 -- ============================================================================
 -- AI Code Review 一次性初始化脚本（仅适用于全新环境）
 --
--- 本脚本是 sql/01_core_schema.sql … sql/49_issue_auto_assignment.sql
+-- 本脚本是 sql/01_core_schema.sql … sql/50_git_platform_user_identity.sql
 -- 全部执行完成后的最终状态（表结构 + 初始化数据），新环境一条命令即可完成初始化：
 --
 --   mysql --default-character-set=utf8mb4 -u root -p < sql/init-full.sql
@@ -15,15 +15,16 @@
 -- 4. 初始管理员为 admin / admin123，首次登录后请立即修改密码。
 -- 5. 新增编号增量脚本后必须同步重新生成本脚本（生成方式见 sql/README.md）。
 --
--- 生成日期：2026-08-22；基线：企业级架构风险修复 S6 + M11 行内评论 + M12 数据洞察 + M13 问题自动指派
--- （已含 01-49 全部增量：45 项目权限治理、46 企业标准角色与业务审计、47 上线前收口、48 Token 用量分析、49 问题自动指派）
+-- 生成日期：2026-08-22 全量快照；2026-09-22 并入 sql/50（仅将 sys_user_identity.user_id 改为可空，未重新导出整库）。
+-- 基线：企业级架构风险修复 S6 + M11 行内评论 + M12 数据洞察 + M13 问题自动指派 + Git 平台用户身份映射
+-- （已含 01-50 全部增量：45 项目权限治理、46 企业标准角色与业务审计、47 上线前收口、48 Token 用量分析、49 问题自动指派、50 Git 平台用户身份 user_id 可空）
 -- ============================================================================
 
 CREATE DATABASE IF NOT EXISTS `ai_code_review` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
 USE `ai_code_review`;
 
 -- ----------------------------------------------------------------------------
--- 第一部分：表结构最终态（01-48 增量合并后的最终状态）
+-- 第一部分：表结构最终态（01-50 增量合并后的最终状态）
 -- ----------------------------------------------------------------------------
 
 
@@ -1111,7 +1112,7 @@ DROP TABLE IF EXISTS `sys_user_identity`;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `sys_user_identity` (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键',
-  `user_id` bigint NOT NULL COMMENT '平台用户ID',
+  `user_id` bigint DEFAULT NULL COMMENT '系统用户ID；AUTO 发现未映射时为空',
   `identity_type` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '身份类型(GIT_COMMIT/IM_WECOM/IM_DINGTALK/IM_FEISHU)',
   `identifier` varchar(320) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '身份标识(GIT=提交邮箱或名称；IM=账号ID)',
   `display_name` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '展示名',

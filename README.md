@@ -17,7 +17,7 @@
 </p>
 <p align="center">
   <img src="https://img.shields.io/badge/GitHub-E2E_verified-181717.svg" alt="GitHub E2E verified" />
-  <img src="https://img.shields.io/badge/GitLab-adapter_tested-FC6D26.svg" alt="GitLab adapter tested" />
+  <img src="https://img.shields.io/badge/GitLab-maintainer_tested-FC6D26.svg" alt="GitLab maintainer tested" />
   <img src="https://img.shields.io/badge/Gitee-adapter_tested-C71D23.svg" alt="Gitee adapter tested" />
   <img src="https://img.shields.io/badge/Gitea-adapter_tested-609926.svg" alt="Gitea adapter tested" />
 </p>
@@ -47,7 +47,7 @@ AI Code Review 面向企业内部研发团队，部署在代码托管平台旁�
 | 企业治理 | 以仓库或工具配置为主 | 项目权限、凭据治理、运行恢复、业务留痕和质量洞察统一管理 |
 | 部署边界 | 常依赖外部托管服务 | 开源私有化部署；凭据加密，模型端点受控 |
 
-当前版本定位为 **V0.2 核心版受控推广**。GitHub 已完成真实仓库全链路验收；GitLab、Gitee、Gitea 已完成适配器与契约测试，但仍需在目标企业的真实实例中验收。当前状态不等同于 V1.0 企业正式生产就绪。
+当前版本定位为 **V0.2 核心版受控推广**。GitHub 已完成真实仓库全链路验收；GitLab 已由维护者测试，基本可用。Gitee、Gitea 已完成适配器与契约测试，仍需在目标实例中验收。当前状态不等同于 V1.0 企业正式生产就绪。
 
 ## 已落地的核心能力
 
@@ -55,14 +55,14 @@ AI Code Review 面向企业内部研发团队，部署在代码托管平台旁�
 |---|---|
 | 🧩 多平台接入与触发 | GitHub / GitLab / Gitee / Gitea 统一适配契约；支持 MR/PR 事件与配置分支 Push 审查。Push 路径用于合并后发现与治理，不是合并前强制门禁 |
 | 🔐 可信 Webhook | 分平台验签、载荷限制、按仓库路径和目标分支匹配、Delivery 幂等去重；验签通过后才占用去重键，伪造或错位事件直接拒绝 |
-| ⚙️ 双执行模式与范围治理 | `LLM_DIRECT` 大模型直审或可选 `OCR_ENGINE`；Diff 纳入/排除、测试文件、存量问题和高影响文件扩展策略随任务冻结。默认 Docker 镜像不内置 OCR CLI |
+| ⚙️ 双执行模式与范围治理 | `LLM_DIRECT` 大模型直审或可选 `OCR_ENGINE`；Diff 纳入/排除、测试文件、存量问题和高影响文件扩展策略随任务冻结。默认 Docker 后端镜像已内置 open-code-review CLI 1.11.6 |
 | 🧠 结构化审查结果 | 五维评分、后端重算总分、结构化问题清单、Top 3 重点问题与 NEW/EXISTING 归属；模型、模板、Prompt、范围和执行结果按运行留快照 |
 | 💬 低噪声结果交付 | MR/PR 总结评论幂等新增或更新；严重/高危问题可按项目开关发布行内评论；审查结论、总结评论、行内评论和 IM 投递状态相互独立 |
 | 📣 国内 IM 通知 | 钉钉 / 企业微信 / 飞书群机器人；项目级结论策略、低优先级冷却、失败通知、正文快照、失败补发和投递追踪。当前一个项目绑定一个渠道 |
 | 📒 问题治理闭环 | 全量新增问题入账，支持确认、关闭、忽略、误报、待复核、重开、批量处置和生命周期时间线；按提交作者/PR 发起人/项目负责人自动指派，并提供逾期扫描与聚合提醒 |
 | 👥 权限与敏感资产 | 有效访问取 **功能 RBAC × 部门 DataScope × 项目成员角色** 的交集；项目角色包含 OWNER / ADMIN / REVIEWER / VIEWER；Git Token、Webhook Secret、通知地址和模型 API Key 使用 AES-GCM 加密且不明文回显 |
 | 🛡️ 可靠性与运行保障 | 数据库驱动的任务与投递调度、租约/epoch 围栏、失败退避与恢复、有界执行池、项目并发和 Git/工作区/OCR/LLM 资源预算；运行概览展示积压、失败、资源和依赖告警 |
-| 📊 数据洞察 | 质量总览、项目明细、成员分析、提交趋势、增删行数、身份关联、指标口径说明；Token 用量按运行采集并基于当前模型单价估算成本，尚不包含价格版本、预算和配额控制 |
+| 📊 数据洞察 | 质量总览、项目明细、成员分析、提交趋势、增删行数、身份关联、指标口径说明；Token 用量按运行采集，并按当前模型单价估算费用。用哪家模型、如何计价由使用方决定 |
 | 🧭 产品内指引 | 全局功能助手内置快速上手、四平台接入、模型与引擎、提交注释、通知投递和常见问题等 14 篇指引，关键配置页可直接深链 |
 
 ## 闭环与架构
@@ -139,7 +139,7 @@ docker compose up -d --build
 docker compose ps
 ```
 
-四个服务均为 `healthy` 后打开 <http://127.0.0.1>，使用默认管理员 `admin / admin123` 登录，并立即修改默认密码。这是试用环境，不是生产加固方案；正式部署、升级与回滚说明见[部署文档](docs/deployment.md)。
+四个服务均为 `healthy` 后打开 <http://127.0.0.1>，使用默认管理员 `admin / admin123` 登录，并立即修改默认密码。Compose 在 MySQL 数据卷首次初始化时执行 `sql/init-full.sql`（等效于增量脚本 `01`–`50`）。这是试用环境，不是生产加固方案；手动安装与存量升级见[部署文档](docs/deployment.md)。
 
 如需让公网 Git 平台回调本机，须先准备其可访问的 HTTPS 地址，并在 `.env` 设置 `ACR_WEBHOOK_CALLBACK_URL`。团队需要访问 IM 消息中的详情链接时，还应在参数管理中把 `review.ui.base-url` 配置为团队可访问的前端地址。
 
@@ -159,7 +159,7 @@ Compose 默认使用内置 MySQL。需要复用宿主机已有测试库时，可
 
 ### OCR 引擎（可选）
 
-默认 Docker 后端镜像不安装 open-code-review CLI，不影响使用 `LLM_DIRECT`。需要启用 `OCR_ENGINE` 时，请在自定义运行环境中执行 `npm install -g @alibaba-group/open-code-review`，或向容器挂载已安装的可执行文件，并设置容器内命令/绝对路径，例如 `ACR_OCR_EXECUTABLE=ocr`。平台会在项目配置和运行概览展示探测状态；仅当存在启用中的 OCR 项目时，不可用状态才产生运行告警。
+`docker/Dockerfile.backend` 已安装 `@alibaba-group/open-code-review@1.11.6`，入口为容器内命令 `ocr`。`LLM_DIRECT` 不依赖该 CLI。本地 `java -jar` 运行时需自行执行 `npm install -g @alibaba-group/open-code-review`，或把 `ACR_OCR_EXECUTABLE` 设为可执行文件的绝对路径。平台会在项目配置和运行概览展示探测状态；仅当存在启用中的 OCR 项目时，不可用状态才产生运行告警。
 
 ## 产品边界与选型建议
 
@@ -174,7 +174,7 @@ Compose 默认使用内置 MySQL。需要复用宿主机已有测试库时，可
 |---|---|
 | V0.1 MVP | 已交付项目接入、可信 Webhook、双执行模式、总结回写、IM 通知、基础问题闭环和工作台；GitHub 真实仓库全链路验收通过 |
 | V0.2 核心版 | 当前受控推广；已交付完整问题生命周期与自动指派、Push 审查、行内评论、数据洞察与 Token 用量、项目级权限、持久调度/恢复、资源预算和运行概览 |
-| V1.0 企业正式准入 | 尚未完成：统一身份或完整账号生命周期、敏感对象完整业务审计与导出、数据留存与备份恢复演练、不可变报告/订阅、价格版本与配额，以及计划投产 Provider 的真实实例验收 |
+| V1.0 企业正式准入 | 账号生命周期沿用开源 RuoYi；敏感操作以现有日志查看为准；数据留存、备份与恢复由使用方数据策略负责；模型与费用由使用方决定。当前未承诺不可变报告与订阅。GitLab 已由维护者测试、基本可用；Gitee 与 Gitea 仍需在目标实例验收 |
 | 后续候选 | 质量门禁影子评估、洞察证据下钻与表格导出、模板/模型发布回滚治理；均需单独立项和验收，不作为当前能力承诺 |
 
 完整业务边界、依赖和验收口径见[产品路线图](docs/planning/product-roadmap.md)；生产准入真值表见[正式上线前完整性治理](docs/planning/production-readiness-governance.md)。
@@ -183,7 +183,7 @@ Compose 默认使用内置 MySQL。需要复用宿主机已有测试库时，可
 
 | 文档 | 说明 |
 |---|---|
-| [部署说明](docs/deployment.md) | Docker Compose 试用、手动部署、生产配置与升级路径 |
+| [部署说明](docs/deployment.md) | 手动安装、Docker Compose 试用与存量升级 |
 | [产品路线图](docs/planning/product-roadmap.md) | 产品定位、非目标、能力真值与阶段验收 |
 | [架构说明](docs/planning/architecture-scaffold.md) | 模块归属、依赖方向和主流程边界 |
 | [SQL 脚本说明](sql/README.md) | 新装初始化、存量升级和脚本清单 |

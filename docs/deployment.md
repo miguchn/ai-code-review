@@ -10,13 +10,13 @@
 | MySQL | 8.0+ | 主数据库 |
 | Redis | 6.0+ | 缓存/会话 |
 | npm | 9+ | 前端包管理 |
-| OCR (可选) | 最新 | alibaba/open-code-review CLI |
+| OCR | Docker 镜像内置 1.11.6；本地 `java -jar` 需自行安装 | `@alibaba-group/open-code-review` CLI |
 
 ## 开发环境部署
 
 ### 1. 数据库初始化
 
-**新装环境**：执行一次性初始化脚本（库、全部表结构、菜单/字典/参数/定时任务/内置审查模板等初始数据），等效于按序号执行完 01–43 全部增量脚本的最终状态：
+**新装环境**：执行一次性初始化脚本（库、全部表结构、菜单/字典/参数/定时任务/内置审查模板等初始数据），等效于按序号执行完 01–50 全部增量脚本的最终状态：
 
 ```bash
 mysql --default-character-set=utf8mb4 -u root -p < sql/init-full.sql
@@ -137,29 +137,29 @@ ocr version
 
 管理入口：**模型服务 → 审查引擎**，提供环境检测与内置样例测试调用。
 
-## 生产环境部署（Docker Compose）
+## Docker Compose 试用部署
 
-待完善。规划的容器架构：
+仓库里的 `docker-compose.yml` 是试用级一键启动，不是另一套生产加固方案。当前文件实际包含四个服务：
 
-```yaml
-services:
-  mysql:
-    image: mysql:8.0
-    # ...
-  redis:
-    image: redis:7-alpine
-    # ...
-  backend:
-    build: ./acr-admin
-    depends_on: [mysql, redis]
-    # OCR 可选；需要时使用已安装 CLI 的自定义镜像或挂载可执行文件
-    environment:
-      ACR_OCR_EXECUTABLE: ocr
-  frontend:
-    image: nginx:alpine
-    volumes:
-      - ./acr-ui/dist:/usr/share/nginx/html
+| 服务 | 来源 | 当前行为 |
+|------|------|----------|
+| mysql | `mysql:8.0` | 数据卷首次初始化时执行挂载的 `sql/init-full.sql`，服务端字符集 `utf8mb4` |
+| redis | `redis:7` | `requirepass`，密码来自 `REDIS_PASSWORD`（默认 `redis`） |
+| backend | `docker/Dockerfile.backend` | Spring profile `docker`，等待 MySQL 与 Redis 健康检查；镜像已安装 open-code-review CLI 1.11.6 |
+| frontend | `docker/Dockerfile.frontend` | 构建前端生产包，由 nginx 监听 80，并把 `/prod-api/` 反代到 `backend:8080`；映射宿主机 `80:80` |
+
+```bash
+cp .env.example .env
+# 必填 ACR_CREDENTIAL_MASTER_KEY，可用 openssl rand -base64 32 生成
+docker compose up -d --build
+docker compose ps
 ```
+
+四个服务均为 `healthy` 后访问 http://127.0.0.1。默认管理员 `admin / admin123`，首次登录后立即修改密码。
+
+`sql/init-full.sql` 只在 MySQL 数据卷第一次初始化时执行。已经存在 `acr-mysql-data` 卷时不会重跑。存量库按 `sql/README.md` 补尚未执行的增量脚本，不得对已有业务数据执行 `init-full.sql`。
+
+试用默认值需要在对外环境自行替换：MySQL root 密码默认 `root`，Redis 密码默认 `redis`；未设置 `ACR_TOKEN_SECRET` 时使用系统内置 JWT 默认值；`ACR_LLM_ALLOW_HTTP` 与 `ACR_LLM_ALLOW_PRIVATE_ENDPOINTS` 在 Compose 中默认为 `true`。复用宿主机 MySQL 见上文第 6 节。
 
 ## 多平台 Git Webhook 与凭据配置
 
