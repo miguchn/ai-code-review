@@ -174,7 +174,7 @@ export const TOUR_MANIFEST = [
         route: '/insight/overview',
         selector: '[data-tour="insight-kpis"]',
         title: '先读四个核心指标',
-        content: '覆盖率、成功率、P95 时延和未处置重点问题共同反映质量与运行健康。'
+        content: '耗时取各项目每日 P95 的最大值。'
       },
       {
         id: 'manager-insight-charts',

@@ -3,6 +3,11 @@ package com.acr.framework.web.service;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
+import com.acr.common.core.domain.entity.SysUser;
+import com.acr.common.enums.UserStatus;
+import com.acr.common.exception.ServiceException;
+import com.acr.system.service.ISysUserService;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -55,6 +60,9 @@ public class TokenService
     @Autowired
     private RedisCache redisCache;
 
+    @Autowired
+    private ISysUserService userService;
+
     /**
      * 获取用户身份信息
      * 
@@ -73,6 +81,11 @@ public class TokenService
                 String uuid = (String) claims.get(Constants.LOGIN_USER_KEY);
                 String userKey = getTokenKey(uuid);
                 LoginUser user = redisCache.getCacheObject(userKey);
+                if (user != null && !isSessionValid(user, false))
+                {
+                    redisCache.deleteObject(userKey);
+                    return null;
+                }
                 return user;
             }
             catch (Exception e)
@@ -114,6 +127,12 @@ public class TokenService
      */
     public String createToken(LoginUser loginUser)
     {
+        loginUser.setSessionVersion(redisCache.getCacheObject(
+                CacheConstants.LOGIN_SESSION_VERSION_KEY + loginUser.getUserId()));
+        if (!isSessionValid(loginUser, true))
+        {
+            throw new ServiceException("账号已变更，请重新登录");
+        }
         String token = IdUtils.fastUUID();
         loginUser.setToken(token);
         setUserAgent(loginUser);
@@ -224,6 +243,26 @@ public class TokenService
             token = token.replace(Constants.TOKEN_PREFIX, "");
         }
         return token;
+    }
+
+    private boolean isSessionValid(LoginUser loginUser, boolean authenticating)
+    {
+        if (loginUser.getUserId() == null || loginUser.getUser() == null
+                || (authenticating && StringUtils.isEmpty(loginUser.getUser().getPassword())))
+        {
+            return false;
+        }
+        // 核对当前账号和会话版本；缓存不保存密码，登录时额外核对认证时的密码。
+        SysUser current = userService.selectUserById(loginUser.getUserId());
+        if (current == null || !UserStatus.OK.getCode().equals(current.getStatus())
+                || UserStatus.DELETED.getCode().equals(current.getDelFlag())
+                || (authenticating && !Objects.equals(current.getPassword(), loginUser.getUser().getPassword())))
+        {
+            return false;
+        }
+        String version = redisCache.getCacheObject(
+                CacheConstants.LOGIN_SESSION_VERSION_KEY + loginUser.getUserId());
+        return Objects.equals(version, loginUser.getSessionVersion());
     }
 
     private String getTokenKey(String uuid)

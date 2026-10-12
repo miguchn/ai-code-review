@@ -16,7 +16,7 @@
 
 ### 1. 数据库初始化
 
-**新装环境**：执行一次性初始化脚本（库、全部表结构、菜单/字典/参数/定时任务/内置审查模板等初始数据），等效于按序号执行完 01–43 全部增量脚本的最终状态：
+**新装环境**：执行一次性初始化脚本（库、全部表结构、菜单/字典/参数/定时任务/内置审查模板等初始数据），等效于按序号执行完 01–49 全部增量脚本的最终状态：
 
 ```bash
 mysql --default-character-set=utf8mb4 -u root -p < sql/init-full.sql
@@ -137,29 +137,30 @@ ocr version
 
 管理入口：**模型服务 → 审查引擎**，提供环境检测与内置样例测试调用。
 
-## 生产环境部署（Docker Compose）
+## Docker Compose 部署与生产使用条件
 
-待完善。规划的容器架构：
+仓库根目录的 [docker-compose.yml](../docker-compose.yml) 是可执行的单机试用配置，包含 MySQL、Redis、后端和 Nginx 前端；后端与前端分别由 [Dockerfile.backend](../docker/Dockerfile.backend) 和 [Dockerfile.frontend](../docker/Dockerfile.frontend) 构建。
 
-```yaml
-services:
-  mysql:
-    image: mysql:8.0
-    # ...
-  redis:
-    image: redis:7-alpine
-    # ...
-  backend:
-    build: ./acr-admin
-    depends_on: [mysql, redis]
-    # OCR 可选；需要时使用已安装 CLI 的自定义镜像或挂载可执行文件
-    environment:
-      ACR_OCR_EXECUTABLE: ocr
-  frontend:
-    image: nginx:alpine
-    volumes:
-      - ./acr-ui/dist:/usr/share/nginx/html
+```bash
+cp .env.example .env
+# 生成主密钥并填入 .env 的 ACR_CREDENTIAL_MASTER_KEY
+openssl rand -base64 32
+docker compose up -d --build
+docker compose ps
 ```
+
+四个服务健康后访问宿主机 80 端口。Nginx 将 `/prod-api/` 转发到后端 API，`/webhook/` 按原始路径转发到各平台回调入口；请求体和签名头保持不变，验签与载荷限制仍由后端执行。MySQL 数据和上传文件分别保存到 `acr-mysql-data`、`acr-upload-data` 卷，后端、MySQL 和 Redis 不直接公开宿主机端口。
+
+正式使用前，应由部署方完成以下配置与验收：
+
+- 为入口配置 HTTPS，并将 `ACR_WEBHOOK_CALLBACK_URL` 设为 Git 平台可达的 HTTPS 根地址；将 `review.ui.base-url` 设为团队可访问的前端地址。
+- 设置独立随机的 `ACR_TOKEN_SECRET`、MySQL 和 Redis 密码；后端数据库账号采用最小权限。首次登录立即修改默认管理员密码。
+- 根据批准的模型接入范围配置 `ACR_LLM_ALLOW_HTTP`、`ACR_LLM_ALLOW_PRIVATE_ENDPOINTS`。默认试用配置会放开这两项，公网模型部署应显式设置为 `false`；可信内网模型需要单独评估。
+- 安全保存凭据主密钥并限制 `.env` 的读取权限；安排数据库、上传文件和主密钥的备份，验证隔离环境恢复。删除数据卷会丢失数据，不要在升级中执行 `docker compose down -v`。
+- 存量库先备份，再按 [SQL 说明](../sql/README.md) 执行未应用的增量脚本；不要执行新装初始化脚本。升级前保留旧镜像及配置，涉及数据库变更时评估兼容性，不能只切回旧镜像就认定回滚成功。
+- 对实际使用的 Git 平台、模型与通知渠道完成闭环验收，并确认权限、故障恢复、容量及值守安排。
+
+这套 Compose 配置不提供 HTTPS 证书、数据库高可用或恢复演练结果；部署条件和现场验收不能由容器健康状态替代。
 
 ## 多平台 Git Webhook 与凭据配置
 

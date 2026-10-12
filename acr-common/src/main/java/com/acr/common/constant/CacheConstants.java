@@ -12,6 +12,9 @@ public class CacheConstants
      */
     public static final String LOGIN_TOKEN_KEY = "login_tokens:";
 
+    /** 每个账号的会话版本，安全变更后替换；不得单独设置过期时间。 */
+    public static final String LOGIN_SESSION_VERSION_KEY = "login_session_versions:";
+
     /**
      * 验证码 redis key
      */
