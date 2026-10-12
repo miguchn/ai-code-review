@@ -211,7 +211,9 @@ public class GitLabWebhookAdapter implements GitWebhookAdapter
             author = authorObj == null ? null : authorObj.getString("username");
         }
 
-        if (iid == null || sourceBranch == null || targetBranch == null || headSha == null || baseSha == null
+        // GitLab 19.x 起 MR 载荷不再携带 diff_refs / target_branch_sha，base 允许缺失，
+        // 由执行阶段经 MR API 的 diff_refs 补全（GitPullRequestBaseRefResolver）。
+        if (iid == null || sourceBranch == null || targetBranch == null || headSha == null
             || pathWithNamespace == null || pathWithNamespace.isBlank()
             || owner == null || repository == null)
         {

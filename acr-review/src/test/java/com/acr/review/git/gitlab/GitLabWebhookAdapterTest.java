@@ -191,6 +191,32 @@ class GitLabWebhookAdapterTest
     }
 
     @Test
+    void parsesMergeRequestWithoutDiffRefsAndNullBaseSha()
+    {
+        // GitLab 19.x 载荷：无 diff_refs / target_branch_sha，base 由执行阶段经 MR API 补全
+        String payload = """
+            {
+              "object_kind": "merge_request",
+              "user": { "username": "alice" },
+              "project": { "path_with_namespace": "miguchn/demo-repo" },
+              "object_attributes": {
+                "iid": 7,
+                "title": "feat: slim payload",
+                "action": "open",
+                "source_branch": "feature/slim",
+                "target_branch": "main",
+                "last_commit": { "id": "ffffeeeeddddccccbbbbaaaa3333222211110000" }
+              }
+            }
+            """;
+        GitPullRequestEvent event = adapter.parsePullRequestEvent(
+            "Merge Request Hook", "delivery-2", payload.getBytes(StandardCharsets.UTF_8));
+        assertNotNull(event);
+        assertEquals("ffffeeeeddddccccbbbbaaaa3333222211110000", event.headSha());
+        assertNull(event.baseSha());
+    }
+
+    @Test
     void returnsNullForInvalidPayload()
     {
         assertNull(adapter.parseRepository("not-json".getBytes(StandardCharsets.UTF_8)));
