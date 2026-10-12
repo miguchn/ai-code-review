@@ -19,13 +19,18 @@ import org.springframework.stereotype.Service;
 import com.acr.review.domain.ReviewProject;
 import com.acr.review.domain.ReviewWebhookEvent;
 import com.acr.review.domain.WebhookHandleResult;
+import com.acr.review.git.GitAccessContext;
 import com.acr.review.git.GitAdapterRegistry;
+import com.acr.review.git.GitPullRequestBaseRefResolver;
 import com.acr.review.git.GitPullRequestEvent;
 import com.acr.review.git.GitProviderCodes;
 import com.acr.review.git.GitPushEvent;
 import com.acr.review.git.GitRepositoryCoordinates;
 import com.acr.review.git.GitWebhookAdapter;
 import com.acr.review.git.WebhookRequestHeaders;
+import com.acr.common.exception.ServiceException;
+import com.acr.review.domain.GitCredential;
+import com.acr.review.service.IGitCredentialService;
 import com.acr.review.insight.ReviewCommitFactIngestService;
 import com.acr.review.mapper.ReviewProjectMapper;
 import com.acr.review.mapper.ReviewWebhookEventMapper;
@@ -58,6 +63,7 @@ public class ReviewWebhookServiceImpl implements IReviewWebhookService
     private final IReviewIssueService issueService;
     private final ReviewCommitFactIngestService commitFactIngestService;
     private final ISysUserIdentityService identityService;
+    private final IGitCredentialService credentialService;
     private final int maxPayloadBytes;
 
     public ReviewWebhookServiceImpl(ReviewWebhookEventMapper eventMapper,
@@ -69,6 +75,7 @@ public class ReviewWebhookServiceImpl implements IReviewWebhookService
                                     IReviewIssueService issueService,
                                     ReviewCommitFactIngestService commitFactIngestService,
                                     ISysUserIdentityService identityService,
+                                    IGitCredentialService credentialService,
                                     @Value("${review.webhook.max-payload-bytes:262144}") int maxPayloadBytes)
     {
         this.eventMapper = eventMapper;
@@ -80,6 +87,7 @@ public class ReviewWebhookServiceImpl implements IReviewWebhookService
         this.issueService = issueService;
         this.commitFactIngestService = commitFactIngestService;
         this.identityService = identityService;
+        this.credentialService = credentialService;
         this.maxPayloadBytes = maxPayloadBytes;
     }
 
@@ -109,6 +117,16 @@ public class ReviewWebhookServiceImpl implements IReviewWebhookService
         try
         {
             return process(event, webhookAdapter, safeHeaders, payload, platformDeliveryId);
+        }
+        catch (ServiceException e)
+        {
+            log.warn("Webhook 事件处理失败, provider={}, deliveryId={}, message={}", provider, deliveryId, e.getMessage());
+            if (event.getEventId() != null)
+            {
+                finishEvent(event, "FAILED", e.getMessage());
+                return WebhookHandleResult.ok("事件接收成功，处理结果请查看平台记录");
+            }
+            return WebhookHandleResult.serverError(e.getMessage());
         }
         catch (RuntimeException e)
         {
@@ -246,10 +264,66 @@ public class ReviewWebhookServiceImpl implements IReviewWebhookService
             return WebhookHandleResult.ok("目标分支不在审查范围，已忽略");
         }
 
+        prEvent = backfillBaseRef(event, project, prEvent);
         Long taskId = taskCreateService.createTaskFromEvent(project, event, prEvent);
         String message = "已受理合并请求 #" + prEvent.prNumber() + "，生成审查任务 #" + taskId;
         projectMapper.updateLastWebhook(project.getProjectId(), message);
         return WebhookHandleResult.ok(message);
+    }
+
+    /**
+     * GitLab 19.x 起载荷不再携带 diff_refs，base SHA 缺失会导致建单落库失败；
+     * 建单前经平台 API（如 GitLab MR 的 diff_refs.base_sha）补全。
+     * 补全最终失败时显式抛错：事件标记 FAILED 并给出明确原因，避免落入
+     * 「落库 NOT NULL 崩溃 + 载荷幂等去重吞掉重投递」的静默丢失链路。
+     */
+    private GitPullRequestEvent backfillBaseRef(ReviewWebhookEvent event, ReviewProject project,
+                                                GitPullRequestEvent prEvent)
+    {
+        if (prEvent.baseSha() != null && !prEvent.baseSha().isBlank())
+        {
+            return prEvent;
+        }
+        GitPullRequestBaseRefResolver resolver = adapterRegistry.findBaseRefResolver(event.getProvider());
+        if (resolver == null)
+        {
+            return prEvent;
+        }
+        String baseSha = null;
+        try
+        {
+            GitCredential credential = credentialService.selectGitCredentialById(project.getCredentialId());
+            String token = credentialService.getPlainToken(project.getCredentialId(), true);
+            // webhook 路径的 project 投影不含 repository_url，用 serverUrl + fullPath 拼规范地址
+            String serverUrl = credential == null ? null : credential.getServerUrl();
+            if (serverUrl == null || serverUrl.isBlank() || prEvent.repositoryFullPath() == null)
+            {
+                throw new IllegalStateException("GitLab 凭据缺少 serverUrl，无法补全 base SHA");
+            }
+            String canonicalUrl = serverUrl.replaceAll("/+$", "") + "/" + prEvent.repositoryFullPath();
+            baseSha = resolver.resolveBaseRef(
+                new GitRepositoryCoordinates(prEvent.repositoryOwner(), prEvent.repositoryName(),
+                    prEvent.repositoryFullPath(), canonicalUrl),
+                GitAccessContext.of(token, serverUrl),
+                prEvent.prNumber());
+        }
+        catch (Exception ex)
+        {
+            log.warn("Webhook 阶段 base SHA 补全失败, provider={}, prNumber={}",
+                event.getProvider(), prEvent.prNumber(), ex);
+        }
+        if (baseSha == null || baseSha.isBlank())
+        {
+            throw new ServiceException("base SHA 补全失败（平台 API 未返回 diff_refs），"
+                + "事件已标记失败；请检查 GitLab API 可达性与 Token 权限后重发 MR 事件");
+        }
+        log.info("Webhook 阶段补全 base SHA, provider={}, projectId={}, prNumber={}, baseSha={}",
+            event.getProvider(), project.getProjectId(), prEvent.prNumber(), baseSha);
+        event.setBaseSha(baseSha);
+        return new GitPullRequestEvent(prEvent.deliveryId(), prEvent.action(), prEvent.repositoryOwner(),
+            prEvent.repositoryName(), prEvent.repositoryFullPath(), prEvent.prNumber(), prEvent.prTitle(),
+            prEvent.sourceBranch(), prEvent.targetBranch(), baseSha, prEvent.headSha(), prEvent.prAuthor(),
+            prEvent.additions(), prEvent.deletions(), prEvent.changedFiles(), prEvent.merged());
     }
 
     private WebhookHandleResult processPush(ReviewWebhookEvent event, ReviewProject project,

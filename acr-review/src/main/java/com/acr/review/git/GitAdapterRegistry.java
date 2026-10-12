@@ -18,6 +18,7 @@ public class GitAdapterRegistry
     private final Map<String, GitFileContentFetcher> fileContentFetchers = new HashMap<>();
     private final Map<String, GitPullRequestWorkspacePreparer> workspacePreparers = new HashMap<>();
     private final Map<String, GitPullRequestCommentClient> commentClients = new HashMap<>();
+    private final Map<String, GitPullRequestBaseRefResolver> baseRefResolvers = new HashMap<>();
 
     public GitAdapterRegistry(List<GitProvider> providers,
                               List<GitWebhookAdapter> webhookAdapters,
@@ -25,7 +26,8 @@ public class GitAdapterRegistry
                               List<GitPullRequestMetadataFetcher> metadataFetchers,
                               List<GitFileContentFetcher> fileContentFetchers,
                               List<GitPullRequestWorkspacePreparer> workspacePreparers,
-                              List<GitPullRequestCommentClient> commentClients)
+                              List<GitPullRequestCommentClient> commentClients,
+                              List<GitPullRequestBaseRefResolver> baseRefResolvers)
     {
         index(providers, this.providers, "GitProvider");
         index(webhookAdapters, this.webhookAdapters, "GitWebhookAdapter");
@@ -34,6 +36,17 @@ public class GitAdapterRegistry
         index(fileContentFetchers, this.fileContentFetchers, "GitFileContentFetcher");
         index(workspacePreparers, this.workspacePreparers, "GitPullRequestWorkspacePreparer");
         index(commentClients, this.commentClients, "GitPullRequestCommentClient");
+        index(baseRefResolvers, this.baseRefResolvers, "GitPullRequestBaseRefResolver");
+    }
+
+    /** 平台未提供基线补全实现时返回 null（载荷自带 base 的平台无需实现）。 */
+    public GitPullRequestBaseRefResolver findBaseRefResolver(String providerCode)
+    {
+        if (providerCode == null || providerCode.isBlank())
+        {
+            return null;
+        }
+        return baseRefResolvers.get(providerCode.trim().toUpperCase(Locale.ROOT));
     }
 
     public GitProvider requireProvider(String providerCode)
@@ -122,6 +135,10 @@ public class GitAdapterRegistry
         if (bean instanceof GitPullRequestCommentClient client)
         {
             return client.providerCode();
+        }
+        if (bean instanceof GitPullRequestBaseRefResolver resolver)
+        {
+            return resolver.providerCode();
         }
         return null;
     }
