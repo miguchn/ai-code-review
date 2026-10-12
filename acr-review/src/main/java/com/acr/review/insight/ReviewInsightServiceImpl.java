@@ -113,7 +113,7 @@ public class ReviewInsightServiceImpl implements IReviewInsightService
         resp.getKpis().add(kpi("successRate", "审查成功率",
             InsightMetrics.ratio(cur.taskSuccess, cur.taskTotal),
             InsightMetrics.ratio(prev.taskSuccess, prev.taskTotal), "ratio"));
-        resp.getKpis().add(kpi("durationP95Ms", "P95 审查时延",
+        resp.getKpis().add(kpi("durationP95Ms", "检查耗时",
             (double) cur.durationP95Max, (double) prev.durationP95Max, "ms"));
         resp.getKpis().add(kpi("openFocusIssues", "未处置重点问题数",
             (double) openFocus, (double) openFocus, "count"));

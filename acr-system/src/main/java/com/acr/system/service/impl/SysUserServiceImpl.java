@@ -3,6 +3,10 @@ package com.acr.system.service.impl;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Objects;
+import com.acr.common.constant.CacheConstants;
+import com.acr.common.core.redis.RedisCache;
+import com.acr.common.utils.uuid.IdUtils;
 import java.util.stream.Collectors;
 import jakarta.validation.Validator;
 import org.slf4j.Logger;
@@ -46,8 +50,25 @@ public class SysUserServiceImpl implements ISysUserService
 {
     private static final Logger log = LoggerFactory.getLogger(SysUserServiceImpl.class);
 
+    private boolean isSecurityChange(SysUser before, SysUser update)
+    {
+        return before != null && ((StringUtils.isNotEmpty(update.getStatus())
+                && !Objects.equals(before.getStatus(), update.getStatus()))
+                || (StringUtils.isNotEmpty(update.getPassword())
+                && !Objects.equals(before.getPassword(), update.getPassword())));
+    }
+
+    private void invalidateUserSessions(Long userId)
+    {
+        // 保留版本以防旧会话在账号重新启用或并发续期后复活；不扫描在线会话。
+        redisCache.setCacheObject(CacheConstants.LOGIN_SESSION_VERSION_KEY + userId, IdUtils.randomUUID());
+    }
+
     @Autowired
     private SysUserMapper userMapper;
+
+    @Autowired
+    private RedisCache redisCache;
 
     @Autowired
     private SysRoleMapper roleMapper;
@@ -301,6 +322,7 @@ public class SysUserServiceImpl implements ISysUserService
     public int updateUser(SysUser user)
     {
         Long userId = user.getUserId();
+        SysUser beforeUser = userMapper.selectUserById(userId);
         List<Long> beforeRoles = roleMapper.selectRoleListByUserId(userId);
         // 删除用户与角色关联
         userRoleMapper.deleteUserRoleByUserId(userId);
@@ -311,7 +333,12 @@ public class SysUserServiceImpl implements ISysUserService
         userPostMapper.deleteUserPostByUserId(userId);
         // 新增用户与岗位管理
         insertUserPost(user);
-        return userMapper.updateUser(user);
+        int rows = userMapper.updateUser(user);
+        if (rows > 0 && isSecurityChange(beforeUser, user))
+        {
+            invalidateUserSessions(userId);
+        }
+        return rows;
     }
 
     /**
@@ -337,9 +364,15 @@ public class SysUserServiceImpl implements ISysUserService
      * @return 结果
      */
     @Override
+    @Transactional
     public int updateUserStatus(SysUser user)
     {
-        return userMapper.updateUserStatus(user.getUserId(), user.getStatus());
+        int rows = userMapper.updateUserStatus(user.getUserId(), user.getStatus());
+        if (rows > 0)
+        {
+            invalidateUserSessions(user.getUserId());
+        }
+        return rows;
     }
 
     /**
@@ -387,9 +420,15 @@ public class SysUserServiceImpl implements ISysUserService
      * @return 结果
      */
     @Override
+    @Transactional
     public int resetPwd(SysUser user)
     {
-        return userMapper.resetUserPwd(user.getUserId(), user.getPassword());
+        int rows = userMapper.resetUserPwd(user.getUserId(), user.getPassword());
+        if (rows > 0)
+        {
+            invalidateUserSessions(user.getUserId());
+        }
+        return rows;
     }
 
     /**
@@ -400,9 +439,15 @@ public class SysUserServiceImpl implements ISysUserService
      * @return 结果
      */
     @Override
+    @Transactional
     public int resetUserPwd(Long userId, String password)
     {
-        return userMapper.resetUserPwd(userId, password);
+        int rows = userMapper.resetUserPwd(userId, password);
+        if (rows > 0)
+        {
+            invalidateUserSessions(userId);
+        }
+        return rows;
     }
 
     /**
@@ -498,7 +543,12 @@ public class SysUserServiceImpl implements ISysUserService
         userRoleMapper.deleteUserRoleByUserId(userId);
         // 删除用户与岗位表
         userPostMapper.deleteUserPostByUserId(userId);
-        return userMapper.deleteUserById(userId);
+        int rows = userMapper.deleteUserById(userId);
+        if (rows > 0)
+        {
+            invalidateUserSessions(userId);
+        }
+        return rows;
     }
 
     /**
@@ -520,7 +570,15 @@ public class SysUserServiceImpl implements ISysUserService
         userRoleMapper.deleteUserRole(userIds);
         // 删除用户与岗位关联
         userPostMapper.deleteUserPost(userIds);
-        return userMapper.deleteUserByIds(userIds);
+        int rows = userMapper.deleteUserByIds(userIds);
+        if (rows > 0)
+        {
+            for (Long userId : userIds)
+            {
+                invalidateUserSessions(userId);
+            }
+        }
+        return rows;
     }
 
     /**
@@ -568,6 +626,10 @@ public class SysUserServiceImpl implements ISysUserService
                     user.setUserId(u.getUserId());
                     user.setDeptId(u.getDeptId());
                     user.setUpdateBy(operName);
+                    if (isSecurityChange(u, user))
+                    {
+                        invalidateUserSessions(u.getUserId());
+                    }
                     userMapper.updateUser(user);
                     successNum++;
                     successMsg.append("<br/>" + successNum + "、账号 " + user.getUserName() + " 更新成功");

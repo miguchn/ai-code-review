@@ -1,0 +1,25 @@
+{
+  "date": "2026-10-12",
+  "scope": "当前仓库中的后台菜单、功能名称、字段、动作、状态、短说明及操作引导",
+  "excluded": [
+    "数据监控第三方页面（用户明确不处理）",
+    "登录与注册品牌页",
+    "技术代码、示例代码、外部平台文档正文",
+    "未启用的提示词管理与报告中心不新增入口"
+  ],
+  "rows": 1764,
+  "menu_rows": 42,
+  "permission_rows": 106,
+  "pending_rows": 0,
+  "source_files": 86,
+  "name_length": "2–4字；平台帮助标题、计量单位及必要技术说明按用户确认保留原名",
+  "description_length": "每条不超过20字",
+  "length_errors": 0,
+  "source_errors": 0,
+  "same_source_conflicts": 0,
+  "verification": "原文以提交9f1d923为基线完成静态核验；耗时指标另已修正，其余建议未批量应用页面；未部署后台",
+  "technical_terms_confirmed": true,
+  "unavailable_rows": 1,
+  "source_baseline": "9f1d923：对照原文基于本次发布整理前的界面",
+  "release_corrections": "P95指标说明另已按真实口径修正；其他对照建议未批量应用界面"
+}

@@ -61,8 +61,8 @@ public final class InsightMetrics
             "SUCCESS 且至少一次投递 SUCCESS、且非空范围审查的任务数 / ACCEPTED 事件数", "ratio"));
         list.add(def("successRate", "审查成功率",
             "SUCCESS 任务数 / 终态任务数（SUCCESS+FAILED）", "ratio"));
-        list.add(def("durationP95Ms", "P95 审查时延",
-            "成功任务 duration_ms 升序后取 95 分位", "duration"));
+        list.add(def("durationP95Ms", "检查耗时",
+            "各项目每日成功任务 P95 的最大值", "duration"));
         list.add(def("openFocusIssues", "未处置重点问题数",
             "CRITICAL+HIGH 且状态为待确认/待修复/待复核的问题数（当前库存）", "count"));
         list.add(def("issueNew", "新增问题数",

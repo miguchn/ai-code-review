@@ -35,6 +35,9 @@ public class LoginUser implements UserDetails
      */
     private String token;
 
+    /** 登录时的账号会话版本。 */
+    private String sessionVersion;
+
     /**
      * 登录时间
      */
@@ -111,6 +114,16 @@ public class LoginUser implements UserDetails
     public void setDeptId(Long deptId)
     {
         this.deptId = deptId;
+    }
+
+    public String getSessionVersion()
+    {
+        return sessionVersion;
+    }
+
+    public void setSessionVersion(String sessionVersion)
+    {
+        this.sessionVersion = sessionVersion;
     }
 
     public String getToken()
