@@ -6,7 +6,7 @@
 
 ### 新装环境：一次性初始化（推荐）
 
-执行 `init-full.sql` 一条命令完成全部初始化（库、表结构、菜单/字典/参数/定时任务/内置审查模板等初始数据），等效于按序号执行完 `01`–`49` 全部增量脚本后的最终状态：
+执行 `init-full.sql` 一条命令完成全部初始化（库、表结构、菜单/字典/参数/定时任务/内置审查模板等初始数据），等效于按序号执行完 `01`–`50` 全部增量脚本后的最终状态：
 
 ```bash
 mysql --default-character-set=utf8mb4 -u root -p < sql/init-full.sql
@@ -76,10 +76,11 @@ mysql --default-character-set=utf8mb4 -u root -p ai_code_review < sql/NN_xxx.sql
 47. `47_production_readiness_governance.sql`：正式上线前收口（项目通知结论策略与低优先级冷却频控；隐藏并停用未交付的报告中心入口；须 utf8mb4）。
 48. `48_token_usage_analysis.sql`：Token 用量分析（`review_task_run` 增 input/output/total_tokens、`sys_ai_model_config` 增输入/输出单价、`idx_run_token_time` 索引、数据洞察「Token 用量分析」菜单与 `insight:token:view`；不建聚合表；须 utf8mb4）。
 49. `49_issue_auto_assignment.sql`：问题自动指派闭环（`review_issue` 增 `assignee_user_id`/`assign_source`/`assign_time`/`overdue_flag` 与两索引、逾期天数参数、`OVERDUE_REMIND` 字典、逾期扫描任务种子；不建新表、不回填历史；须 utf8mb4）。
+50. `50_git_platform_user_identity.sql`：允许 `sys_user_identity.user_id` 为空，供 AUTO 发现但尚未映射到系统用户的 Git 平台身份使用（须 utf8mb4）。
 
 ## init-full.sql 维护规则
 
-- `init-full.sql` 是增量脚本执行完成后的最终状态快照（2026-08-22 同步，含 01–49 全部增量中的结构/参数/菜单/定时任务种子）。
+- `init-full.sql` 是增量脚本执行完成后的最终状态快照。2026-08-22 的结构/参数/菜单/定时任务种子之上，已并入 `50_git_platform_user_identity.sql`（`sys_user_identity.user_id` 可空）。
 - **新增编号增量脚本后必须同步重新生成**，否则新装环境会缺失该脚本的变更。生成方式（在已执行全部增量脚本的本地库上）：
 
 ```bash
@@ -105,7 +106,7 @@ docker exec mysql8 mysqldump -uroot -proot --default-character-set=utf8mb4 --sin
 - 文件名统一使用 `NN_purpose.sql` 格式。
 - `NN` 为两位十进制连续序号，从 `01` 开始，表示全局执行顺序。
 - `purpose` 使用小写英文 `snake_case`，准确描述脚本用途，不再附加日期。
-- 新增脚本使用当前最大序号加一，不插号、不复用或调整已有序号。例如，下一个脚本应命名为 `30_xxx.sql`。
+- 新增脚本使用当前最大序号加一，不插号、不复用或调整已有序号。例如，下一个脚本应命名为 `51_xxx.sql`。
 - 文件名中的顺序必须与脚本依赖一致；新增脚本前应先确认所有前置表、字段、菜单或配置已由更小序号的脚本创建。
 - 文件重命名后，必须同步更新 README、部署文档和 SQL 前置说明中的引用。
 

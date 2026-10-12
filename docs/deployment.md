@@ -10,13 +10,13 @@
 | MySQL | 8.0+ | 主数据库 |
 | Redis | 6.0+ | 缓存/会话 |
 | npm | 9+ | 前端包管理 |
-| OCR (可选) | 最新 | alibaba/open-code-review CLI |
+| OCR | Docker 镜像内置 1.11.6；本地 Java 运行需自行安装 | `@alibaba-group/open-code-review` CLI |
 
 ## 开发环境部署
 
 ### 1. 数据库初始化
 
-**新装环境**：执行一次性初始化脚本（库、全部表结构、菜单/字典/参数/定时任务/内置审查模板等初始数据），等效于按序号执行完 01–49 全部增量脚本的最终状态：
+**新装环境**：执行一次性初始化脚本（库、全部表结构、菜单/字典/参数/定时任务/内置审查模板等初始数据），等效于按序号执行完 01–50 全部增量脚本的最终状态：
 
 ```bash
 mysql --default-character-set=utf8mb4 -u root -p < sql/init-full.sql
@@ -148,6 +148,8 @@ openssl rand -base64 32
 docker compose up -d --build
 docker compose ps
 ```
+
+MySQL 数据卷首次初始化时执行挂载的 `sql/init-full.sql`；已有 `acr-mysql-data` 卷不会重复初始化。存量库按 [SQL 说明](../sql/README.md)执行尚未应用的增量脚本。
 
 四个服务健康后访问宿主机 80 端口。Nginx 将 `/prod-api/` 转发到后端 API，`/webhook/` 按原始路径转发到各平台回调入口；请求体和签名头保持不变，验签与载荷限制仍由后端执行。MySQL 数据和上传文件分别保存到 `acr-mysql-data`、`acr-upload-data` 卷，后端、MySQL 和 Redis 不直接公开宿主机端口。
 

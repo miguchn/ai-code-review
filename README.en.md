@@ -1,7 +1,7 @@
 <div align="center">
-  <h1>AI Code Review</h1>
+  <h1>AI Code Review · V1.0</h1>
   <h4>Review code automatically. Follow issues through to resolution.</h4>
-  <p>An open-source, self-hosted code review platform for enterprise engineering teams.</p>
+  <p>An enterprise code review platform. Open source and self-hosted.</p>
   <p>
     <a href="LICENSE"><img src="https://img.shields.io/github/license/miguchn/ai-code-review" alt="Apache License 2.0" /></a>
     <img src="https://img.shields.io/badge/version-1.0.0-blue.svg" alt="Version 1.0.0" />
@@ -11,6 +11,8 @@
   </p>
   <p>English | <a href="README.md">简体中文</a></p>
 </div>
+
+**V1.0 Enterprise Release is the stable version for self-hosted use within enterprise teams.** It includes project-based access control, encrypted credentials, task recovery, and issue tracking for ongoing code review and quality management.
 
 AI Code Review receives PR/MR and push events, reviews code with your configured model, posts results to the Git platform, and sends group notifications. Teams can assign, track, verify, and close issues. Authorized managers can view project quality and model usage.
 
@@ -30,7 +32,7 @@ AI Code Review receives PR/MR and push events, reviews code with your configured
 | View quality | Project and member statistics, trends, Token usage, and estimated costs at current model prices |
 | Operate the service | Queue, failure, and dependency visibility, with persistent scheduling, retries, and recovery |
 
-GitHub has a recorded acceptance run against a real repository. GitLab, Gitee, and Gitea have adapter and contract-test coverage; validate the actual instances you will use during deployment. Push reviews find issues after submission. Risk conclusions do not automatically block merges. Costs are estimates, and member statistics support engineering improvement.
+GitHub has a recorded acceptance run against a real repository. GitLab has been tested by the maintainer and is usable. Gitee and Gitea have adapter and contract-test coverage; validate the actual instances you will use during deployment. Push reviews find issues after submission. Risk conclusions do not automatically block merges. Costs are estimates, and member statistics support engineering improvement.
 
 Code context is sent to the model service you configure. Before connecting enterprise repositories, confirm your team's approved model, network, and data-processing boundaries.
 
@@ -73,6 +75,8 @@ Once all four services are `healthy`, open <http://127.0.0.1>, sign in with `adm
 These menu paths match the current interface. The built-in `功能助手` provides step-by-step guidance. The interface and built-in help are primarily in Chinese.
 
 Set `ACR_WEBHOOK_CALLBACK_URL` to an address reachable by the Git platform. Set `review.ui.base-url` to the frontend address reachable by your team for notification links. The default backend image includes open-code-review CLI `1.11.6`; local Java deployments must install it as described in the deployment guide.
+
+For a new installation, MySQL runs `init-full.sql` when it first initializes the data volume. The script includes the final state of incremental scripts `01`–`50`. Existing data volumes are not initialized again.
 
 Back up an existing database before upgrading and apply only missing incremental scripts from the [SQL guide](sql/README.md). Use `init-full.sql` for new installations only: it recreates tables.
 

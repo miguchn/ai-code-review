@@ -1,7 +1,7 @@
 <div align="center">
-  <h1>AI Code Review</h1>
+  <h1>AI Code Review · V1.0</h1>
   <h4>自动检查代码，持续跟进问题。</h4>
-  <p>面向企业研发团队的开源代码检查平台，支持私有化部署。</p>
+  <p>企业级代码检查平台，开源并支持私有化部署。</p>
   <p>
     <a href="LICENSE"><img src="https://img.shields.io/github/license/miguchn/ai-code-review" alt="Apache License 2.0" /></a>
     <img src="https://img.shields.io/badge/version-1.0.0-blue.svg" alt="Version 1.0.0" />
@@ -11,6 +11,8 @@
   </p>
   <p><a href="README.en.md">English</a> | 简体中文</p>
 </div>
+
+**V1.0 企业级正式版，适用于企业内部部署使用。** 提供项目权限、凭据加密、任务恢复和问题跟进，支持团队持续开展代码检查与质量管理。
 
 AI Code Review 接收代码平台的 PR/MR 和 Push 事件，按团队设置调用模型检查代码，将结果写回代码平台并发送群通知。发现的问题可以指派、跟进、复核，直到结束处理；管理者可在授权范围内查看项目质量和模型用量。
 
@@ -30,7 +32,7 @@ AI Code Review 接收代码平台的 PR/MR 和 Push 事件，按团队设置调�
 | 查看质量 | 查看项目和成员统计、质量趋势、Token 用量及按当前单价估算的费用 |
 | 运行维护 | 查看任务积压、失败和依赖状态，支持持久调度、重试与故障恢复 |
 
-GitHub 已有真实仓库闭环验收记录；GitLab、Gitee、Gitea 已完成适配和契约测试，部署时需在实际使用的实例中验证。Push 检查用于提交后的问题发现，风险结论不会自动阻止代码合并。模型费用是估算值，成员统计用于工程改进。
+GitHub 已有真实仓库闭环验收记录；GitLab 已由维护者测试可用；Gitee、Gitea 已完成适配和契约测试，部署时需在实际使用的实例中验证。Push 检查用于提交后的问题发现，风险结论不会自动阻止代码合并。模型费用是估算值，成员统计用于工程改进。
 
 代码上下文会发送到你配置的模型服务。接入企业仓库前，请确认模型、网络和数据处理范围符合团队要求。
 
@@ -73,6 +75,8 @@ docker compose ps
 上述菜单路径对应当前界面；后台「功能助手」提供逐步指引。界面和内置帮助以中文为主。
 
 Git 平台回调地址由 `ACR_WEBHOOK_CALLBACK_URL` 设置，必须能从代码平台访问。通知中的详情链接由 `review.ui.base-url` 设置，必须能从团队网络访问。默认后端镜像已包含 open-code-review CLI `1.11.6`；本地 Java 运行方式需按部署说明安装该工具。
+
+新装时，MySQL 数据卷首次初始化会执行 `init-full.sql`，已包含 `01`–`50` 增量脚本的最终状态。已有数据卷不会重复初始化。
 
 存量数据库升级前先备份，按 [SQL 说明](sql/README.md)执行尚未应用的增量脚本。`init-full.sql` 仅用于新装，会重建表结构。
 
